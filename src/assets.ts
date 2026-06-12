@@ -83,25 +83,47 @@ const SHARDS: Record<number, ShardInfo> = {
 
 // ---- accessors ----
 
-export const profileIconUrl = (id: number) =>
-  ddVersion ? `${DD}/cdn/${ddVersion}/img/profileicon/${id}.png` : "";
+export const profileIconUrl = (id: number) => {
+  assetsReady();
+  return ddVersion ? `${DD}/cdn/${ddVersion}/img/profileicon/${id}.png` : "";
+};
 
-export const itemIconUrl = (id: number) =>
-  ddVersion ? `${DD}/cdn/${ddVersion}/img/item/${id}.png` : "";
+export const itemIconUrl = (id: number) => {
+  assetsReady();
+  return ddVersion ? `${DD}/cdn/${ddVersion}/img/item/${id}.png` : "";
+};
 
 /** Icon by Data Dragon image id (what the Live Client API calls rawName). */
-export const champIconByName = (imageId: string) =>
-  ddVersion && imageId ? `${DD}/cdn/${ddVersion}/img/champion/${imageId}.png` : "";
+export const champIconByName = (imageId: string) => {
+  assetsReady();
+  return ddVersion && imageId
+    ? `${DD}/cdn/${ddVersion}/img/champion/${imageId}.png`
+    : "";
+};
 
-export const champIconByKey = (key: number) =>
-  champIconByName(championByKey.get(key)?.imageId ?? "");
+export const champIconByKey = (key: number) => {
+  assetsReady();
+  return champIconByName(championByKey.get(key)?.imageId ?? "");
+};
 
 /** Display name for a numeric champion id ("" while assets are loading). */
-export const champName = (key: number) => championByKey.get(key)?.name ?? "";
+export const champName = (key: number) => {
+  assetsReady();
+  return championByKey.get(key)?.name ?? "";
+};
 
-export const getPerk = (id: number) => perkById.get(id);
-export const getStyle = (id: number) => styleById.get(id);
-export const getSpell = (key: number) => spellByKey.get(key);
+export const getPerk = (id: number) => {
+  assetsReady();
+  return perkById.get(id);
+};
+export const getStyle = (id: number) => {
+  assetsReady();
+  return styleById.get(id);
+};
+export const getSpell = (key: number) => {
+  assetsReady();
+  return spellByKey.get(key);
+};
 export const getShard = (id: number): ShardInfo =>
   SHARDS[id] ?? { label: `Shard ${id}`, icon: "" };
 
@@ -157,6 +179,11 @@ export function setIcon(img: HTMLImageElement, url: string) {
 
 // ---- startup loading ----
 
+import { createSignal } from "solid-js";
+
+const [assetsReady, setAssetsReady] = createSignal(false);
+export { assetsReady };
+
 let ready: Promise<void> | null = null;
 
 /**
@@ -209,6 +236,8 @@ async function load(): Promise<void> {
     }
   } catch (e) {
     console.warn("Data Dragon init failed; running without icons", e);
+  } finally {
+    setAssetsReady(true);
   }
 }
 

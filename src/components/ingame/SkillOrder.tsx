@@ -1,0 +1,119 @@
+import { createEffect, createSignal, Index, Show } from "solid-js";
+import { assetsReady, getAbility, setIcon } from "../../assets";
+import type { SkillOrder as SkillOrderType } from "../../types";
+
+function skillLabel(skillId: number): string {
+  return ["", "Q", "W", "E", "R"][skillId] ?? "";
+}
+
+function isBasicSkill(skillId: number): boolean {
+  return skillId >= 1 && skillId <= 3;
+}
+
+function skillOrderIds(order: SkillOrderType | null | undefined): number[] {
+  const maxOrder = order?.maxOrder.filter(isBasicSkill) ?? [];
+  if (maxOrder.length > 0) return maxOrder.slice(0, 3);
+
+  const derived: number[] = [];
+  for (const skillId of order?.levelOrder ?? []) {
+    if (!isBasicSkill(skillId) || derived.includes(skillId)) continue;
+    derived.push(skillId);
+    if (derived.length === 3) break;
+  }
+  return derived;
+}
+
+function SkillCard(props: {
+  skillId: number;
+  championImageId: string;
+}) {
+  const [hasIcon, setHasIcon] = createSignal(false);
+  const [abilityName, setAbilityName] = createSignal("");
+  let imgEl!: HTMLImageElement;
+
+  createEffect(() => {
+    assetsReady();
+    const id = props.skillId;
+    const champ = props.championImageId;
+    setHasIcon(false);
+    imgEl.style.visibility = "hidden";
+    void getAbility(champ, id).then((ability) => {
+      if (!ability) return;
+      imgEl.style.visibility = "";
+      setIcon(imgEl, ability.icon);
+      setAbilityName(ability.name);
+      setHasIcon(true);
+    });
+  });
+
+  const label = () => skillLabel(props.skillId);
+  const title = () => {
+    const name = abilityName();
+    return name ? `${label()} · ${name}` : label();
+  };
+
+  return (
+    <span
+      class={`skill-card relative w-[38px] h-[38px] flex items-center justify-center overflow-hidden border rounded-[5px] bg-hx-bg-raised shadow-[inset_0_0_0_1px_rgba(200,170,110,0.08),0_2px_8px_rgba(0,0,0,0.28)] ${
+        hasIcon() ? "border-hx-gold-dim" : "border-hx-border"
+      }`}
+      title={title()}
+    >
+      <img
+        ref={imgEl}
+        class="skill-card-icon w-full h-full object-cover saturate-[0.96] contrast-[1.08] brightness-90"
+        alt=""
+      />
+      <span
+        class={`skill-card-key absolute flex items-center justify-center text-hx-gold font-hx-serif font-bold leading-none ${
+          hasIcon()
+            ? "inset-auto right-0 bottom-0 w-[17px] h-[15px] border-t border-l border-[rgba(200,170,110,0.42)] rounded-tl text-[10px] text-hx-text bg-[rgba(11,10,8,0.9)] text-shadow-[0_1px_2px_rgba(0,0,0,0.95)]"
+            : "inset-0 text-[17px] text-shadow-skill"
+        }`}
+      >
+        {label()}
+      </span>
+    </span>
+  );
+}
+
+export function SkillOrder(props: {
+  order: SkillOrderType | null | undefined;
+  championImageId: string;
+}) {
+  const ids = () => skillOrderIds(props.order);
+  const title = () => {
+    const o = props.order;
+    return o && o.games > 0
+      ? `${Math.round(o.winRate * 100)}% WR · ${o.games} games`
+      : "";
+  };
+
+  return (
+    <Show when={ids().length > 0}>
+      <div
+        class="flex items-center gap-3 px-3 py-2 pb-2.5 border-b border-hx-border bg-gradient-to-r from-[rgba(200,170,110,0.04)] to-transparent"
+        title={title()}
+      >
+        <div class="skill-label flex-none w-28 h-[38px] flex items-center box-border px-2.5 border border-hx-border rounded bg-[rgba(21,18,13,0.86)] text-hx-gold-dim font-hx-serif text-[10px] font-semibold leading-tight tracking-[0.14em] uppercase whitespace-nowrap">
+          Skill Order
+        </div>
+        <div class="flex items-center gap-2">
+          <Index each={ids()}>
+            {(skillId, i) => (
+              <>
+                <SkillCard
+                  skillId={skillId()}
+                  championImageId={props.championImageId}
+                />
+                <Show when={i < ids().length - 1}>
+                  <span class="skill-arrow" />
+                </Show>
+              </>
+            )}
+          </Index>
+        </div>
+      </div>
+    </Show>
+  );
+}

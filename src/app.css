@@ -1,0 +1,152 @@
+@import "tailwindcss";
+
+@theme {
+  --color-hx-bg: #0b0a08;
+  --color-hx-bg-raised: #15120d;
+  --color-hx-border: #3a3022;
+  --color-hx-gold: #c8aa6e;
+  --color-hx-gold-dim: #7a6a4d;
+  --color-hx-text: #f0e6d2;
+  --color-hx-muted: #847b6a;
+  --color-hx-up: #3fc380;
+  --color-hx-red: #e84057;
+  --color-hx-keystone-border: #463f2e;
+  --font-hx-serif: "Beaufort for LOL", "Cinzel", Georgia, serif;
+}
+
+@layer base {
+  html,
+  body {
+    margin: 0;
+    height: 100%;
+    background: transparent;
+    overflow: hidden;
+    pointer-events: none;
+    color: var(--color-hx-text);
+    user-select: none;
+    font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+  }
+}
+
+@layer components {
+  .panel {
+    position: fixed;
+    background: linear-gradient(
+        180deg,
+        rgba(200, 170, 110, 0.06),
+        rgba(200, 170, 110, 0) 18%
+      ),
+      rgba(11, 10, 8, 0.94);
+    border: 1px solid var(--color-hx-border);
+    border-radius: 8px;
+    padding: 10px 14px;
+    backdrop-filter: blur(6px);
+    box-shadow: 0 6px 28px rgba(0, 0, 0, 0.55);
+    font-size: 13px;
+  }
+
+  .skill-arrow {
+    width: 12px;
+    height: 38px;
+    flex: 0 0 auto;
+    position: relative;
+    opacity: 0.8;
+  }
+  .skill-arrow::before {
+    content: "";
+    position: absolute;
+    left: 3px;
+    top: 15px;
+    width: 8px;
+    height: 8px;
+    border-top: 1px solid var(--color-hx-gold-dim);
+    border-right: 1px solid var(--color-hx-gold-dim);
+    transform: rotate(45deg);
+    box-sizing: border-box;
+  }
+  .skill-arrow::after {
+    content: "";
+    position: absolute;
+    left: 0;
+    right: 3px;
+    top: 19px;
+    height: 1px;
+    background: var(--color-hx-gold-dim);
+  }
+
+  .text-shadow-skill {
+    text-shadow:
+      0 2px 4px rgba(0, 0, 0, 0.95),
+      0 0 9px rgba(0, 0, 0, 0.7);
+  }
+
+  .hx-skel {
+    background: linear-gradient(
+      90deg,
+      var(--color-hx-bg-raised) 25%,
+      #1f1a12 37%,
+      var(--color-hx-bg-raised) 63%
+    );
+    background-size: 400% 100%;
+    animation: hx-shimmer 1.4s ease infinite;
+    border-radius: 6px;
+  }
+
+  .hx-scroll::-webkit-scrollbar {
+    width: 6px;
+  }
+  .hx-scroll::-webkit-scrollbar-track,
+  .rec-list::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  .hx-scroll::-webkit-scrollbar-thumb,
+  .rec-list::-webkit-scrollbar-thumb {
+    background: var(--color-hx-gold-dim);
+    border-radius: 3px;
+  }
+  .hx-scroll::-webkit-scrollbar-thumb:hover,
+  .rec-list::-webkit-scrollbar-thumb:hover {
+    background: var(--color-hx-gold);
+  }
+  .rec-list::-webkit-scrollbar {
+    width: 6px;
+  }
+
+  .hexgate img {
+    -webkit-user-drag: none;
+  }
+}
+
+body.interactive::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  border: 2px solid rgba(200, 170, 110, 0.45);
+  box-shadow: inset 0 0 48px rgba(200, 170, 110, 0.12);
+}
+
+body.champselect .status-chip,
+body.champselect .ingame-panel {
+  display: none !important;
+}
+
+body.champselect .settings-panel {
+  bottom: auto;
+  top: 56px;
+  right: 10px;
+  z-index: 10;
+}
+
+body.champselect.interactive::after {
+  display: none;
+}
+
+@keyframes hx-shimmer {
+  0% {
+    background-position: 100% 0;
+  }
+  100% {
+    background-position: -100% 0;
+  }
+}
