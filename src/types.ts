@@ -176,6 +176,8 @@ export interface Settings {
   importSpells: boolean;
   spellsFlipped: boolean;
   pinned: boolean;
+  /** "deeplol" | "ugg" */
+  dataSource?: string;
 }
 
 export interface PanelPosition {

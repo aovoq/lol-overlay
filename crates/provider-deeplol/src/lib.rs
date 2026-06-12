@@ -23,18 +23,16 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use async_trait::async_trait;
+use overlay_ddragon::{normalize, ChampionMaps, DdragonClient};
+use overlay_provider::{
+    BuildProvider, CounterEntry, ItemRecommendation, ProviderError, Result, RuneBuild,
+    RuneRecommendation, SkillOrder, TierEntry,
+};
+use overlay_types::GameSnapshot;
 use serde::Deserialize;
 use tokio::sync::RwLock;
 
-use crate::error::{Error, Result};
-use crate::live_client::GameSnapshot;
-use crate::provider::{
-    BuildProvider, CounterEntry, ItemRecommendation, RuneBuild, RuneRecommendation, SkillOrder,
-    TierEntry,
-};
-
 const DEEPLOL: &str = "https://b2c-api-cdn.deeplol.gg";
-const DDRAGON: &str = "https://ddragon.leagueoflegends.com";
 
 /// A matchup page needs this many games behind it before we trust it; the same
 /// floor is applied to individual counter matchups.
@@ -44,6 +42,7 @@ const MIN_RUNE_SAMPLES: usize = 3;
 
 pub struct DeepLolProvider {
     http: reqwest::Client,
+    ddragon: Arc<DdragonClient>,
     /// Region for the stat queries. DeepLoL wants a *numbered* platform id
     /// (`JP1`, `NA1`, `EUW1`, …); `KR` is the one exception. The build numbers
     /// barely move between regions, so a high-population default is fine.
@@ -67,15 +66,8 @@ struct Cache {
     /// The patch before that (`game_version_list[1]`), used only to compute the
     /// tier list's win-rate delta arrows.
     prev_patch: Option<String>,
-    /// Normalized English champion name → numeric id (`"chogath" → 31`).
-    name_to_id: HashMap<String, i64>,
-    /// Champion id → display name (`31 → "Cho'Gath"`), for HEXGATE page names.
-    id_to_name: HashMap<i64, String>,
-    /// Champion id → Data Dragon image id (`31 → "Chogath"`), for the mock
-    /// scenarios that synthesize Live-Client-shaped state.
-    id_to_image: HashMap<i64, String>,
-    /// Item id → display name, for the recommendation labels.
-    item_names: HashMap<i64, String>,
+    champions: Option<Arc<ChampionMaps>>,
+    items: Option<Arc<HashMap<i64, String>>>,
     /// champion_id → its `/champion/build` response (cached for the session).
     builds: HashMap<i64, Arc<BuildResponse>>,
     /// game_version → `/champion/rank` response (current + previous patch).
@@ -90,7 +82,7 @@ struct Cache {
 }
 
 impl DeepLolProvider {
-    pub fn new() -> Result<Self> {
+    pub fn new(ddragon: Arc<DdragonClient>) -> Result<Self> {
         let http = reqwest::Client::builder()
             .timeout(Duration::from_secs(8))
             // DeepLoL's CDN 403s requests with no User-Agent (reqwest sends none
@@ -103,6 +95,7 @@ impl DeepLolProvider {
             .build()?;
         Ok(Self {
             http,
+            ddragon,
             platform_id: std::sync::RwLock::new("KR".into()),
             tier: "Emerald+".into(),
             cache: RwLock::new(Cache::default()),
@@ -114,7 +107,7 @@ impl DeepLolProvider {
     async fn ensure_static(&self) -> Result<()> {
         {
             let c = self.cache.read().await;
-            if c.patch.is_some() && !c.name_to_id.is_empty() {
+            if c.patch.is_some() && c.champions.is_some() {
                 return Ok(());
             }
         }
@@ -122,18 +115,23 @@ impl DeepLolProvider {
         let patch = versions
             .first()
             .cloned()
-            .ok_or_else(|| Error::Other("DeepLoL returned no game versions".into()))?;
-        let ddver = self.fetch_ddragon_version().await?;
-        let (name_to_id, id_to_name, id_to_image) = self.fetch_champion_map(&ddver).await?;
-        let item_names = self.fetch_item_map(&ddver).await?;
+            .ok_or_else(|| ProviderError::Other("DeepLoL returned no game versions".into()))?;
+        let champions = self
+            .ddragon
+            .champions()
+            .await
+            .map_err(|e| ProviderError::Other(e.to_string()))?;
+        let items = self
+            .ddragon
+            .items()
+            .await
+            .map_err(|e| ProviderError::Other(e.to_string()))?;
 
         let mut c = self.cache.write().await;
         c.patch = Some(patch);
         c.prev_patch = versions.get(1).cloned();
-        c.name_to_id = name_to_id;
-        c.id_to_name = id_to_name;
-        c.id_to_image = id_to_image;
-        c.item_names = item_names;
+        c.champions = Some(champions);
+        c.items = Some(items);
         Ok(())
     }
 
@@ -147,7 +145,11 @@ impl DeepLolProvider {
             return None;
         }
         let c = self.cache.read().await;
-        c.name_to_id.get(&normalize(raw_name)).copied()
+        c.champions
+            .as_ref()?
+            .name_to_id
+            .get(&normalize(raw_name))
+            .copied()
     }
 
     /// Display name for a champion id (`"Cho'Gath"`), for rune-page names.
@@ -159,8 +161,9 @@ impl DeepLolProvider {
         self.cache
             .read()
             .await
-            .id_to_name
-            .get(&champion_id)
+            .champions
+            .as_ref()
+            .and_then(|c| c.id_to_name.get(&champion_id))
             .cloned()
             .unwrap_or_else(|| champion_id.to_string())
     }
@@ -180,7 +183,7 @@ impl DeepLolProvider {
             .await
             .patch
             .clone()
-            .ok_or_else(|| Error::Other("no build patch available".into()))?;
+            .ok_or_else(|| ProviderError::Other("no build patch available".into()))?;
 
         let resp = Arc::new(self.fetch_resolved_build(champion_id, &patch).await?);
         self.cache
@@ -309,7 +312,7 @@ impl DeepLolProvider {
             }
         }
 
-        Err(Error::Other("no rune data for champion".into()))
+        Err(ProviderError::Other("no rune data for champion".into()))
     }
 
     async fn rune_build_from_entry(
@@ -332,7 +335,7 @@ impl DeepLolProvider {
             || sub_style == 0
             || primary_perks.len() + sub_perks.len() + shards.len() < 6
         {
-            return Err(Error::Other("incomplete rune data".into()));
+            return Err(ProviderError::Other("incomplete rune data".into()));
         }
         let name = self.champion_name(champion_id).await;
         Ok(RuneBuild {
@@ -367,7 +370,7 @@ impl DeepLolProvider {
             let my_build = self.get_build(champion_id).await?;
             pick_lane(&my_build, role)
                 .map(|(l, _)| l.to_string())
-                .ok_or_else(|| Error::Other("no lane data for champion".into()))?
+                .ok_or_else(|| ProviderError::Other("no lane data for champion".into()))?
         };
 
         let key = (champion_id, enemy_champion_id, lane.clone());
@@ -376,7 +379,7 @@ impl DeepLolProvider {
             if let Some(cached) = c.matchup_builds.get(&key) {
                 return match cached {
                     Some(b) => Ok(b.clone()),
-                    None => Err(Error::NotEnoughData),
+                    None => Err(ProviderError::NotEnoughData),
                 };
             }
         }
@@ -403,7 +406,7 @@ impl DeepLolProvider {
             .cloned()
         else {
             self.cache.write().await.matchup_builds.insert(key, None);
-            return Err(Error::NotEnoughData);
+            return Err(ProviderError::NotEnoughData);
         };
 
         let mut samples: Vec<OtpEntry> = Vec::new();
@@ -430,9 +433,9 @@ impl DeepLolProvider {
             .collect();
         if filtered.len() < MIN_RUNE_SAMPLES {
             self.cache.write().await.matchup_builds.insert(key, None);
-            return Err(Error::NotEnoughData);
+            return Err(ProviderError::NotEnoughData);
         }
-        let page = aggregate_otp(&filtered).ok_or(Error::NotEnoughData)?;
+        let page = aggregate_otp(&filtered).ok_or(ProviderError::NotEnoughData)?;
 
         let me = self.champion_name(champion_id).await;
         let foe = self.champion_name(enemy_champion_id).await;
@@ -470,74 +473,6 @@ impl DeepLolProvider {
             .await?;
         Ok(v.game_version_list)
     }
-
-    async fn fetch_ddragon_version(&self) -> Result<String> {
-        let v: Vec<String> = self
-            .http
-            .get(format!("{DDRAGON}/api/versions.json"))
-            .send()
-            .await?
-            .error_for_status()?
-            .json()
-            .await?;
-        v.into_iter()
-            .next()
-            .ok_or_else(|| Error::Other("Data Dragon returned no versions".into()))
-    }
-
-    /// All directions of the champion map: normalized-name → id for resolving
-    /// Live Client names, id → display name for HEXGATE page labels, and
-    /// id → Data Dragon image id for synthesizing mock state.
-    #[allow(clippy::type_complexity)]
-    async fn fetch_champion_map(
-        &self,
-        ddver: &str,
-    ) -> Result<(
-        HashMap<String, i64>,
-        HashMap<i64, String>,
-        HashMap<i64, String>,
-    )> {
-        let file: DDChampionFile = self
-            .http
-            .get(format!("{DDRAGON}/cdn/{ddver}/data/en_US/champion.json"))
-            .send()
-            .await?
-            .error_for_status()?
-            .json()
-            .await?;
-        let mut by_name = HashMap::new();
-        let mut by_id = HashMap::new();
-        let mut by_image = HashMap::new();
-        for (id_key, champ) in file.data {
-            if let Ok(num) = champ.key.parse::<i64>() {
-                // `id_key` matches rawChampionName ("Chogath"); `name` is the
-                // display form ("Cho'Gath"). Index both, normalized.
-                by_name.insert(normalize(&id_key), num);
-                by_name.insert(normalize(&champ.name), num);
-                by_id.insert(num, champ.name);
-                by_image.insert(num, id_key);
-            }
-        }
-        Ok((by_name, by_id, by_image))
-    }
-
-    async fn fetch_item_map(&self, ddver: &str) -> Result<HashMap<i64, String>> {
-        let file: DDItemFile = self
-            .http
-            .get(format!("{DDRAGON}/cdn/{ddver}/data/en_US/item.json"))
-            .send()
-            .await?
-            .error_for_status()?
-            .json()
-            .await?;
-        let mut map = HashMap::new();
-        for (id, item) in file.data {
-            if let Ok(num) = id.parse::<i64>() {
-                map.insert(num, item.name);
-            }
-        }
-        Ok(map)
-    }
 }
 
 #[async_trait]
@@ -562,10 +497,10 @@ impl BuildProvider for DeepLolProvider {
         let id = self
             .champion_id(&snapshot.self_raw_name)
             .await
-            .ok_or_else(|| Error::Other(format!("unknown champion: {:?}", snapshot.self_champion)))?;
+            .ok_or_else(|| ProviderError::Other(format!("unknown champion: {:?}", snapshot.self_champion)))?;
         let build = self.get_build(id).await?;
         let (_, entry) = pick(&build, Some(&snapshot.self_position))
-            .ok_or_else(|| Error::Other("no build data for champion".into()))?;
+            .ok_or_else(|| ProviderError::Other("no build data for champion".into()))?;
 
         let wr = entry.win_rate * 100.0;
         let guard = self.cache.read().await; // no awaits past here
@@ -576,9 +511,9 @@ impl BuildProvider for DeepLolProvider {
                 continue;
             }
             let name = guard
-                .item_names
-                .get(&item_id)
-                .cloned()
+                .items
+                .as_ref()
+                .and_then(|items| items.get(&item_id).cloned())
                 .unwrap_or_else(|| format!("Item {item_id}"));
             let reason = if i == 0 {
                 format!("Core build · {wr:.0}% WR · {} games", entry.games)
@@ -593,7 +528,7 @@ impl BuildProvider for DeepLolProvider {
             });
         }
         if recs.is_empty() {
-            return Err(Error::Other("build had no items".into()));
+            return Err(ProviderError::Other("build had no items".into()));
         }
         Ok(recs)
     }
@@ -602,10 +537,10 @@ impl BuildProvider for DeepLolProvider {
         let id = self
             .champion_id(&snapshot.self_raw_name)
             .await
-            .ok_or_else(|| Error::Other(format!("unknown champion: {:?}", snapshot.self_champion)))?;
+            .ok_or_else(|| ProviderError::Other(format!("unknown champion: {:?}", snapshot.self_champion)))?;
         let build = self.get_build(id).await?;
         let (_, entry) = pick(&build, Some(&snapshot.self_position))
-            .ok_or_else(|| Error::Other("no skill data for champion".into()))?;
+            .ok_or_else(|| ProviderError::Other("no skill data for champion".into()))?;
 
         let max_order: Vec<i64> = entry
             .skill
@@ -623,7 +558,7 @@ impl BuildProvider for DeepLolProvider {
             .collect();
 
         if max_order.is_empty() && level_order.is_empty() {
-            return Err(Error::Other("build had no skill order".into()));
+            return Err(ProviderError::Other("build had no skill order".into()));
         }
 
         Ok(SkillOrder {
@@ -652,7 +587,7 @@ impl BuildProvider for DeepLolProvider {
 
     async fn tier_list(&self, role: &str) -> Result<Vec<TierEntry>> {
         let lane = deeplol_lane(Some(role))
-            .ok_or_else(|| Error::Other(format!("unknown role: {role:?}")))?;
+            .ok_or_else(|| ProviderError::Other(format!("unknown role: {role:?}")))?;
         {
             let c = self.cache.read().await;
             if let Some(rows) = c.tier_lists.get(lane) {
@@ -665,7 +600,7 @@ impl BuildProvider for DeepLolProvider {
             (
                 c.patch
                     .clone()
-                    .ok_or_else(|| Error::Other("no build patch available".into()))?,
+                    .ok_or_else(|| ProviderError::Other("no build patch available".into()))?,
                 c.prev_patch.clone(),
             )
         };
@@ -696,7 +631,7 @@ impl BuildProvider for DeepLolProvider {
     async fn counters(&self, champion_id: i64, role: &str) -> Result<Vec<CounterEntry>> {
         let build = self.get_build(champion_id).await?;
         let (_, lb) = pick_lane(&build, Some(role))
-            .ok_or_else(|| Error::Other("no lane data for champion".into()))?;
+            .ok_or_else(|| ProviderError::Other("no lane data for champion".into()))?;
         let counters = counter_entries(lb);
         if !counters.is_empty() {
             return Ok(counters);
@@ -731,9 +666,10 @@ impl BuildProvider for DeepLolProvider {
     async fn champion_names(&self, champion_id: i64) -> Option<(String, String)> {
         self.ensure_static().await.ok()?;
         let c = self.cache.read().await;
+        let champs = c.champions.as_ref()?;
         Some((
-            c.id_to_name.get(&champion_id)?.clone(),
-            c.id_to_image.get(&champion_id)?.clone(),
+            champs.id_to_name.get(&champion_id)?.clone(),
+            champs.id_to_image.get(&champion_id)?.clone(),
         ))
     }
 }
@@ -953,15 +889,6 @@ fn mode<I: Iterator<Item = i64>>(values: I) -> i64 {
         .max_by_key(|&(v, c)| (c, Reverse(v)))
         .map(|(v, _)| v)
         .unwrap_or(0)
-}
-
-/// Lowercase + strip non-alphanumerics so "Cho'Gath", "Chogath" and "chogath"
-/// all collapse to the same key.
-fn normalize(name: &str) -> String {
-    name.chars()
-        .filter(|c| c.is_ascii_alphanumeric())
-        .map(|c| c.to_ascii_lowercase())
-        .collect()
 }
 
 // ---- DeepLoL response shapes (only the fields we use) ----
@@ -1237,30 +1164,6 @@ struct OtpSpell {
     spell_2: i64,
 }
 
-// ---- Data Dragon name maps ----
-
-#[derive(Debug, Deserialize)]
-struct DDChampionFile {
-    data: HashMap<String, DDChampion>,
-}
-
-#[derive(Debug, Deserialize)]
-struct DDChampion {
-    /// Numeric id, encoded as a string in Data Dragon.
-    key: String,
-    name: String,
-}
-
-#[derive(Debug, Deserialize)]
-struct DDItemFile {
-    data: HashMap<String, DDItem>,
-}
-
-#[derive(Debug, Deserialize)]
-struct DDItem {
-    name: String,
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1526,7 +1429,7 @@ mod tests {
     //
     // Decisive end-to-end checks against the real DeepLoL + Data Dragon APIs.
     // Ignored by default; run with:
-    //   cargo test --lib provider::deeplol -- --ignored --nocapture
+    //   cargo test -p overlay-provider-deeplol --lib -- --ignored --nocapture
 
     /// Shared harness for the live tests: one provider, one runtime.
     fn live<F, Fut>(f: F)
@@ -1538,7 +1441,8 @@ mod tests {
             .enable_all()
             .build()
             .unwrap();
-        rt.block_on(f(DeepLolProvider::new().unwrap()));
+        let ddragon = Arc::new(DdragonClient::new());
+        rt.block_on(f(DeepLolProvider::new(ddragon).unwrap()));
     }
 
     #[test]
@@ -1762,7 +1666,7 @@ mod tests {
                     assert!(b.win_rate > 0.0 && b.win_rate < 1.0);
                     assert!(b.games >= MIN_MATCHUP_GAMES);
                 }
-                Err(Error::NotEnoughData) => {
+                Err(ProviderError::NotEnoughData) => {
                     println!("MATCHUP: not enough data (acceptable outcome)");
                 }
                 Err(e) => panic!("matchup rune_build failed unexpectedly: {e}"),

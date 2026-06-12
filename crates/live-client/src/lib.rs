@@ -7,11 +7,21 @@
 //!
 //! Docs: <https://developer.riotgames.com/docs/lol#game-client-api>
 
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 
-use crate::error::Result;
+pub use overlay_types::{EnemyChampion, GameSnapshot};
 
 const BASE: &str = "https://127.0.0.1:2999/liveclientdata";
+
+#[derive(Debug, thiserror::Error)]
+pub enum LiveClientError {
+    #[error("http error: {0}")]
+    Http(#[from] reqwest::Error),
+    #[error("json error: {0}")]
+    Json(#[from] serde_json::Error),
+}
+
+pub type Result<T> = std::result::Result<T, LiveClientError>;
 
 /// One participant as returned by `/allgamedata`'s `allPlayers`.
 #[derive(Debug, Clone, Deserialize)]
@@ -70,18 +80,6 @@ pub struct AllGameData {
     pub game_data: RawGameData,
 }
 
-/// A champion on the enemy team, normalized for the rest of the app.
-#[derive(Debug, Clone, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct EnemyChampion {
-    /// Localized display name (for the UI).
-    pub name: String,
-    /// English name for locale-independent logic (e.g. "Talon", "Chogath").
-    pub raw_name: String,
-    pub position: String,
-    pub items: Vec<i64>,
-}
-
 /// Pull the English champion name out of `rawChampionName`
 /// ("game_character_displayname_Talon" -> "Talon"); fall back to `display`.
 fn english_name(raw: &str, display: &str) -> String {
@@ -90,21 +88,6 @@ fn english_name(raw: &str, display: &str) -> String {
         .filter(|s| !s.is_empty())
         .unwrap_or(display)
         .to_string()
-}
-
-/// The slice of game state we care about: who we are and who we face.
-#[derive(Debug, Clone, Serialize)]
-pub struct GameSnapshot {
-    pub game_mode: String,
-    pub game_time: f64,
-    /// Localized display name of our champion (for the UI).
-    pub self_champion: String,
-    /// English name of our champion (e.g. "Talon"), for id lookups in the
-    /// data layer. Empty when spectating / before spawn.
-    pub self_raw_name: String,
-    pub self_position: String,
-    pub enemies: Vec<EnemyChampion>,
-    pub allies: Vec<String>,
 }
 
 pub struct LiveClient {

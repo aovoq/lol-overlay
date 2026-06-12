@@ -14,8 +14,10 @@ use crate::engine::{Engine, PanelPosition, Settings, UiLayout, WindowPosition};
 use crate::error;
 use crate::events::{log, RuneImportedEvent};
 use crate::hittest::HitRegion;
-use crate::lcu::{self, RunePagePayload};
-use crate::provider::{CounterEntry, RuneBuild, TierEntry};
+use overlay_lcu::{self as lcu, RunePagePayload};
+use overlay_provider::BuildProvider;
+use overlay_provider::ProviderKind;
+use overlay_types::{CounterEntry, RuneBuild, TierEntry};
 
 /// An empty role string means "unknown" on the frontend; the provider's
 /// optional-role APIs take `None` for that.
@@ -153,7 +155,7 @@ pub async fn get_tier_list(
 ) -> error::Result<Vec<TierEntry>> {
     engine.provider.tier_list(&role).await.map_err(|e| {
         eprintln!("get_tier_list failed role={role:?}: {e}");
-        e
+        e.into()
     })
 }
 
@@ -170,7 +172,7 @@ pub async fn get_counters(
         .await
         .map_err(|e| {
             eprintln!("get_counters failed champion_id={champion_id} role={role:?}: {e}");
-            e
+            e.into()
         })
 }
 
@@ -191,7 +193,7 @@ pub async fn get_rune_build(
             eprintln!(
                 "get_rune_build failed champion_id={champion_id} role={role:?} enemy_champion_id={enemy_champion_id:?}: {e}"
             );
-            e
+            e.into()
         })
 }
 
@@ -246,5 +248,37 @@ pub async fn import_build(
             page_name: build.page_name,
         },
     );
+    Ok(())
+}
+
+#[tauri::command]
+pub fn get_data_source(engine: State<'_, Arc<Engine>>) -> String {
+    engine.provider.active().as_str().to_string()
+}
+
+#[tauri::command]
+pub fn list_data_sources(engine: State<'_, Arc<Engine>>) -> Vec<String> {
+    engine
+        .provider
+        .available()
+        .into_iter()
+        .map(|k| k.as_str().to_string())
+        .collect()
+}
+
+#[tauri::command]
+pub fn set_data_source(
+    app: AppHandle,
+    engine: State<'_, Arc<Engine>>,
+    kind: String,
+) -> error::Result<()> {
+    let parsed = ProviderKind::parse(&kind)
+        .ok_or_else(|| error::Error::Other(format!("unknown data source: {kind}")))?;
+    engine.provider.set_active(parsed)?;
+    {
+        engine.settings.lock().unwrap().data_source = parsed;
+    }
+    engine.persist()?;
+    let _ = app.emit("data-source", kind);
     Ok(())
 }

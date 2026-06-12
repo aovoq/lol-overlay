@@ -6,10 +6,11 @@
 //! Replace this with a real provider when you wire up a data source.
 
 use async_trait::async_trait;
+use overlay_types::{GameSnapshot, ItemRecommendation, RuneRecommendation};
 
-use crate::error::Result;
-use crate::live_client::GameSnapshot;
-use crate::provider::{classify_threats, BuildProvider, ItemRecommendation, RuneRecommendation};
+use crate::threat::classify_threats;
+use crate::trait_def::BuildProvider;
+use crate::Result;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DamageType {

@@ -1,0 +1,14 @@
+[package]
+name = "overlay-ddragon"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+reqwest = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true }
+
+[lints]
+workspace = true

@@ -1,0 +1,15 @@
+[package]
+name = "overlay-lcu"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+overlay-types = { workspace = true }
+irelia = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+tokio = { workspace = true }
+thiserror = { workspace = true }
+
+[lints]
+workspace = true

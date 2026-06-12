@@ -1,3 +1,4 @@
+import { listen } from "@tauri-apps/api/event";
 import { invoke } from "@tauri-apps/api/core";
 import { createSignal, type Accessor } from "solid-js";
 import type { CounterEntry, RuneBuild, TierEntry } from "../types";
@@ -28,6 +29,7 @@ export function makeCache<T>(fetcher: (key: string) => Promise<T>) {
       set: (e: CacheEntry<T>) => void;
     }
   >();
+  const [version, setVersion] = createSignal(0);
 
   const fire = (key: string, set: (e: CacheEntry<T>) => void) => {
     fetcher(key).then(
@@ -42,6 +44,7 @@ export function makeCache<T>(fetcher: (key: string) => Promise<T>) {
 
   return {
     get(key: string): CacheEntry<T> {
+      version();
       let slot = map.get(key);
       if (!slot) {
         const [entry, setEntry] = createSignal<CacheEntry<T>>({
@@ -58,6 +61,10 @@ export function makeCache<T>(fetcher: (key: string) => Promise<T>) {
       if (!slot) return;
       slot.set({ state: "loading" });
       fire(key, slot.set);
+    },
+    clear() {
+      map.clear();
+      setVersion((v) => v + 1);
     },
   };
 }
@@ -85,3 +92,9 @@ export const buildKey = (
   role: string,
   enemy: number | null,
 ) => `${champ}|${role}|${enemy ?? 0}`;
+
+listen<string>("data-source", () => {
+  tierCache.clear();
+  counterCache.clear();
+  buildCache.clear();
+}).catch(() => {});

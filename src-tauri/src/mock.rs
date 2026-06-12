@@ -16,8 +16,8 @@ use tauri::{AppHandle, Emitter};
 
 use crate::engine::{self, Engine, MockStage};
 use crate::events::{log, ChampSelectEvent, PhaseEvent, RecommendationsEvent, RuneImportedEvent};
-use crate::live_client::{EnemyChampion, GameSnapshot};
-use crate::provider::classify_threats;
+use overlay_types::{EnemyChampion, GameSnapshot};
+use overlay_provider::{classify_threats, BuildProvider};
 
 /// Champ-select mock: me on the top meta jungler, the runner-up revealed as
 /// the enemy jungler, real ban targets in the ban slots. The frontend then

@@ -3,9 +3,12 @@ import { invoke } from "@tauri-apps/api/core";
 import { interactive } from "../state/backend";
 import {
   autoImport,
+  dataSource,
+  dataSources,
   gearHidden,
   importSpells,
   setAutoImport,
+  setDataSource,
   setGearHidden,
   setImportSpells,
 } from "../state/settings";
@@ -51,6 +54,20 @@ export function SettingsPanel() {
           />
           <span>スペルも書き込む</span>
         </label>
+        <Show when={dataSources().length > 1}>
+          <label class="flex flex-col gap-1 text-hx-text">
+            <span class="text-[11px] text-hx-muted">データソース</span>
+            <select
+              class="bg-hx-panel border border-hx-border rounded px-2 py-1 text-[12px]"
+              value={dataSource()}
+              onChange={(e) => setDataSource(e.currentTarget.value)}
+            >
+              {dataSources().map((src) => (
+                <option value={src}>{src}</option>
+              ))}
+            </select>
+          </label>
+        </Show>
         <div class="text-[11px] text-hx-muted">
           Ctrl+Shift+O 全体操作(非常用) · Ctrl+Shift+M モニター移動
         </div>

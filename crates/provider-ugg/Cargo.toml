@@ -1,0 +1,17 @@
+[package]
+name = "overlay-provider-ugg"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+overlay-provider = { workspace = true }
+overlay-types = { workspace = true }
+overlay-ddragon = { workspace = true }
+async-trait = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+reqwest = { workspace = true }
+tokio = { workspace = true, features = ["rt", "macros"] }
+
+[lints]
+workspace = true

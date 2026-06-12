@@ -1,15 +1,14 @@
 //! lol-overlay — a lightweight, Tauri-based League of Legends overlay.
 //!
-//! Modules:
-//!   * `live_client` — reads in-game state from the Live Client Data API.
-//!   * `lcu`         — LCU access via `irelia` (phase, champ select, runes).
-//!   * `provider`    — pluggable data source for items & rune pages.
-//!   * `engine`      — shared state + the poller / rune-import tasks.
-//!   * `events`      — payloads emitted to the frontend.
-//!   * `hittest`     — region-based click-through (always-clickable headers).
-//!   * `mock`        — debug mode driving synthetic state (Ctrl+Shift+D).
-//!   * `hotkeys`     — global shortcuts.
-//!   * `commands`    — frontend-invokable commands.
+//! App modules (`src-tauri/src/`):
+//!   * `engine`      — shared state + the poller / rune-import tasks
+//!   * `events`      — payloads emitted to the frontend
+//!   * `hittest`     — region-based click-through (always-clickable headers)
+//!   * `mock`        — debug mode driving synthetic state (Ctrl+Shift+D)
+//!   * `hotkeys`     — global shortcuts
+//!   * `commands`    — frontend-invokable commands
+//!
+//! Workspace crates: `overlay-lcu`, `overlay-live-client`, `overlay-provider`, …
 
 mod commands;
 mod engine;
@@ -18,10 +17,7 @@ mod events;
 mod hittest;
 #[cfg(desktop)]
 mod hotkeys;
-mod lcu;
-mod live_client;
 mod mock;
-mod provider;
 
 use std::sync::atomic::AtomicBool;
 use std::sync::{Arc, Mutex};
@@ -29,16 +25,33 @@ use std::sync::{Arc, Mutex};
 use serde_json::Value;
 use tauri::Manager;
 
+use overlay_ddragon::DdragonClient;
+use overlay_provider::{ProviderKind, ProviderProxy};
+use overlay_provider_deeplol::DeepLolProvider;
+use overlay_provider_ugg::UggProvider;
+
 use crate::engine::{Engine, MockStage, Settings};
-use crate::live_client::LiveClient;
-use crate::provider::deeplol::DeepLolProvider;
+use overlay_live_client::LiveClient;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    // The data source. `DeepLolProvider` pulls real meta builds & runes from
-    // DeepLoL; swap in `HardcodedProvider` for a fully-offline fallback.
+    let ddragon = Arc::new(DdragonClient::new());
+    let mut proxy = ProviderProxy::new(ProviderKind::Deeplol);
+    proxy.register(
+        ProviderKind::Deeplol,
+        Arc::new(
+            DeepLolProvider::new(ddragon.clone())
+                .expect("failed to build DeepLoL provider"),
+        ),
+    );
+    proxy.register(
+        ProviderKind::Ugg,
+        Arc::new(UggProvider::new(ddragon.clone()).expect("failed to build u.gg provider")),
+    );
+    let provider = Arc::new(proxy);
+
     let engine = Arc::new(Engine {
-        provider: Arc::new(DeepLolProvider::new().expect("failed to build data provider")),
+        provider,
         live: LiveClient::new().expect("failed to build Live Client http client"),
         settings: Mutex::new(Settings::default()),
         ui_layout: Mutex::new(Default::default()),
@@ -78,8 +91,7 @@ pub fn run() {
             // Champ-select WebSocket → channel → rune processor (event-driven);
             // the poller tracks phase / in-game state and feeds the same channel.
             let (tx, rx) = tokio::sync::mpsc::unbounded_channel::<Value>();
-            let ws = lcu::subscribe_champ_select(tx.clone());
-            std::mem::forget(ws); // keep alive for the app's lifetime
+            overlay_lcu::subscribe_champ_select(tx.clone()).expect("failed to subscribe to champ-select");
 
             let handle = app.handle().clone();
             tauri::async_runtime::spawn(engine::rune_processor(handle.clone(), engine.clone(), rx));
@@ -106,6 +118,9 @@ pub fn run() {
             commands::get_counters,
             commands::get_rune_build,
             commands::import_build,
+            commands::get_data_source,
+            commands::list_data_sources,
+            commands::set_data_source,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

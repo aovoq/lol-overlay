@@ -22,16 +22,24 @@ tauri = { version = "2", features = ["macos-private-api"] }
 tauri-plugin-opener = "2"
 # Global hotkeys: toggle overlay interactivity / cycle monitor.
 tauri-plugin-global-shortcut = "2"
-serde = { version = "1", features = ["derive"] }
-serde_json = "1"
-# LCU REST + WebSocket client (lockfile auto-discovery, champ-select events).
-irelia = { version = "0.11", features = ["ws"] }
+serde = { workspace = true }
+serde_json = { workspace = true }
+overlay-lcu = { workspace = true }
+overlay-live-client = { workspace = true }
 # HTTP client for the Live Client Data API (in-game polling; no WebSocket exists
 # for it). Self-signed cert on localhost, so we accept invalid certs per-client.
 # native-tls (OS TLS) is used on purpose: Riot's Live Client server closes the
 # socket without a TLS close_notify, which rustls treats as a hard error.
-reqwest = { version = "0.12", default-features = false, features = ["json", "native-tls"] }
-tokio = { version = "1", features = ["time", "sync"] }
-async-trait = "0.1"
-thiserror = "2"
+reqwest = { workspace = true }
+tokio = { workspace = true }
+async-trait = { workspace = true }
+thiserror = { workspace = true }
+overlay-types = { workspace = true }
+overlay-provider = { workspace = true }
+overlay-provider-deeplol = { workspace = true }
+overlay-provider-ugg = { workspace = true }
+overlay-ddragon = { workspace = true }
 
+
+[lints]
+workspace = true

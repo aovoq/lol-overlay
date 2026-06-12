@@ -23,9 +23,9 @@ use crate::events::{
     log, ChampSelectEvent, LpChangeEvent, PhaseEvent, RecommendationsEvent, RuneImportedEvent,
 };
 use crate::hittest::HitRegion;
-use crate::lcu::{self, Phase, RunePagePayload};
-use crate::live_client::LiveClient;
-use crate::provider::{classify_threats, BuildProvider};
+use overlay_lcu::{self as lcu, Phase, RunePagePayload};
+use overlay_live_client::LiveClient;
+use overlay_provider::{classify_threats, BuildProvider, ProviderKind, ProviderProxy};
 
 /// How often the poller checks phase / in-game state.
 const POLL_INTERVAL: Duration = Duration::from_millis(2000);
@@ -46,6 +46,8 @@ pub struct Settings {
     /// Keep the champ-select window mode after champ select ends.
     #[serde(default)]
     pub pinned: bool,
+    #[serde(default)]
+    pub data_source: ProviderKind,
 }
 
 fn default_true() -> bool {
@@ -59,6 +61,7 @@ impl Default for Settings {
             import_spells: true,
             spells_flipped: false,
             pinned: false,
+            data_source: ProviderKind::default(),
         }
     }
 }
@@ -118,7 +121,7 @@ pub enum MockStage {
 
 /// Shared application state, held in Tauri's managed state.
 pub struct Engine {
-    pub provider: Arc<dyn BuildProvider>,
+    pub provider: Arc<ProviderProxy>,
     pub live: LiveClient,
     pub settings: Mutex<Settings>,
     pub ui_layout: Mutex<UiLayout>,
@@ -166,8 +169,10 @@ impl Engine {
         if path.exists() {
             let bytes = fs::read(&path)?;
             let stored = serde_json::from_slice::<StoredState>(&bytes)?;
+            let data_source = stored.settings.data_source;
             *self.settings.lock().unwrap() = stored.settings;
             *self.ui_layout.lock().unwrap() = stored.ui_layout;
+            let _ = self.provider.set_active(data_source);
         }
 
         *self.store_path.lock().unwrap() = Some(path);

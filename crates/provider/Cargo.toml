@@ -1,0 +1,15 @@
+[package]
+name = "overlay-provider"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+overlay-types = { workspace = true }
+async-trait = { workspace = true }
+thiserror = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+reqwest = { workspace = true }
+
+[lints]
+workspace = true
