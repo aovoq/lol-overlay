@@ -1,0 +1,1353 @@
+/* Overlay styling: the window is transparent + click-through, so the page
+   background must be fully transparent and nothing should capture the mouse.
+   Every panel shares the HEXGATE hextech theme (dark warm brown + gold). */
+:root {
+  /* HEXGATE hextech theme (all panels) */
+  --hx-bg: #0b0a08;
+  --hx-bg-raised: #15120d;
+  --hx-border: #3a3022;
+  --hx-gold: #c8aa6e;
+  --hx-gold-dim: #7a6a4d;
+  --hx-text: #f0e6d2;
+  --hx-muted: #847b6a;
+  --hx-up: #3fc380;
+  --hx-red: #e84057;
+  --hx-keystone-border: #463f2e;
+  --hx-serif: "Beaufort for LOL", "Cinzel", Georgia, serif;
+
+  /* Legacy aliases (in-game panels predate the hextech skin) */
+  --bg: rgba(11, 10, 8, 0.94);
+  --border: var(--hx-border);
+  --text: var(--hx-text);
+  --muted: var(--hx-muted);
+  --good: var(--hx-up);
+  --bad: var(--hx-red);
+  --warn: var(--hx-gold);
+  font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+}
+
+html,
+body {
+  margin: 0;
+  height: 100%;
+  background: transparent;
+  overflow: hidden;
+  /* Clicks pass straight through to the game. */
+  pointer-events: none;
+  color: var(--text);
+  user-select: none;
+}
+
+.panel {
+  position: fixed;
+  background: linear-gradient(
+    180deg,
+    rgba(200, 170, 110, 0.06),
+    rgba(200, 170, 110, 0) 18%
+    ),
+    var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px 14px;
+  backdrop-filter: blur(6px);
+  box-shadow: 0 6px 28px rgba(0, 0, 0, 0.55);
+  font-size: 13px;
+}
+
+.hidden {
+  display: none !important;
+}
+
+/* connection status, bottom-left */
+.status {
+  left: 16px;
+  bottom: 16px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--hx-muted);
+  font-size: 12px;
+  letter-spacing: 0.02em;
+}
+.dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--bad);
+  box-shadow: 0 0 8px currentColor;
+}
+.dot.up {
+  background: var(--warn);
+}
+.dot.ingame {
+  background: var(--good);
+}
+
+/* logged-in summoner profile inside the status chip */
+.profile {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: 6px;
+  padding-left: 10px;
+  border-left: 1px solid var(--border);
+}
+.profile-icon {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  border: 1px solid var(--border);
+}
+.profile-text {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.25;
+}
+.profile-name {
+  color: var(--fg, #e8e0cc);
+  font-weight: 600;
+}
+.profile-rank {
+  color: var(--hx-muted);
+  font-size: 11px;
+}
+
+/* recent-games strip: champion icons (newest left) + summary line */
+.profile-form {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  margin-top: 4px;
+}
+.form-games {
+  display: flex;
+  gap: 3px;
+}
+.form-game {
+  width: 18px;
+  height: 18px;
+  border-radius: 3px;
+  border-bottom: 2px solid transparent;
+  opacity: 0.95;
+}
+.form-game.win {
+  border-bottom-color: var(--good);
+}
+.form-game.loss {
+  border-bottom-color: var(--bad);
+  filter: grayscale(0.5);
+  opacity: 0.75;
+}
+.form-summary {
+  color: var(--hx-muted);
+  font-size: 11px;
+}
+.form-summary.streak-win {
+  color: var(--good);
+}
+.form-summary.streak-loss {
+  color: var(--bad);
+}
+
+/* post-game LP banner */
+.lp-banner {
+  border-left: 3px solid var(--hx-gold-dim);
+}
+.lp-banner.win {
+  border-left-color: var(--good);
+}
+.lp-banner.loss {
+  border-left-color: var(--bad);
+}
+.lp-banner #lp-result {
+  font-size: 15px;
+  letter-spacing: 0.04em;
+}
+.lp-banner.win #lp-result {
+  color: var(--good);
+}
+.lp-banner.loss #lp-result {
+  color: var(--bad);
+}
+.lp-banner #lp-detail {
+  color: var(--hx-muted);
+}
+
+/* rune import banner, top-center */
+.banner {
+  top: 18px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  border-color: var(--hx-gold-dim);
+}
+.banner .banner-text {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.3;
+}
+.banner strong {
+  color: var(--hx-gold);
+  font-family: var(--hx-serif);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+}
+.banner #rune-name {
+  color: var(--hx-muted);
+  font-size: 12px;
+}
+
+/* champion / item icons */
+.champ-icon {
+  width: 34px;
+  height: 34px;
+  border-radius: 6px;
+  border: 1px solid var(--hx-gold-dim);
+  object-fit: cover;
+}
+.champ-icon.sm {
+  width: 26px;
+  height: 26px;
+  border-radius: 4px;
+  border-color: rgba(232, 64, 87, 0.45);
+}
+.item-icon {
+  width: 32px;
+  height: 32px;
+  border-radius: 4px;
+  border: 1px solid var(--hx-border);
+  flex: 0 0 auto;
+}
+.enemies {
+  display: flex;
+  gap: 4px;
+}
+
+/* in-game build panel, top-right — hextech, mirrors the HEXGATE panel */
+.recs {
+  top: 80px;
+  right: 16px;
+  width: 448px;
+  padding: 0;
+  overflow: hidden;
+  pointer-events: auto;
+}
+.recs .ig-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 9px 12px;
+  border-bottom: 1px solid var(--hx-border);
+  transition: border-bottom-color 0.2s cubic-bezier(0.2, 0, 0, 1);
+  cursor: grab;
+}
+.ig-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--hx-gold);
+  font-family: var(--hx-serif);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.32em;
+}
+.ig-brand svg {
+  width: 13px;
+  height: 13px;
+  fill: none;
+  stroke: var(--hx-gold);
+  stroke-width: 1.6;
+}
+.ig-chip {
+  padding: 3px 9px;
+  border: 1px solid var(--hx-border);
+  border-radius: 3px;
+  font-family: var(--hx-serif);
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.22em;
+  color: var(--hx-text);
+}
+.ig-head-right {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.ig-collapse {
+  width: 22px;
+  height: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  background: transparent;
+  border: 1px solid var(--hx-border);
+  border-radius: 4px;
+  color: var(--hx-muted);
+  cursor: pointer;
+}
+.ig-collapse:hover {
+  color: var(--hx-gold);
+  border-color: var(--hx-gold);
+}
+.ig-collapse svg {
+  width: 14px;
+  height: 14px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  transition: transform 0.15s ease;
+}
+/* collapsed: only the header chip remains. Width animates between the two
+   fixed values; height animates via the wrapper's 1fr ⇔ 0fr grid row, which
+   keeps the body in the DOM and clips it as it shrinks. */
+.recs {
+  transition: width 0.2s cubic-bezier(0.2, 0, 0, 1);
+}
+.ig-collapse-wrap {
+  display: grid;
+  grid-template-rows: 1fr;
+  transition: grid-template-rows 0.2s cubic-bezier(0.2, 0, 0, 1);
+}
+.ig-body {
+  min-height: 0;
+  overflow: hidden;
+}
+.recs.collapsed {
+  width: 280px;
+}
+.recs.collapsed .ig-collapse-wrap {
+  grid-template-rows: 0fr;
+}
+.recs.collapsed .ig-head {
+  border-bottom-color: transparent;
+}
+.recs.collapsed .ig-collapse svg {
+  transform: rotate(-90deg);
+}
+/* keep the header on one line while the width transitions */
+.ig-brand,
+.ig-chip {
+  white-space: nowrap;
+}
+.ig-me {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px 8px;
+}
+.ig-me-icon {
+  width: 38px;
+  height: 38px;
+  border-radius: 5px;
+  border: 1px solid var(--hx-gold-dim);
+  object-fit: cover;
+}
+.ig-me-text {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+.ig-me-name {
+  color: var(--hx-text);
+  font-weight: 700;
+  font-size: 14px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.ig-me-pos {
+  color: var(--hx-gold-dim);
+  font-family: var(--hx-serif);
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.26em;
+}
+.ig-intel {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  padding: 0 12px 10px;
+  border-bottom: 1px solid var(--hx-border);
+}
+.threats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.threat-chip {
+  padding: 2px 7px;
+  border: 1px solid var(--hx-border);
+  border-radius: 3px;
+  background: var(--hx-bg-raised);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  color: var(--hx-muted);
+}
+.threat-chip b {
+  font-weight: 700;
+}
+.threat-chip.ad b {
+  color: #e8923f;
+}
+.threat-chip.ap b {
+  color: #9faafc;
+}
+.threat-chip.tank b {
+  color: #a1d586;
+}
+.threat-chip.cc {
+  color: var(--hx-red);
+  border-color: rgba(232, 64, 87, 0.35);
+}
+.ig-section {
+  padding: 9px 12px 6px;
+  font-family: var(--hx-serif);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.24em;
+  color: var(--hx-gold-dim);
+}
+.ig-skill {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 12px 10px;
+  border-bottom: 1px solid var(--hx-border);
+  background: linear-gradient(90deg, rgba(200, 170, 110, 0.04), transparent 70%);
+}
+.skill-label {
+  flex: 0 0 112px;
+  min-width: 0;
+  height: 38px;
+  display: flex;
+  align-items: center;
+  box-sizing: border-box;
+  padding: 0 10px;
+  border: 1px solid var(--hx-border);
+  border-radius: 4px;
+  background: rgba(21, 18, 13, 0.86);
+  color: var(--hx-gold-dim);
+  font-family: var(--hx-serif);
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 1.15;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+.skill-path {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0;
+}
+.skill-card {
+  position: relative;
+  width: 38px;
+  height: 38px;
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  overflow: hidden;
+  border: 1px solid var(--hx-border);
+  border-radius: 5px;
+  background: var(--hx-bg-raised);
+  box-shadow:
+    inset 0 0 0 1px rgba(200, 170, 110, 0.08),
+    0 2px 8px rgba(0, 0, 0, 0.28);
+}
+.skill-card.has-icon {
+  border-color: var(--hx-gold-dim);
+}
+.skill-card-icon {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  filter: saturate(0.96) contrast(1.08) brightness(0.9);
+}
+.skill-card-key {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--hx-gold);
+  font-family: var(--hx-serif);
+  font-size: 17px;
+  font-weight: 700;
+  line-height: 1;
+  text-shadow:
+    0 2px 4px rgba(0, 0, 0, 0.95),
+    0 0 9px rgba(0, 0, 0, 0.7);
+}
+.skill-card.has-icon .skill-card-key {
+  inset: auto 0 0 auto;
+  width: 17px;
+  height: 15px;
+  border-top: 1px solid rgba(200, 170, 110, 0.42);
+  border-left: 1px solid rgba(200, 170, 110, 0.42);
+  border-radius: 4px 0 0 0;
+  background: rgba(11, 10, 8, 0.9);
+  color: var(--hx-text);
+  font-size: 10px;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.95);
+}
+.skill-arrow {
+  width: 12px;
+  height: 38px;
+  flex: 0 0 auto;
+  position: relative;
+  opacity: 0.8;
+}
+.skill-arrow::before {
+  content: "";
+  position: absolute;
+  left: 3px;
+  top: 15px;
+  width: 8px;
+  height: 8px;
+  border-top: 1px solid var(--hx-gold-dim);
+  border-right: 1px solid var(--hx-gold-dim);
+  transform: rotate(45deg);
+  box-sizing: border-box;
+}
+.skill-arrow::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 3px;
+  top: 19px;
+  height: 1px;
+  background: var(--hx-gold-dim);
+}
+.recs ul {
+  list-style: none;
+  margin: 0;
+  padding: 0 8px 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  max-height: 52vh;
+  overflow-y: auto;
+}
+.recs li {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 9px;
+  padding: 6px 8px;
+  border: 1px solid transparent;
+  border-radius: 5px;
+  background: var(--hx-bg-raised);
+}
+.recs li:first-child {
+  border-color: var(--hx-keystone-border);
+}
+.recs li .rec-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+.recs li .name {
+  font-weight: 600;
+  color: var(--hx-text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.recs li .reason {
+  font-size: 10.5px;
+  color: var(--hx-muted);
+}
+.score-bar {
+  height: 2px;
+  margin-top: 4px;
+  border-radius: 1px;
+  background: linear-gradient(90deg, var(--hx-gold), var(--hx-gold-dim));
+  opacity: 0.85;
+}
+
+/* settings panel — a hit region (data-hit), so it opts back into clicks */
+.settings {
+  bottom: 16px;
+  right: 16px;
+  width: 220px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  pointer-events: auto;
+}
+.settings-title {
+  font-family: var(--hx-serif);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.28em;
+  color: var(--hx-gold);
+}
+.settings .toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  color: var(--hx-text);
+}
+.settings input[type="checkbox"] {
+  accent-color: var(--hx-gold);
+}
+.settings .hint {
+  font-size: 11px;
+  color: var(--hx-muted);
+}
+
+/* faint frame so the user can tell the overlay is capturing input */
+body.interactive::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  border: 2px solid rgba(200, 170, 110, 0.45);
+  box-shadow: inset 0 0 48px rgba(200, 170, 110, 0.12);
+}
+
+/* ====================================================================== */
+/* HEXGATE — champ-select panel (hextech dark-brown/gold theme).          */
+/* In ChampSelectMode the window is exactly 1000x860, so the panel fills  */
+/* it edge to edge and opts back into mouse input.                       */
+/* ====================================================================== */
+
+/* The window IS the panel in champ select; the overlay chrome would just
+   paint on top of it, so park it while the champselect body class is on. */
+body.champselect .status,
+body.champselect .recs {
+  display: none !important;
+}
+/* The header gear opens settings inside the small window, above the panel. */
+body.champselect .settings {
+  bottom: auto;
+  top: 56px;
+  right: 10px;
+  z-index: 10;
+}
+/* No interactive frame either — the whole window is interactive here. */
+body.champselect.interactive::after {
+  display: none;
+}
+
+.hexgate {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+  pointer-events: auto;
+  background: var(--hx-bg);
+  border: 1px solid var(--hx-border);
+  border-radius: 8px;
+  /* subtle inner top highlight + drop shadow */
+  box-shadow:
+    inset 0 1px 0 rgba(240, 230, 210, 0.07),
+    0 8px 40px rgba(0, 0, 0, 0.55);
+  color: var(--hx-text);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  overflow: hidden;
+}
+.hexgate img {
+  -webkit-user-drag: none;
+}
+
+/* thin gold scrollbars on dark track */
+.hexgate *::-webkit-scrollbar {
+  width: 6px;
+}
+.hexgate *::-webkit-scrollbar-track,
+.recs ul::-webkit-scrollbar-track {
+  background: transparent;
+}
+.hexgate *::-webkit-scrollbar-thumb,
+.recs ul::-webkit-scrollbar-thumb {
+  background: var(--hx-gold-dim);
+  border-radius: 3px;
+}
+.hexgate *::-webkit-scrollbar-thumb:hover,
+.recs ul::-webkit-scrollbar-thumb:hover {
+  background: var(--hx-gold);
+}
+.recs ul::-webkit-scrollbar {
+  width: 6px;
+}
+
+/* ---- header ---- */
+
+.hx-header {
+  flex: none;
+  height: 48px;
+  display: flex;
+  align-items: center;
+  padding: 0 14px;
+  border-bottom: 1px solid var(--hx-border);
+  position: relative;
+  cursor: grab;
+}
+.recs .ig-head:active,
+.hx-header:active {
+  cursor: grabbing;
+}
+.hx-brand {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  color: var(--hx-gold);
+  font-family: var(--hx-serif);
+  font-weight: 700;
+  font-size: 15px;
+  letter-spacing: 0.24em;
+}
+.hx-brand svg {
+  width: 18px;
+  height: 18px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.6;
+}
+.hx-phase-chip {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  border: 1px solid var(--hx-border);
+  border-radius: 4px;
+  padding: 4px 14px;
+  font-family: var(--hx-serif);
+  font-weight: 600;
+  font-size: 10px;
+  letter-spacing: 0.18em;
+  color: var(--hx-text);
+}
+.hx-pin {
+  margin-left: auto;
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: 1px solid var(--hx-border);
+  border-radius: 4px;
+  color: var(--hx-muted);
+  cursor: pointer;
+}
+.hx-pin svg {
+  width: 15px;
+  height: 15px;
+  fill: currentColor;
+}
+.hx-pin.active {
+  color: var(--hx-gold);
+  border-color: var(--hx-gold);
+  background: rgba(200, 170, 110, 0.12);
+}
+/* gear sits right of the pin (the pin's margin-left:auto pushes both right) */
+.hx-gear {
+  margin-left: 8px;
+}
+
+/* ---- two-column body ---- */
+
+.hx-body {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: 360px 1fr;
+}
+.hx-left {
+  border-right: 1px solid var(--hx-border);
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-height: 0;
+}
+.hx-right {
+  padding: 16px 18px 14px;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+/* ---- left column: section heads, role chips, tier rows ---- */
+
+.hx-section-head {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  font-family: var(--hx-serif);
+  font-weight: 600;
+  font-size: 11px;
+  letter-spacing: 0.16em;
+  color: var(--hx-gold-dim);
+  padding: 4px 2px 2px;
+}
+.hx-role-chips {
+  display: flex;
+  gap: 6px;
+}
+.hx-role-chip {
+  flex: 1;
+  font-family: var(--hx-serif);
+  font-weight: 600;
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  color: var(--hx-muted);
+  background: transparent;
+  border: 1px solid var(--hx-border);
+  border-radius: 4px;
+  padding: 5px 0;
+  cursor: pointer;
+}
+.hx-role-chip.active {
+  color: var(--hx-gold);
+  border-color: var(--hx-gold);
+}
+.hx-list {
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding-right: 4px;
+}
+.hx-strong {
+  flex: 1.3 1 0;
+}
+.hx-bans {
+  flex: 1 1 0;
+}
+.hx-row {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 8px;
+  border-radius: 6px;
+}
+.hx-row:hover {
+  background: var(--hx-bg-raised);
+}
+.hx-row-icon {
+  width: 28px;
+  height: 28px;
+  border-radius: 4px;
+  border: 1px solid var(--hx-border);
+  object-fit: cover;
+}
+.hx-row-name {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.hx-row-wr {
+  width: 48px;
+  text-align: right;
+  font-weight: 700;
+  color: var(--hx-text);
+}
+.hx-row-wr.red {
+  color: var(--hx-red);
+}
+.hx-row-delta {
+  width: 38px;
+  text-align: right;
+  font-size: 11px;
+}
+.hx-row-delta.up {
+  color: var(--hx-up);
+}
+.hx-row-delta.down {
+  color: var(--hx-red);
+}
+.hx-row-games {
+  width: 44px;
+  text-align: right;
+  font-size: 12px;
+  color: var(--hx-muted);
+}
+
+/* ---- right column: enemy picks + counters ---- */
+
+.hx-enemy-row {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+.hx-enemy-slot {
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--hx-bg-raised);
+  border: 1px solid var(--hx-border);
+  border-radius: 6px;
+  color: var(--hx-muted);
+  font-family: var(--hx-serif);
+  font-size: 15px;
+  overflow: hidden;
+}
+.hx-enemy-slot.revealed {
+  border-color: var(--hx-red);
+}
+.hx-enemy-slot img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.hx-counters-label {
+  color: var(--hx-muted);
+  font-size: 12px;
+  margin-bottom: 6px;
+}
+.hx-counters-strip {
+  display: flex;
+  gap: 10px;
+  min-height: 46px;
+  align-items: center;
+}
+.hx-counter {
+  width: 34px;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  align-items: center;
+}
+.hx-counter img {
+  width: 32px;
+  height: 32px;
+  border-radius: 4px;
+  border: 1px solid var(--hx-border);
+  object-fit: cover;
+}
+.hx-counter-wr {
+  font-size: 10px;
+  color: var(--hx-muted);
+}
+.hx-counter-wr.up {
+  color: var(--hx-up);
+}
+.hx-counter.hx-skel {
+  width: 32px;
+  height: 44px;
+  border-radius: 4px;
+}
+.hx-divider {
+  flex: none;
+  border-top: 1px solid var(--hx-border);
+  margin: 10px 0;
+}
+
+/* ---- matchup line + tabs ---- */
+
+.hx-matchup {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+}
+.hx-matchup-role {
+  font-family: var(--hx-serif);
+  font-weight: 600;
+  font-size: 11px;
+  letter-spacing: 0.16em;
+  color: var(--hx-muted);
+}
+.hx-matchup-icon {
+  width: 20px;
+  height: 20px;
+  border-radius: 4px;
+  border: 1px solid var(--hx-border);
+  object-fit: cover;
+}
+.hx-matchup-me {
+  color: var(--hx-gold);
+  font-weight: 600;
+}
+.hx-matchup-vs {
+  color: var(--hx-muted);
+  font-style: italic;
+}
+.hx-matchup-enemy {
+  color: var(--hx-text);
+}
+
+.hx-tabs {
+  position: relative;
+  display: flex;
+  gap: 26px;
+  border-bottom: 1px solid var(--hx-border);
+  margin-top: 6px;
+}
+.hx-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  padding: 10px 2px;
+  font-family: var(--hx-serif);
+  font-weight: 600;
+  font-size: 12px;
+  letter-spacing: 0.12em;
+  color: var(--hx-muted);
+  cursor: pointer;
+}
+.hx-tab.active {
+  color: var(--hx-gold);
+  border-bottom-color: var(--hx-gold);
+}
+.hx-tab:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+.hx-tab-icon {
+  width: 18px;
+  height: 18px;
+  border-radius: 3px;
+  border: 1px solid var(--hx-border);
+  object-fit: cover;
+}
+.hx-chevron {
+  padding-left: 2px;
+}
+.hx-vs-menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 140px;
+  z-index: 10;
+  min-width: 180px;
+  display: flex;
+  flex-direction: column;
+  background: var(--hx-bg-raised);
+  border: 1px solid var(--hx-border);
+  border-radius: 6px;
+  padding: 4px;
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.55);
+}
+.hx-vs-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  text-align: left;
+  background: none;
+  border: none;
+  border-radius: 4px;
+  padding: 6px 10px;
+  color: var(--hx-text);
+  font-size: 13px;
+  cursor: pointer;
+}
+.hx-vs-item:hover {
+  background: var(--hx-bg);
+  color: var(--hx-gold);
+}
+.hx-vs-item img {
+  width: 22px;
+  height: 22px;
+  border-radius: 3px;
+  border: 1px solid var(--hx-border);
+  object-fit: cover;
+}
+
+/* ---- rune page ---- */
+
+.hx-build {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 12px 4px 6px 0;
+}
+.hx-runes {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.hx-tree-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 8px 0 2px;
+  color: var(--hx-gold);
+  font-family: var(--hx-serif);
+  font-weight: 600;
+  font-size: 12px;
+  letter-spacing: 0.16em;
+}
+.hx-tree-head img {
+  width: 16px;
+  height: 16px;
+}
+.hx-keystone {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 12px;
+  background: var(--hx-bg-raised);
+  border: 1px solid var(--hx-keystone-border);
+  border-radius: 6px;
+}
+.hx-keystone img {
+  width: 44px;
+  height: 44px;
+}
+.hx-keystone-name {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--hx-text);
+}
+.hx-rune-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 4px 8px;
+  font-size: 13px;
+  color: var(--hx-text);
+}
+.hx-rune-row img {
+  width: 28px;
+  height: 28px;
+}
+.hx-shards-head {
+  display: block;
+  margin-top: 8px;
+  color: var(--hx-muted);
+  font-family: var(--hx-serif);
+  font-weight: 600;
+  font-size: 11px;
+  letter-spacing: 0.16em;
+}
+.hx-shards {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.hx-shard {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid var(--hx-border);
+  border-radius: 999px;
+  padding: 4px 10px;
+  font-size: 11px;
+  color: var(--hx-text);
+}
+.hx-shard img {
+  width: 16px;
+  height: 16px;
+  opacity: 0.9; /* small white CommunityDragon glyphs */
+}
+
+/* ---- stats / spells row + import button ---- */
+
+.hx-stats {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 0;
+}
+.hx-stat-wr {
+  font-weight: 700;
+  font-size: 14px;
+  color: var(--hx-text);
+}
+.hx-stat-games {
+  color: var(--hx-muted);
+}
+.hx-stats-spacer {
+  flex: 1;
+}
+.hx-spell-icons {
+  display: flex;
+  gap: 4px;
+}
+.hx-spell-icons img {
+  width: 26px;
+  height: 26px;
+  border-radius: 4px;
+  border: 1px solid var(--hx-border);
+}
+.hx-flip {
+  background: none;
+  border: 1px solid var(--hx-border);
+  border-radius: 4px;
+  padding: 4px 8px;
+  font-family: var(--hx-serif);
+  font-weight: 600;
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  color: var(--hx-gold-dim);
+  cursor: pointer;
+}
+.hx-flip:hover {
+  color: var(--hx-gold);
+  border-color: var(--hx-gold-dim);
+}
+.hx-spells-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: 6px;
+  font-size: 12px;
+  color: var(--hx-text);
+  cursor: pointer;
+}
+.hx-spells-toggle input {
+  accent-color: var(--hx-gold);
+}
+
+.hx-import {
+  flex: none;
+  width: 100%;
+  height: 44px;
+  background: #131009;
+  border: 1px solid var(--hx-gold);
+  border-radius: 6px;
+  color: var(--hx-gold);
+  font-family: var(--hx-serif);
+  font-weight: 700;
+  font-size: 13px;
+  letter-spacing: 0.18em;
+  cursor: pointer;
+}
+.hx-import:hover:not(:disabled) {
+  border-color: #e3cb95;
+  color: #e3cb95;
+  box-shadow: 0 0 14px rgba(200, 170, 110, 0.28);
+}
+.hx-import:disabled {
+  opacity: 0.65;
+  cursor: default;
+}
+.hx-import.failed {
+  border-color: var(--hx-red);
+  color: var(--hx-red);
+}
+.hx-pro-row {
+  display: flex;
+  justify-content: center;
+  padding: 8px 0 2px;
+}
+.hx-pro {
+  border: 1px solid var(--hx-gold-dim);
+  border-radius: 3px;
+  padding: 3px 12px;
+  font-family: var(--hx-serif);
+  font-weight: 600;
+  font-size: 10px;
+  letter-spacing: 0.22em;
+  color: var(--hx-gold-dim);
+}
+
+/* ---- empty / error / skeleton states ---- */
+
+.hx-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  margin: 56px auto 0;
+  max-width: 340px;
+  text-align: center;
+  color: var(--hx-muted);
+}
+.hx-glyph svg {
+  width: 44px;
+  height: 44px;
+  color: var(--hx-gold-dim);
+}
+.hx-empty-role {
+  font-family: var(--hx-serif);
+  font-weight: 700;
+  font-size: 14px;
+  letter-spacing: 0.2em;
+  color: var(--hx-gold);
+}
+.hx-empty-title {
+  font-size: 16px;
+  color: var(--hx-text);
+}
+.hx-empty-text {
+  font-size: 12px;
+  line-height: 1.5;
+}
+.hx-error {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 8px;
+  font-size: 12px;
+  color: var(--hx-muted);
+}
+.hx-retry {
+  background: none;
+  border: none;
+  padding: 0;
+  font-size: 12px;
+  color: var(--hx-gold);
+  text-decoration: underline;
+  cursor: pointer;
+}
+.hx-error-detail {
+  flex-basis: 100%;
+  overflow-wrap: anywhere;
+  color: rgba(230, 217, 181, 0.62);
+  font-family:
+    ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+  font-size: 10px;
+  line-height: 1.4;
+}
+
+.hx-skel {
+  background: linear-gradient(
+    90deg,
+    var(--hx-bg-raised) 25%,
+    #1f1a12 37%,
+    var(--hx-bg-raised) 63%
+  );
+  background-size: 400% 100%;
+  animation: hx-shimmer 1.4s ease infinite;
+  border-radius: 6px;
+}
+.hx-row.hx-skel {
+  height: 28px;
+}
+.hx-skel-keystone {
+  height: 62px;
+}
+.hx-skel-row {
+  height: 36px;
+}
+@keyframes hx-shimmer {
+  0% {
+    background-position: 100% 0;
+  }
+  100% {
+    background-position: -100% 0;
+  }
+}

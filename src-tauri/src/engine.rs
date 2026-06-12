@@ -1,0 +1,556 @@
+//! Core engine: shared application state plus the two background tasks.
+//!
+//!   * [`rune_processor`] drains champ-select sessions and imports runes on
+//!     pick change (sessions arrive from the WebSocket and the poller fallback).
+//!   * [`poller`] tracks phase / in-game state for the UI and feeds the
+//!     rune-import channel as a REST fallback.
+
+use std::fs;
+use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Mutex};
+use std::time::Duration;
+
+use serde::{Deserialize, Serialize};
+use serde_json::Value;
+use tauri::{
+    AppHandle, Emitter, LogicalPosition, LogicalSize, Manager, Monitor, PhysicalPosition,
+    PhysicalSize,
+};
+use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
+
+use crate::events::{
+    log, ChampSelectEvent, LpChangeEvent, PhaseEvent, RecommendationsEvent, RuneImportedEvent,
+};
+use crate::hittest::HitRegion;
+use crate::lcu::{self, Phase, RunePagePayload};
+use crate::live_client::LiveClient;
+use crate::provider::{classify_threats, BuildProvider};
+
+/// How often the poller checks phase / in-game state.
+const POLL_INTERVAL: Duration = Duration::from_millis(2000);
+
+/// User-tunable settings. Serialized camelCase because the frontend mirrors
+/// this shape directly, and persisted in the app config store.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Settings {
+    #[serde(default = "default_true")]
+    pub auto_import_runes: bool,
+    /// Write summoner spells along with runes on manual import.
+    #[serde(default = "default_true")]
+    pub import_spells: bool,
+    /// Swap the two spells (D/F order) on import.
+    #[serde(default)]
+    pub spells_flipped: bool,
+    /// Keep the champ-select window mode after champ select ends.
+    #[serde(default)]
+    pub pinned: bool,
+}
+
+fn default_true() -> bool {
+    true
+}
+
+impl Default for Settings {
+    fn default() -> Self {
+        Self {
+            auto_import_runes: true,
+            import_spells: true,
+            spells_flipped: false,
+            pinned: false,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PanelPosition {
+    pub left: f64,
+    pub top: f64,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WindowPosition {
+    pub x: f64,
+    pub y: f64,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UiLayout {
+    #[serde(default)]
+    pub ingame_panel: Option<PanelPosition>,
+    #[serde(default)]
+    pub champselect_window: Option<WindowPosition>,
+    /// In-game panel collapsed to its header chip.
+    #[serde(default)]
+    pub ingame_collapsed: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct StoredState {
+    #[serde(default)]
+    settings: Settings,
+    #[serde(default)]
+    ui_layout: UiLayout,
+}
+
+impl Default for StoredState {
+    fn default() -> Self {
+        Self {
+            settings: Settings::default(),
+            ui_layout: UiLayout::default(),
+        }
+    }
+}
+
+/// Which synthetic scenario the debug hotkey is driving
+/// (Ctrl+Shift+D cycles off → champ select → in game → off).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MockStage {
+    Off,
+    ChampSelect,
+    InGame,
+}
+
+/// Shared application state, held in Tauri's managed state.
+pub struct Engine {
+    pub provider: Arc<dyn BuildProvider>,
+    pub live: LiveClient,
+    pub settings: Mutex<Settings>,
+    pub ui_layout: Mutex<UiLayout>,
+    pub store_path: Mutex<Option<PathBuf>>,
+    /// Debug/mock mode: when on, the poller pauses and the UI is driven by
+    /// synthetic state (cycle with Ctrl+Shift+D). Lets you work on the
+    /// overlay without launching League.
+    pub mock: AtomicBool,
+    /// Which mock scenario is active; `mock` stays in sync (true iff != Off).
+    pub mock_stage: Mutex<MockStage>,
+    /// Last `champ-select` event emitted, so duplicate sessions (WS + REST
+    /// fallback) don't spam the frontend with identical state.
+    pub last_champ_select: Mutex<Option<ChampSelectEvent>>,
+    /// Clickable rects reported by the frontend (`data-hit` elements), in
+    /// window-relative logical px. Read by `hittest::cursor_watcher`.
+    pub hit_regions: Mutex<Vec<HitRegion>>,
+    /// A panel drag is in progress: hold the window interactive even when the
+    /// cursor outruns the (briefly stale) reported rects.
+    pub drag_active: AtomicBool,
+    /// Ctrl+Shift+O emergency override: whole window interactive.
+    pub forced_interactive: AtomicBool,
+    /// Interactivity last applied to the window, so the watcher only touches
+    /// the window style on transitions.
+    pub interactive_applied: AtomicBool,
+    /// Window mode last applied by `apply_window_mode`: true while the window
+    /// is the panel-sized champ-select window. The monitor-cycle hotkey uses
+    /// it to re-apply the right bounds on the target monitor.
+    pub window_champselect: AtomicBool,
+}
+
+impl Engine {
+    pub fn settings(&self) -> Settings {
+        self.settings.lock().unwrap().clone()
+    }
+
+    pub fn ui_layout(&self) -> UiLayout {
+        self.ui_layout.lock().unwrap().clone()
+    }
+
+    pub fn init_store(&self, path: PathBuf) -> crate::error::Result<()> {
+        if let Some(parent) = path.parent() {
+            fs::create_dir_all(parent)?;
+        }
+
+        if path.exists() {
+            let bytes = fs::read(&path)?;
+            let stored = serde_json::from_slice::<StoredState>(&bytes)?;
+            *self.settings.lock().unwrap() = stored.settings;
+            *self.ui_layout.lock().unwrap() = stored.ui_layout;
+        }
+
+        *self.store_path.lock().unwrap() = Some(path);
+        self.persist()
+    }
+
+    pub fn persist(&self) -> crate::error::Result<()> {
+        let path = self.store_path.lock().unwrap().clone();
+        let Some(path) = path else {
+            return Ok(());
+        };
+
+        write_store(
+            &path,
+            &StoredState {
+                settings: self.settings(),
+                ui_layout: self.ui_layout(),
+            },
+        )
+    }
+
+    pub fn mock_stage(&self) -> MockStage {
+        *self.mock_stage.lock().unwrap()
+    }
+
+    /// Advance/clear the mock scenario, keeping the plain `mock` flag in sync
+    /// (the poller pause and `import_build` only care about on/off).
+    pub fn set_mock_stage(&self, stage: MockStage) {
+        *self.mock_stage.lock().unwrap() = stage;
+        self.mock.store(stage != MockStage::Off, Ordering::SeqCst);
+    }
+}
+
+fn write_store(path: &Path, stored: &StoredState) -> crate::error::Result<()> {
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent)?;
+    }
+    let tmp = path.with_extension("json.tmp");
+    fs::write(&tmp, serde_json::to_vec_pretty(stored)?)?;
+    fs::rename(tmp, path)?;
+    Ok(())
+}
+
+/// Emit `ev` on `champ-select` unless it equals the last emitted state — the
+/// WebSocket and the poller's REST fallback feed the same sessions twice.
+pub fn emit_champ_select(app: &AppHandle, engine: &Engine, ev: ChampSelectEvent) {
+    let mut last = engine.last_champ_select.lock().unwrap();
+    if last.as_ref() == Some(&ev) {
+        return;
+    }
+    let _ = app.emit("champ-select", ev.clone());
+    *last = Some(ev);
+}
+
+/// Logical size/offset of the champ-select panel window (HEXGATE spec:
+/// 1000×860 at x=48, vertically centered on the current monitor).
+const CHAMP_SELECT_SIZE: (f64, f64) = (1000.0, 860.0);
+const CHAMP_SELECT_X: f64 = 48.0;
+
+/// The screen region the overlay window may occupy on `monitor`.
+///
+/// On Windows the borderless game covers the whole monitor, so the overlay
+/// must too. On macOS a regular window can't overlap the menu bar: the OS
+/// pushes a monitor-sized window down below it while keeping the requested
+/// size, sliding the bottom edge (and the bottom-anchored status chip) off
+/// screen — so use the work area (screen minus menu bar / Dock) there.
+pub fn overlay_bounds(monitor: &Monitor) -> (PhysicalPosition<i32>, PhysicalSize<u32>) {
+    if cfg!(target_os = "macos") {
+        let area = monitor.work_area();
+        (area.position, area.size)
+    } else {
+        (*monitor.position(), *monitor.size())
+    }
+}
+
+/// Switch the overlay window between its two modes and tell the frontend.
+///
+/// * `champselect = true`: a panel-sized champ-select window.
+/// * `champselect = false`: the normal overlay — full current monitor.
+///
+/// Both modes start click-through; `hittest::cursor_watcher` re-enables mouse
+/// input whenever the cursor is over a reported hit region (panel headers,
+/// the champ-select panel body). Ctrl+Shift+O remains as an emergency
+/// whole-window override and is cleared on every mode switch.
+pub fn apply_window_mode(app: &AppHandle, champselect: bool) {
+    let Some(win) = app.get_webview_window("main") else {
+        return;
+    };
+    let monitor = win
+        .current_monitor()
+        .ok()
+        .flatten()
+        .or_else(|| win.primary_monitor().ok().flatten());
+    let Some(monitor) = monitor else {
+        return;
+    };
+
+    let (area_pos, area_size) = overlay_bounds(&monitor);
+    if champselect {
+        // Monitor bounds are physical pixels; the panel is specced in logical
+        // px, so convert via the monitor's scale factor.
+        let scale = monitor.scale_factor();
+        let origin = area_pos.to_logical::<f64>(scale);
+        let bounds = area_size.to_logical::<f64>(scale);
+        let (w, h) = CHAMP_SELECT_SIZE;
+        let stored_position = app
+            .try_state::<Arc<Engine>>()
+            .and_then(|engine| engine.ui_layout().champselect_window);
+        let _ = win.set_size(LogicalSize::new(w, h));
+        let position = if let Some(pos) = stored_position {
+            LogicalPosition::new(
+                pos.x.clamp(origin.x, origin.x + (bounds.width - w).max(0.0)),
+                pos.y.clamp(origin.y, origin.y + (bounds.height - h).max(0.0)),
+            )
+        } else {
+            LogicalPosition::new(
+                origin.x + CHAMP_SELECT_X,
+                origin.y + ((bounds.height - h) / 2.0).max(0.0),
+            )
+        };
+        let _ = win.set_position(position);
+        let pinned = app
+            .try_state::<Arc<Engine>>()
+            .map(|engine| engine.settings().pinned)
+            .unwrap_or(false);
+        let _ = win.set_always_on_top(pinned);
+    } else {
+        let _ = win.set_position(area_pos);
+        let _ = win.set_size(area_size);
+        let _ = win.set_always_on_top(true);
+    }
+
+    // Reset to click-through and clear the emergency override, keeping the
+    // watcher's applied-state cache in sync with the actual window style.
+    if let Some(engine) = app.try_state::<Arc<Engine>>() {
+        engine.forced_interactive.store(false, Ordering::SeqCst);
+        engine.interactive_applied.store(false, Ordering::SeqCst);
+        engine.window_champselect.store(champselect, Ordering::SeqCst);
+    }
+    let _ = win.set_ignore_cursor_events(true);
+    let _ = app.emit("interactive", false);
+
+    let _ = app.emit(
+        "window-mode",
+        if champselect { "champselect" } else { "overlay" },
+    );
+}
+
+/// Drains champ-select sessions and imports runes whenever our pick changes.
+/// Dedup by champion id makes the duplicate WS + REST sessions harmless.
+pub async fn rune_processor(app: AppHandle, engine: Arc<Engine>, mut rx: UnboundedReceiver<Value>) {
+    let mut last_imported: i64 = 0;
+
+    while let Some(session) = rx.recv().await {
+        // HEXGATE panel state: every session parses into a ChampSelectEvent,
+        // emitted only on change (the poller emits the `active: false` end).
+        if let Some(ev) = lcu::parse_champ_select(&session) {
+            emit_champ_select(&app, &engine, ev);
+        }
+
+        if !engine.settings().auto_import_runes {
+            continue;
+        }
+        let Some(pick) = lcu::parse_my_pick(&session) else {
+            last_imported = 0; // pick cleared; allow re-import of the same champ
+            continue;
+        };
+        if pick.champion_id == last_imported {
+            continue;
+        }
+
+        let rec = match engine
+            .provider
+            .runes(pick.champion_id, pick.position.as_deref())
+            .await
+        {
+            Ok(rec) => rec,
+            Err(e) => {
+                log(&app, "error", format!("rune lookup failed: {e}"));
+                continue;
+            }
+        };
+
+        let payload = RunePagePayload {
+            name: rec.name.clone(),
+            primary_style_id: rec.primary_style_id,
+            sub_style_id: rec.sub_style_id,
+            selected_perk_ids: rec.selected_perk_ids,
+            current: true,
+        };
+        if let Err(e) = lcu::apply_runes(&payload).await {
+            log(&app, "error", format!("rune import failed: {e}"));
+            continue;
+        }
+
+        last_imported = pick.champion_id;
+        log(&app, "info", format!("Imported runes: {}", rec.name));
+        let _ = app.emit(
+            "rune-imported",
+            RuneImportedEvent {
+                champion_id: pick.champion_id,
+                page_name: rec.name,
+            },
+        );
+    }
+}
+
+/// Ladder position as a single comparable number, for promote/demote
+/// detection. Apex tiers have no real division ("NA" → 0).
+fn rank_value(tier: &str, division: &str) -> i32 {
+    const TIERS: [&str; 10] = [
+        "IRON", "BRONZE", "SILVER", "GOLD", "PLATINUM", "EMERALD", "DIAMOND", "MASTER",
+        "GRANDMASTER", "CHALLENGER",
+    ];
+    let t = TIERS.iter().position(|&t| t == tier).map_or(-1, |i| i as i32);
+    let d = match division {
+        "IV" => 0,
+        "III" => 1,
+        "II" => 2,
+        "I" => 3,
+        _ => 0,
+    };
+    t * 4 + d
+}
+
+/// How many recent games the profile chip shows.
+const RECENT_GAMES: usize = 10;
+/// Refresh the match history at least every N polls (~1 min) even without a
+/// detected ranked result, so normal games / ARAMs show up too.
+const HISTORY_REFRESH_POLLS: u32 = 30;
+
+/// Tracks phase + in-game state for the UI. During champ select it also pushes
+/// the current session to `tx` as a fallback in case the WebSocket missed it.
+pub async fn poller(app: AppHandle, engine: Arc<Engine>, tx: UnboundedSender<Value>) {
+    let mut prev_phase = Phase::None;
+    let mut prev_summoner: Option<lcu::SummonerInfo> = None;
+    let mut recent_games: Option<Vec<lcu::RecentGame>> = None;
+    let mut history_poll_age = HISTORY_REFRESH_POLLS; // refresh on first poll
+    let mut platform_resolved = false;
+    loop {
+        // In mock mode the UI is driven by synthetic state; don't fight it.
+        if engine.mock.load(Ordering::Relaxed) {
+            tokio::time::sleep(POLL_INTERVAL).await;
+            continue;
+        }
+
+        let phase = lcu::fetch_phase().await;
+        let client_up = phase.is_ok();
+        let phase = phase.unwrap_or(Phase::None);
+
+        // Window-mode transitions: the panel window appears with champ select
+        // and gives the screen back when it ends (unless pinned). Leaving also
+        // closes the HEXGATE panel — the WebSocket has no "session gone"
+        // signal we consume, so the poller owns the `active: false` sentinel.
+        if phase == Phase::ChampSelect && prev_phase != Phase::ChampSelect {
+            apply_window_mode(&app, true);
+        } else if phase != Phase::ChampSelect && prev_phase == Phase::ChampSelect {
+            emit_champ_select(&app, &engine, ChampSelectEvent::default());
+            if !engine.settings().pinned {
+                apply_window_mode(&app, false);
+            }
+        }
+        let game_just_ended = prev_phase == Phase::InProgress && phase != Phase::InProgress;
+        prev_phase = phase;
+
+        // Logged-in summoner + solo rank/LP for the profile chip. Emitted on
+        // every poll like `phase` — the frontend may register its listener
+        // after the first poll, so a deduped one-shot emit can be lost.
+        let mut ranked_result_landed = false;
+        if client_up {
+            match lcu::fetch_summoner().await {
+                Ok(info) => {
+                    // A ranked result landed when the solo W/L count grew.
+                    // Compare LP around it for the post-game banner.
+                    if let Some(prev) = &prev_summoner {
+                        let games = |s: &lcu::SummonerInfo| s.solo_wins + s.solo_losses;
+                        if !prev.solo_tier.is_empty() && games(&info) > games(prev) {
+                            ranked_result_landed = true;
+                            let old = rank_value(&prev.solo_tier, &prev.solo_division);
+                            let new = rank_value(&info.solo_tier, &info.solo_division);
+                            let _ = app.emit(
+                                "lp-change",
+                                LpChangeEvent {
+                                    win: info.solo_wins > prev.solo_wins,
+                                    lp_delta: info.solo_lp - prev.solo_lp,
+                                    tier: info.solo_tier.clone(),
+                                    division: info.solo_division.clone(),
+                                    lp: info.solo_lp,
+                                    rank_change: match new.cmp(&old) {
+                                        std::cmp::Ordering::Greater => "promoted".into(),
+                                        std::cmp::Ordering::Less => "demoted".into(),
+                                        std::cmp::Ordering::Equal => "".into(),
+                                    },
+                                },
+                            );
+                        }
+                    }
+                    let _ = app.emit("summoner", info.clone());
+                    prev_summoner = Some(info);
+                }
+                Err(e) => log(&app, "warn", format!("summoner fetch failed: {e}")),
+            }
+        } else {
+            prev_summoner = None;
+            recent_games = None;
+            let _ = app.emit("summoner", Value::Null);
+        }
+
+        // Recent-games strip. The fetch is local but heavier than the rank
+        // call, so refresh only when a game just ended (phase left InProgress
+        // or a ranked result landed) or on the ~1 min fallback timer; the
+        // cached list is re-emitted every poll (same listener-race reasoning).
+        if client_up {
+            history_poll_age += 1;
+            if recent_games.is_none()
+                || game_just_ended
+                || ranked_result_landed
+                || history_poll_age >= HISTORY_REFRESH_POLLS
+            {
+                match lcu::fetch_recent_matches(RECENT_GAMES).await {
+                    Ok(games) => {
+                        recent_games = Some(games);
+                        history_poll_age = 0;
+                    }
+                    Err(e) => log(&app, "warn", format!("match history fetch failed: {e}")),
+                }
+            }
+            if let Some(games) = &recent_games {
+                let _ = app.emit("match-history", games);
+            }
+        }
+
+        // Resolve the player's region into the provider once per client run.
+        if client_up && !platform_resolved {
+            match lcu::fetch_platform_id().await {
+                Ok(platform_id) => {
+                    log(&app, "info", format!("platform resolved: {platform_id}"));
+                    engine.provider.set_platform_id(&platform_id);
+                    platform_resolved = true;
+                }
+                Err(e) => log(&app, "warn", format!("region lookup failed: {e}")),
+            }
+        } else if !client_up {
+            platform_resolved = false;
+        }
+
+        if phase == Phase::ChampSelect {
+            if let Ok(Some(session)) = lcu::fetch_session().await {
+                let _ = tx.send(session);
+            }
+        }
+
+        // In-game item recommendations (Live Client Data API — polling only).
+        let mut in_game = false;
+        if let Some(snapshot) = engine.live.snapshot().await {
+            in_game = true;
+            let threats = classify_threats(&snapshot);
+            let items = engine.provider.items(&snapshot).await.unwrap_or_default();
+            let skill_order = engine.provider.skill_order(&snapshot).await.ok();
+
+            let _ = app.emit(
+                "recommendations",
+                RecommendationsEvent {
+                    self_champion: snapshot.self_champion.clone(),
+                    self_raw_name: snapshot.self_raw_name.clone(),
+                    self_position: snapshot.self_position.clone(),
+                    enemies: snapshot.enemies.clone(),
+                    threats,
+                    skill_order,
+                    items,
+                },
+            );
+        }
+
+        let _ = app.emit(
+            "phase",
+            PhaseEvent {
+                phase: phase.label().to_string(),
+                client_up,
+                in_game,
+            },
+        );
+
+        tokio::time::sleep(POLL_INTERVAL).await;
+    }
+}
