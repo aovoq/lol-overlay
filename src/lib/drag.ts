@@ -5,7 +5,7 @@ import type { WindowMode } from "../types";
 import { reportHitRegions } from "./hitRegions";
 
 const appWindow = getCurrentWindow();
-let champselectMoveSaveTimer: number | undefined;
+let controlWindowGeometrySaveTimer: number | undefined;
 
 export function shouldStartDrag(event: PointerEvent): boolean {
   if (event.button !== 0) return false;
@@ -38,11 +38,18 @@ export function saveIngamePanelPosition(panel: HTMLElement) {
   invoke("set_ingame_panel_position", { left, top }).catch(() => {});
 }
 
-async function saveChampselectWindowPosition(position: { x: number; y: number }) {
-  const scale = await appWindow.scaleFactor();
-  await invoke("set_champselect_window_position", {
+async function saveControlWindowGeometry(mode: WindowMode) {
+  const [scale, position, size] = await Promise.all([
+    appWindow.scaleFactor(),
+    appWindow.outerPosition(),
+    appWindow.innerSize(),
+  ]);
+  await invoke("set_control_window_geometry", {
+    mode,
     x: Math.round(position.x / scale),
     y: Math.round(position.y / scale),
+    width: Math.round(size.width / scale),
+    height: Math.round(size.height / scale),
   });
 }
 
@@ -54,15 +61,22 @@ export function initWindowDrag(header: HTMLElement | undefined) {
   });
 }
 
-export function initWindowMoveSave(getMode: () => WindowMode) {
+export function initControlWindowGeometrySave(getMode: () => WindowMode) {
+  const scheduleSave = () => {
+    if (controlWindowGeometrySaveTimer) window.clearTimeout(controlWindowGeometrySaveTimer);
+    controlWindowGeometrySaveTimer = window.setTimeout(() => {
+      saveControlWindowGeometry(getMode()).catch(() => {});
+    }, 250);
+  };
+
   appWindow
-    .onMoved(({ payload }) => {
-      if (getMode() !== "champselect") return;
-      if (champselectMoveSaveTimer) window.clearTimeout(champselectMoveSaveTimer);
-      champselectMoveSaveTimer = window.setTimeout(() => {
-        if (getMode() !== "champselect") return;
-        saveChampselectWindowPosition(payload).catch(() => {});
-      }, 250);
+    .onMoved(() => {
+      scheduleSave();
+    })
+    .catch(() => {});
+  appWindow
+    .onResized(() => {
+      scheduleSave();
     })
     .catch(() => {});
 }

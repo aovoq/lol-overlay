@@ -3,9 +3,13 @@ import { render } from "solid-js/web";
 import { ControlApp, OverlayApp } from "./App";
 import { initAssets } from "./assets";
 import "./app.css";
-import { clampPanelToViewport, saveIngamePanelPosition } from "./lib/drag";
+import {
+  clampPanelToViewport,
+  initControlWindowGeometrySave,
+  saveIngamePanelPosition,
+} from "./lib/drag";
 import { startHitRegionInterval } from "./lib/hitRegions";
-import "./state/backend";
+import { windowMode } from "./state/backend";
 import "./state/settings";
 
 const windowLabel = getCurrentWindow().label;
@@ -19,7 +23,11 @@ if (!root) throw new Error("missing #root element");
 
 render(() => (isControl ? <ControlApp /> : <OverlayApp />), root);
 
-if (!isControl) startHitRegionInterval();
+if (isControl) {
+  initControlWindowGeometrySave(() => windowMode());
+} else {
+  startHitRegionInterval();
+}
 initAssets().catch(() => {});
 
 window.addEventListener("resize", () => {

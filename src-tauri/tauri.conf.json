@@ -40,10 +40,11 @@
         "resizable": true,
         "focus": true,
         "focusable": true,
-        "x": 0,
-        "y": 0,
+        "center": true,
         "width": 520,
-        "height": 220
+        "height": 220,
+        "minWidth": 420,
+        "minHeight": 180
       }
     ],
     "security": {

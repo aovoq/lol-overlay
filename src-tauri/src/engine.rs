@@ -95,6 +95,15 @@ pub enum WindowMode {
 }
 
 impl WindowMode {
+    pub fn parse(value: &str) -> Option<Self> {
+        match value {
+            "overlay" => Some(Self::Overlay),
+            "champselect" => Some(Self::ChampSelect),
+            "ingame" => Some(Self::InGame),
+            _ => None,
+        }
+    }
+
     pub fn as_str(self) -> &'static str {
         match self {
             Self::Overlay => "overlay",
@@ -118,16 +127,57 @@ pub struct WindowPosition {
     pub y: f64,
 }
 
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WindowGeometry {
+    pub x: f64,
+    pub y: f64,
+    pub width: f64,
+    pub height: f64,
+}
+
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct UiLayout {
     #[serde(default)]
     pub ingame_panel: Option<PanelPosition>,
+    /// Legacy champ-select position. Kept for persisted-settings compatibility.
     #[serde(default)]
     pub champselect_window: Option<WindowPosition>,
+    #[serde(default)]
+    pub control_overlay_window: Option<WindowGeometry>,
+    #[serde(default)]
+    pub control_champselect_window: Option<WindowGeometry>,
+    #[serde(default)]
+    pub control_ingame_window: Option<WindowGeometry>,
     /// In-game panel collapsed to its header chip.
     #[serde(default)]
     pub ingame_collapsed: bool,
+}
+
+impl UiLayout {
+    pub fn control_geometry(&self, mode: WindowMode) -> Option<WindowGeometry> {
+        match mode {
+            WindowMode::Overlay => self.control_overlay_window,
+            WindowMode::ChampSelect => self.control_champselect_window.or_else(|| {
+                self.champselect_window.map(|pos| WindowGeometry {
+                    x: pos.x,
+                    y: pos.y,
+                    width: CONTROL_PICK_SIZE.0,
+                    height: CONTROL_PICK_SIZE.1,
+                })
+            }),
+            WindowMode::InGame => self.control_ingame_window,
+        }
+    }
+
+    pub fn set_control_geometry(&mut self, mode: WindowMode, geometry: WindowGeometry) {
+        match mode {
+            WindowMode::Overlay => self.control_overlay_window = Some(geometry),
+            WindowMode::ChampSelect => self.control_champselect_window = Some(geometry),
+            WindowMode::InGame => self.control_ingame_window = Some(geometry),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -265,8 +315,9 @@ pub fn emit_champ_select(app: &AppHandle, engine: &Engine, ev: ChampSelectEvent)
 const CONTROL_COMPACT_SIZE: (f64, f64) = (520.0, 220.0);
 const CONTROL_PICK_SIZE: (f64, f64) = (1040.0, 860.0);
 const CONTROL_INGAME_SIZE: (f64, f64) = (540.0, 820.0);
-const CONTROL_MARGIN: f64 = 16.0;
-const CONTROL_PICK_X: f64 = 48.0;
+const CONTROL_COMPACT_MIN_SIZE: (f64, f64) = (420.0, 180.0);
+const CONTROL_PICK_MIN_SIZE: (f64, f64) = (860.0, 620.0);
+const CONTROL_INGAME_MIN_SIZE: (f64, f64) = (360.0, 420.0);
 
 /// The screen region the overlay window may occupy on `monitor`.
 ///
@@ -305,33 +356,51 @@ pub fn apply_overlay_bounds(app: &AppHandle) {
     let _ = win.set_ignore_cursor_events(true);
 }
 
-fn control_position(
+fn control_default_size(mode: WindowMode) -> (f64, f64) {
+    match mode {
+        WindowMode::Overlay => CONTROL_COMPACT_SIZE,
+        WindowMode::ChampSelect => CONTROL_PICK_SIZE,
+        WindowMode::InGame => CONTROL_INGAME_SIZE,
+    }
+}
+
+fn control_min_size(mode: WindowMode) -> (f64, f64) {
+    match mode {
+        WindowMode::Overlay => CONTROL_COMPACT_MIN_SIZE,
+        WindowMode::ChampSelect => CONTROL_PICK_MIN_SIZE,
+        WindowMode::InGame => CONTROL_INGAME_MIN_SIZE,
+    }
+}
+
+fn clamp_control_layout(
     monitor: &Monitor,
     mode: WindowMode,
+    saved: Option<WindowGeometry>,
 ) -> (LogicalPosition<f64>, LogicalSize<f64>) {
     let scale = monitor.scale_factor();
     let area = monitor.work_area();
     let origin = area.position.to_logical::<f64>(scale);
     let bounds = area.size.to_logical::<f64>(scale);
-    let (w, h) = match mode {
-        WindowMode::Overlay => CONTROL_COMPACT_SIZE,
-        WindowMode::ChampSelect => CONTROL_PICK_SIZE,
-        WindowMode::InGame => CONTROL_INGAME_SIZE,
-    };
+    let (default_w, default_h) = control_default_size(mode);
+    let (min_w, min_h) = control_min_size(mode);
+    let desired_w = saved
+        .map(|geometry| geometry.width.max(min_w))
+        .unwrap_or(default_w);
+    let desired_h = saved
+        .map(|geometry| geometry.height.max(min_h))
+        .unwrap_or(default_h);
+    let w = desired_w.clamp(min_w, bounds.width.max(min_w));
+    let h = desired_h.clamp(min_h, bounds.height.max(min_h));
     let max_x = origin.x + (bounds.width - w).max(0.0);
     let max_y = origin.y + (bounds.height - h).max(0.0);
-    let x = match mode {
-        WindowMode::ChampSelect => origin.x + CONTROL_PICK_X,
-        WindowMode::Overlay | WindowMode::InGame => origin.x + CONTROL_MARGIN,
-    }
-    .clamp(origin.x, max_x);
-    let y = match mode {
-        WindowMode::ChampSelect => origin.y + ((bounds.height - h) / 2.0).max(0.0),
-        WindowMode::Overlay => origin.y + (bounds.height - h - CONTROL_MARGIN).max(0.0),
-        WindowMode::InGame => origin.y + CONTROL_MARGIN,
-    }
-    .clamp(origin.y, max_y);
-    (LogicalPosition::new(x, y), LogicalSize::new(w, h))
+    let default_x = origin.x + ((bounds.width - w) / 2.0).max(0.0);
+    let default_y = origin.y + ((bounds.height - h) / 2.0).max(0.0);
+    let x = saved.map(|geometry| geometry.x).unwrap_or(default_x);
+    let y = saved.map(|geometry| geometry.y).unwrap_or(default_y);
+    (
+        LogicalPosition::new(x.clamp(origin.x, max_x), y.clamp(origin.y, max_y)),
+        LogicalSize::new(w, h),
+    )
 }
 
 /// Place the normal control window in either compact status mode or expanded
@@ -349,7 +418,12 @@ pub fn apply_control_layout(app: &AppHandle, mode: WindowMode) {
     let Some(monitor) = monitor else {
         return;
     };
-    let (pos, size) = control_position(&monitor, mode);
+    let saved = app
+        .try_state::<Arc<Engine>>()
+        .and_then(|engine| engine.ui_layout().control_geometry(mode));
+    let (pos, size) = clamp_control_layout(&monitor, mode, saved);
+    let (min_w, min_h) = control_min_size(mode);
+    let _ = win.set_min_size(Some(LogicalSize::new(min_w, min_h)));
     let _ = win.set_size(size);
     let _ = win.set_position(pos);
     let _ = win.show();

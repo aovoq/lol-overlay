@@ -192,8 +192,16 @@ export interface WindowPosition {
   y: number;
 }
 
+export interface WindowGeometry extends WindowPosition {
+  width: number;
+  height: number;
+}
+
 export interface UiLayout {
   ingamePanel?: PanelPosition | null;
   champselectWindow?: WindowPosition | null;
+  controlOverlayWindow?: WindowGeometry | null;
+  controlChampselectWindow?: WindowGeometry | null;
+  controlIngameWindow?: WindowGeometry | null;
   ingameCollapsed?: boolean;
 }

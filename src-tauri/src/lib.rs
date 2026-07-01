@@ -78,7 +78,7 @@ pub fn run() {
             }
             // Cover the whole monitor so panels anchor to the real screen edges
             // regardless of resolution / HiDPI scaling. The normal control
-            // window starts as a compact status window near the lower-left.
+            // window starts centered unless the user has moved it before.
             engine::apply_overlay_bounds(app.handle());
             engine::apply_control_layout(app.handle(), WindowMode::Overlay);
 
@@ -121,6 +121,7 @@ pub fn run() {
             commands::get_ui_layout,
             commands::set_ingame_panel_position,
             commands::set_champselect_window_position,
+            commands::set_control_window_geometry,
             commands::get_tier_list,
             commands::get_counters,
             commands::get_rune_build,

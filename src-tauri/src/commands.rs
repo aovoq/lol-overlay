@@ -11,7 +11,8 @@ use std::sync::Arc;
 use tauri::{AppHandle, Emitter, State};
 
 use crate::engine::{
-    self, Engine, PanelPosition, PresentationMode, Settings, UiLayout, WindowPosition,
+    self, Engine, PanelPosition, PresentationMode, Settings, UiLayout, WindowGeometry,
+    WindowPosition,
 };
 use crate::error;
 use crate::events::{log, RuneImportedEvent};
@@ -115,6 +116,40 @@ pub fn set_champselect_window_position(
     }
     {
         engine.ui_layout.lock().unwrap().champselect_window = Some(WindowPosition { x, y });
+    }
+    engine.persist()
+}
+
+#[tauri::command]
+pub fn set_control_window_geometry(
+    engine: State<'_, Arc<Engine>>,
+    mode: String,
+    x: f64,
+    y: f64,
+    width: f64,
+    height: f64,
+) -> error::Result<()> {
+    if !x.is_finite()
+        || !y.is_finite()
+        || !width.is_finite()
+        || !height.is_finite()
+        || width <= 0.0
+        || height <= 0.0
+    {
+        return Err(error::Error::Other("invalid window geometry".into()));
+    }
+    let mode = engine::WindowMode::parse(&mode)
+        .ok_or_else(|| error::Error::Other(format!("unknown window mode: {mode}")))?;
+    {
+        engine.ui_layout.lock().unwrap().set_control_geometry(
+            mode,
+            WindowGeometry {
+                x,
+                y,
+                width,
+                height,
+            },
+        );
     }
     engine.persist()
 }

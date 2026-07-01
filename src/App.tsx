@@ -1,7 +1,7 @@
 import { createEffect, Show } from "solid-js";
-import { OpenLolPanel } from "./components/openlol/OpenLolPanel";
 import { InGamePanel } from "./components/ingame/InGamePanel";
 import { LpBanner } from "./components/LpBanner";
+import { OpenLolPanel } from "./components/openlol/OpenLolPanel";
 import { RuneBanner } from "./components/RuneBanner";
 import { SettingsForm } from "./components/SettingsPanel";
 import { StatusChip } from "./components/StatusChip";
