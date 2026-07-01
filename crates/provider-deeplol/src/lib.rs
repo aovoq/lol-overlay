@@ -329,7 +329,7 @@ impl DeepLolProvider {
         let sub_style = r.sub_build.first().copied().unwrap_or(0);
         let primary_perks: Vec<i64> = r.main_build.iter().skip(1).copied().collect();
         let sub_perks: Vec<i64> = r.sub_build.iter().skip(1).copied().collect();
-        let shards = r.stat_build.clone();
+        let shards = normalize_stat_shards(&r.stat_build);
 
         if primary_style == 0
             || sub_style == 0
@@ -788,6 +788,49 @@ fn counter_entries(lb: &LaneBuild) -> Vec<CounterEntry> {
         .collect()
 }
 
+const OFFENSE_SHARDS: &[i64] = &[5008, 5005, 5007];
+const FLEX_SHARDS: &[i64] = &[5008, 5010, 5001];
+const DEFENSE_SHARDS: &[i64] = &[5011, 5013, 5001];
+
+/// LCU expects stat shards as [offense, flex, defense]. DeepLoL's aggregate
+/// build endpoint has returned the same three IDs in other orders, which makes
+/// page creation fail even though each individual shard is valid.
+fn normalize_stat_shards(shards: &[i64]) -> Vec<i64> {
+    if valid_stat_shards(shards) {
+        return shards.to_vec();
+    }
+
+    let reversed: Vec<i64> = shards.iter().rev().copied().collect();
+    if valid_stat_shards(&reversed) {
+        return reversed;
+    }
+
+    vec![
+        shard_for_slot(shards, 0, OFFENSE_SHARDS, 5008),
+        shard_for_slot(shards, 1, FLEX_SHARDS, 5008),
+        shard_for_slot(shards, 2, DEFENSE_SHARDS, 5011),
+    ]
+}
+
+fn valid_stat_shards(shards: &[i64]) -> bool {
+    shards.len() == 3
+        && OFFENSE_SHARDS.contains(&shards[0])
+        && FLEX_SHARDS.contains(&shards[1])
+        && DEFENSE_SHARDS.contains(&shards[2])
+}
+
+fn shard_for_slot(shards: &[i64], slot: usize, allowed: &[i64], fallback: i64) -> i64 {
+    if let Some(id) = shards.get(slot).filter(|id| allowed.contains(id)) {
+        return *id;
+    }
+
+    shards
+        .iter()
+        .copied()
+        .find(|id| allowed.contains(id))
+        .unwrap_or(fallback)
+}
+
 /// One consensus rune page distilled from individual OTP matchup games.
 struct AggregatedPage {
     primary_style: i64,
@@ -842,11 +885,11 @@ fn aggregate_otp(samples: &[&OtpEntry]) -> Option<AggregatedPage> {
             mode(sub_group.iter().map(|s| s.rune.perk_4)),
             mode(sub_group.iter().map(|s| s.rune.perk_5)),
         ],
-        shards: vec![
+        shards: normalize_stat_shards(&[
             mode(group.iter().map(|s| s.rune.stat_perk_0)),
             mode(group.iter().map(|s| s.rune.stat_perk_1)),
             mode(group.iter().map(|s| s.rune.stat_perk_2)),
-        ],
+        ]),
         // Spells are independent of the rune archetype, so count them across
         // all of the lane's games, not just the winning rune group.
         spells: most_common_spell_pair(samples),
@@ -1209,6 +1252,22 @@ mod tests {
         assert_eq!(normalize("Cho'Gath"), "chogath");
         assert_eq!(normalize("Chogath"), "chogath");
         assert_eq!(normalize("Kai'Sa"), "kaisa");
+    }
+
+    #[test]
+    fn stat_shards_normalize_to_lcu_slot_order() {
+        assert_eq!(
+            normalize_stat_shards(&[5005, 5008, 5001]),
+            vec![5005, 5008, 5001]
+        );
+        assert_eq!(
+            normalize_stat_shards(&[5001, 5008, 5005]),
+            vec![5005, 5008, 5001]
+        );
+        assert_eq!(
+            normalize_stat_shards(&[5001, 5008, 5008]),
+            vec![5008, 5008, 5001]
+        );
     }
 
     #[test]
