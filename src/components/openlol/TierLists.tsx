@@ -5,6 +5,7 @@ import { champSelect, selectedRole, setHoverChampId } from "../../state/backend"
 import { tierCache } from "../../state/caches";
 import type { TierEntry } from "../../types";
 import { Icon } from "../Icon";
+import { ScrollArea } from "../ScrollArea";
 import { SectionError } from "./SectionError";
 
 function effectiveRole() {
@@ -130,7 +131,7 @@ export function TierLists() {
         <span>{roleLabel(role())}</span>
         <span>STRONG PICKS</span>
       </div>
-      <div class="min-h-0 overflow-y-auto flex flex-col gap-0.5 pr-1 flex-[1.3_1_0] hx-scroll">
+      <ScrollArea class="min-h-0 flex-[1.3_1_0]" contentClass="flex flex-col gap-0.5 pr-1">
         <Show
           when={isLoading()}
           fallback={
@@ -146,12 +147,12 @@ export function TierLists() {
         >
           <SkeletonRows count={8} />
         </Show>
-      </div>
+      </ScrollArea>
 
       <div class="flex flex-col gap-0.5 font-hx-serif font-semibold text-[11px] tracking-[0.16em] text-hx-gold-dim px-0.5 pt-1 pb-0.5">
         <span>BAN TARGETS</span>
       </div>
-      <div class="min-h-0 overflow-y-auto flex flex-col gap-0.5 pr-1 flex-1 hx-scroll">
+      <ScrollArea class="min-h-0 flex-1" contentClass="flex flex-col gap-0.5 pr-1">
         <Show
           when={isLoading()}
           fallback={
@@ -167,7 +168,7 @@ export function TierLists() {
         >
           <SkeletonRows count={4} />
         </Show>
-      </div>
+      </ScrollArea>
     </>
   );
 }

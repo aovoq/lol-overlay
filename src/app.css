@@ -228,7 +228,6 @@
   .control-settings-panel {
     flex: 1;
     min-height: 0;
-    overflow: auto;
   }
 
   .control-ingame {
@@ -236,7 +235,6 @@
     min-height: 0;
     padding: 12px;
     box-sizing: border-box;
-    overflow: auto;
   }
 
   .control-ingame .ingame-panel {
@@ -248,24 +246,28 @@
     max-height: 320px;
   }
 
-  .hx-scroll::-webkit-scrollbar {
+  .hx-scroll-root {
+    overflow: hidden;
+  }
+
+  .hx-scroll-viewport {
+    width: 100%;
+    height: 100%;
+  }
+
+  .hx-scrollbar {
     width: 6px;
+    padding: 1px;
   }
-  .hx-scroll::-webkit-scrollbar-track,
-  .rec-list::-webkit-scrollbar-track {
-    background: transparent;
-  }
-  .hx-scroll::-webkit-scrollbar-thumb,
-  .rec-list::-webkit-scrollbar-thumb {
-    background: var(--color-hx-gold-dim);
+
+  .hx-scrollbar-thumb {
+    width: 100%;
     border-radius: 3px;
+    background: var(--color-hx-gold-dim);
   }
-  .hx-scroll::-webkit-scrollbar-thumb:hover,
-  .rec-list::-webkit-scrollbar-thumb:hover {
+
+  .hx-scrollbar-thumb:hover {
     background: var(--color-hx-gold);
-  }
-  .rec-list::-webkit-scrollbar {
-    width: 6px;
   }
 
   .openlol img {

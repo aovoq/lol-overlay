@@ -3,6 +3,7 @@ import { InGamePanel } from "./components/ingame/InGamePanel";
 import { LpBanner } from "./components/LpBanner";
 import { OpenLolPanel } from "./components/openlol/OpenLolPanel";
 import { RuneBanner } from "./components/RuneBanner";
+import { ScrollArea } from "./components/ScrollArea";
 import { SettingsForm } from "./components/SettingsPanel";
 import { StatusChip } from "./components/StatusChip";
 import { champSelect, windowMode } from "./state/backend";
@@ -33,7 +34,9 @@ export function ControlApp() {
         <OpenLolPanel />
       ) : mode() === "ingame" ? (
         <main class="control-ingame">
-          <InGamePanel embedded />
+          <ScrollArea class="h-full">
+            <InGamePanel embedded />
+          </ScrollArea>
         </main>
       ) : (
         <div class="control-home">
@@ -41,7 +44,9 @@ export function ControlApp() {
             <StatusChip />
           </section>
           <section class="panel control-settings-panel">
-            <SettingsForm />
+            <ScrollArea class="h-full">
+              <SettingsForm />
+            </ScrollArea>
           </section>
         </div>
       )}

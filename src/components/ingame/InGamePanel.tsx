@@ -11,6 +11,7 @@ import { APP_NAME } from "../../lib/openlol";
 import { phase, recommendations } from "../../state/backend";
 import { ingameCollapsed, ingamePos, setIngameCollapsed } from "../../state/layout";
 import { Icon } from "../Icon";
+import { ScrollArea } from "../ScrollArea";
 import { SkillOrder } from "./SkillOrder";
 
 function PanelBody(props: { embedded?: boolean }) {
@@ -189,32 +190,34 @@ function PanelBody(props: { embedded?: boolean }) {
                   RECOMMENDED BUILD
                 </div>
 
-                <ul class="rec-list list-none m-0 px-2 pb-2 flex flex-col gap-[5px] max-h-[52vh] overflow-y-auto">
-                  <For each={e().items}>
-                    {(it, i) => (
-                      <li
-                        class={`flex flex-row items-center gap-[9px] px-2 py-1.5 border rounded-[5px] bg-hx-bg-raised ${
-                          i() === 0 ? "border-hx-keystone-border" : "border-transparent"
-                        }`}
-                      >
-                        <Show when={assetsReady()}>
-                          <Icon
-                            url={itemIconUrl(it.itemId)}
-                            class="w-8 h-8 rounded border border-hx-border flex-none"
-                          />
-                        </Show>
-                        <div class="flex flex-col min-w-0 flex-1">
-                          <span class="font-semibold text-hx-text truncate">{it.name}</span>
-                          <span class="text-[10.5px] text-hx-muted">{it.reason}</span>
-                          <div
-                            class="h-0.5 mt-1 rounded-sm bg-gradient-to-r from-hx-gold to-hx-gold-dim opacity-85"
-                            style={{ width: `${Math.round(it.score * 100)}%` }}
-                          />
-                        </div>
-                      </li>
-                    )}
-                  </For>
-                </ul>
+                <ScrollArea class="rec-list max-h-[52vh]" contentClass="px-2 pb-2">
+                  <ul class="list-none m-0 flex flex-col gap-[5px]">
+                    <For each={e().items}>
+                      {(it, i) => (
+                        <li
+                          class={`flex flex-row items-center gap-[9px] px-2 py-1.5 border rounded-[5px] bg-hx-bg-raised ${
+                            i() === 0 ? "border-hx-keystone-border" : "border-transparent"
+                          }`}
+                        >
+                          <Show when={assetsReady()}>
+                            <Icon
+                              url={itemIconUrl(it.itemId)}
+                              class="w-8 h-8 rounded border border-hx-border flex-none"
+                            />
+                          </Show>
+                          <div class="flex flex-col min-w-0 flex-1">
+                            <span class="font-semibold text-hx-text truncate">{it.name}</span>
+                            <span class="text-[10.5px] text-hx-muted">{it.reason}</span>
+                            <div
+                              class="h-0.5 mt-1 rounded-sm bg-gradient-to-r from-hx-gold to-hx-gold-dim opacity-85"
+                              style={{ width: `${Math.round(it.score * 100)}%` }}
+                            />
+                          </div>
+                        </li>
+                      )}
+                    </For>
+                  </ul>
+                </ScrollArea>
               </>
             )}
           </Show>

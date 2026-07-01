@@ -5,6 +5,7 @@ import { activeTab, champSelect, hoverChampId, selectedRole, vsEnemyId } from ".
 import { buildCache, buildKey } from "../../state/caches";
 import type { RuneBuild } from "../../types";
 import { Icon } from "../Icon";
+import { ScrollArea } from "../ScrollArea";
 import { SectionError } from "./SectionError";
 
 function effectiveRole() {
@@ -160,7 +161,7 @@ export function BuildArea() {
   const loading = createMemo(() => entry()?.state === "loading");
 
   return (
-    <div class="flex-1 min-h-0 overflow-y-auto pt-3 pb-1.5 pr-1 pl-0 hx-scroll">
+    <ScrollArea class="flex-1 min-h-0" contentClass="pt-3 pb-1.5 pr-1 pl-0">
       <Show when={target()} fallback={<BigEmpty role={role()} />}>
         {(t) => (
           <Show when={!loading()} fallback={<BuildSkeleton />}>
@@ -182,6 +183,6 @@ export function BuildArea() {
           </Show>
         )}
       </Show>
-    </div>
+    </ScrollArea>
   );
 }

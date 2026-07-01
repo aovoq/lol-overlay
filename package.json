@@ -24,6 +24,7 @@
     "tauri": "tauri"
   },
   "dependencies": {
+    "@msviderok/base-ui-solid": "1.0.0-beta.12",
     "@tauri-apps/api": "^2",
     "@tauri-apps/plugin-opener": "^2",
     "solid-js": "^1.9.13"
