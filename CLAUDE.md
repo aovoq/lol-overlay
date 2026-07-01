@@ -15,6 +15,10 @@ pnpm tauri build    # distributable build (run on Windows)
 
 pnpm dev            # frontend only (Vite, no Tauri shell)
 pnpm build          # tsc typecheck + vite build
+pnpm format         # Biome + rustfmt + Taplo write fixes
+pnpm format:check   # check TS/CSS/JSON, Rust, and TOML formatting
+pnpm lint           # Biome lint + strict Clippy
+pnpm check          # format check + lint + typecheck + Rust unit tests
 
 # Rust tests (from repo root — Cargo workspace)
 cargo test --workspace --lib
@@ -23,7 +27,18 @@ cargo test -p overlay-provider-deeplol --lib -- --ignored --nocapture
 cargo test -p overlay-provider-ugg --lib -- --ignored --nocapture
 ```
 
-**Target platform is Windows.** UI/frontend work runs fine on Mac, but anything touching the LCU or Live Client Data API requires a running LoL client (Windows). There is no JS test runner and no linter beyond `tsc` (strict mode, `noUnusedLocals`/`noUnusedParameters`).
+**Target platform is Windows.** UI/frontend work runs fine on Mac, but anything touching the LCU or Live Client Data API requires a running LoL client (Windows).
+
+## Formatting and linting
+
+- Frontend formatting/linting uses **Biome** (`biome.json`) for TS/TSX/CSS/JSON/HTML.
+- Type checking is still **TypeScript** (`pnpm typecheck`); Biome does not replace `tsc`.
+- Rust formatting uses **rustfmt** with LF newlines (`rustfmt.toml`).
+- Rust linting uses **Clippy** via `cargo clippy --workspace --all-targets -- -D warnings`.
+- TOML formatting uses **Taplo** (`.taplo.toml`) for the workspace `Cargo.toml` files.
+- Run `pnpm check` before handing off a non-trivial change.
+- Use `pnpm format` to apply formatter changes instead of hand-formatting large diffs.
+- `.gitattributes` pins text files to LF. Do not introduce CRLF-only churn.
 
 ## Architecture
 
