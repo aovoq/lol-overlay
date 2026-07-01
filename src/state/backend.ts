@@ -2,8 +2,8 @@ import { listen } from "@tauri-apps/api/event";
 import { createSignal } from "solid-js";
 import type {
   ChampSelectEvent,
-  LpChangeEvent,
   LogEvent,
+  LpChangeEvent,
   PhaseEvent,
   RecentGame,
   RecommendationsEvent,
@@ -13,67 +13,58 @@ import type {
 } from "../types";
 
 const [phase, setPhase] = createSignal<PhaseEvent | null>(null);
-const [recommendations, setRecommendations] =
-  createSignal<RecommendationsEvent | null>(null);
-const [runeImported, setRuneImported] = createSignal<RuneImportedEvent | null>(
-  null,
-);
+const [recommendations, setRecommendations] = createSignal<RecommendationsEvent | null>(null);
+const [runeImported, setRuneImported] = createSignal<RuneImportedEvent | null>(null);
 const [summoner, setSummoner] = createSignal<SummonerEvent | null>(null);
 const [matchHistory, setMatchHistory] = createSignal<RecentGame[] | null>(null);
 const [lpChange, setLpChange] = createSignal<LpChangeEvent | null>(null);
 const [windowMode, setWindowMode] = createSignal<WindowMode>("overlay");
 const [interactive, setInteractive] = createSignal(false);
-const [champSelect, setChampSelect] = createSignal<ChampSelectEvent | null>(
-  null,
-);
+const [champSelect, setChampSelect] = createSignal<ChampSelectEvent | null>(null);
 
 const [selectedRole, setSelectedRole] = createSignal("middle");
 const [activeTab, setActiveTab] = createSignal<"best" | "vs">("best");
 const [vsEnemyId, setVsEnemyId] = createSignal(0);
 const [userPickedVsEnemy, setUserPickedVsEnemy] = createSignal(false);
 const [hoverChampId, setHoverChampId] = createSignal(0);
-const [importState, setImportState] = createSignal<
-  "idle" | "importing" | "imported" | "failed"
->("idle");
+const [importState, setImportState] = createSignal<"idle" | "importing" | "imported" | "failed">(
+  "idle",
+);
 const [vsMenuOpen, setVsMenuOpen] = createSignal(false);
 
 export {
+  activeTab,
+  champSelect,
+  hoverChampId,
+  importState,
+  interactive,
+  lpChange,
+  matchHistory,
   phase,
   recommendations,
   runeImported,
-  summoner,
-  matchHistory,
-  lpChange,
-  windowMode,
-  interactive,
-  champSelect,
   selectedRole,
-  setSelectedRole,
-  activeTab,
   setActiveTab,
-  vsEnemyId,
-  setVsEnemyId,
-  userPickedVsEnemy,
-  setUserPickedVsEnemy,
-  hoverChampId,
   setHoverChampId,
-  importState,
   setImportState,
-  vsMenuOpen,
+  setSelectedRole,
+  setUserPickedVsEnemy,
+  setVsEnemyId,
   setVsMenuOpen,
+  summoner,
+  userPickedVsEnemy,
+  vsEnemyId,
+  vsMenuOpen,
+  windowMode,
 };
 
 listen<PhaseEvent>("phase", (e) => setPhase(e.payload));
-listen<RecommendationsEvent>("recommendations", (e) =>
-  setRecommendations(e.payload),
-);
+listen<RecommendationsEvent>("recommendations", (e) => setRecommendations(e.payload));
 listen<RuneImportedEvent>("rune-imported", (e) => setRuneImported(e.payload));
 listen<SummonerEvent | null>("summoner", (e) => setSummoner(e.payload));
 listen<RecentGame[]>("match-history", (e) => setMatchHistory(e.payload));
 listen<LpChangeEvent>("lp-change", (e) => setLpChange(e.payload));
-listen<LogEvent>("log", (e) =>
-  console.log(`[${e.payload.level}] ${e.payload.message}`),
-);
+listen<LogEvent>("log", (e) => console.log(`[${e.payload.level}] ${e.payload.message}`));
 listen<WindowMode>("window-mode", (e) => setWindowMode(e.payload));
 listen<boolean>("interactive", (e) => setInteractive(e.payload));
 

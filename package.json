@@ -3,10 +3,24 @@
   "private": true,
   "version": "0.1.0",
   "type": "module",
+  "packageManager": "pnpm@11.9.0",
   "scripts": {
     "dev": "vite",
-    "build": "tsc && vite build",
+    "build": "pnpm typecheck && vite build",
     "preview": "vite preview",
+    "typecheck": "tsc --noEmit",
+    "format": "pnpm format:frontend && pnpm format:rust && pnpm format:toml",
+    "format:check": "pnpm format:frontend:check && pnpm format:rust:check && pnpm format:toml:check",
+    "format:frontend": "biome check --write .",
+    "format:frontend:check": "biome ci .",
+    "format:rust": "cargo fmt --all",
+    "format:rust:check": "cargo fmt --all -- --check",
+    "format:toml": "taplo fmt Cargo.toml src-tauri/Cargo.toml crates/*/Cargo.toml",
+    "format:toml:check": "taplo fmt --check --diff Cargo.toml src-tauri/Cargo.toml crates/*/Cargo.toml",
+    "lint": "pnpm lint:frontend && pnpm lint:rust",
+    "lint:frontend": "biome lint .",
+    "lint:rust": "cargo clippy --workspace --all-targets -- -D warnings",
+    "check": "pnpm format:check && pnpm lint && pnpm typecheck && cargo test --workspace --lib",
     "tauri": "tauri"
   },
   "dependencies": {
@@ -15,7 +29,9 @@
     "solid-js": "^1.9.13"
   },
   "devDependencies": {
+    "@biomejs/biome": "2.5.1",
     "@tailwindcss/vite": "^4.3.0",
+    "@taplo/cli": "0.7.0",
     "@tauri-apps/cli": "^2",
     "tailwindcss": "^4.3.0",
     "typescript": "~5.6.2",

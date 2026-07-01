@@ -1,12 +1,8 @@
-import { createEffect, createMemo, For, Show, type JSX } from "solid-js";
+import { createEffect, createMemo, For, type JSX, Show } from "solid-js";
 import { assetsReady, champIconByKey, champName, fmtCompact, fmtPct } from "../../assets";
 import { roleLabel } from "../../lib/hexgate";
+import { champSelect, selectedRole, setHoverChampId } from "../../state/backend";
 import { tierCache } from "../../state/caches";
-import {
-  champSelect,
-  selectedRole,
-  setHoverChampId,
-} from "../../state/backend";
 import type { TierEntry } from "../../types";
 import { Icon } from "../Icon";
 import { SectionError } from "./SectionError";
@@ -16,10 +12,7 @@ function effectiveRole() {
   return cs?.myRole || selectedRole();
 }
 
-function ChampRow(props: {
-  championId: number;
-  children?: JSX.Element;
-}) {
+function ChampRow(props: { championId: number; children?: JSX.Element }) {
   return (
     <div
       class="flex-none flex items-center gap-2 px-2 py-1 rounded-md hover:bg-hx-bg-raised"
@@ -88,9 +81,7 @@ export function TierLists() {
   const role = createMemo(() => effectiveRole());
   const bannedKey = createMemo(() => {
     const cs = champSelect();
-    return [...new Set(
-      [...(cs?.myBans ?? []), ...(cs?.enemyBans ?? [])].filter((id) => id > 0),
-    )]
+    return [...new Set([...(cs?.myBans ?? []), ...(cs?.enemyBans ?? [])].filter((id) => id > 0))]
       .sort((a, b) => a - b)
       .join(",");
   });
@@ -112,26 +103,16 @@ export function TierLists() {
   const strong = createMemo(() => {
     const e = entry();
     if (e.state !== "ok") return [];
-    return e.value
-      .filter((t) => t.pickRate >= 0.005)
-      .sort((a, b) => b.winRate - a.winRate);
+    return e.value.filter((t) => t.pickRate >= 0.005).sort((a, b) => b.winRate - a.winRate);
   });
 
   const bans = createMemo(() => {
     const e = entry();
     if (e.state !== "ok") return [];
-    const banSet = new Set(
-      bannedKey()
-        .split(",")
-        .filter(Boolean)
-        .map(Number),
-    );
+    const banSet = new Set(bannedKey().split(",").filter(Boolean).map(Number));
     return e.value
       .filter((t) => !banSet.has(t.championId))
-      .sort(
-        (a, b) =>
-          (b.winRate - 0.5) * b.pickRate - (a.winRate - 0.5) * a.pickRate,
-      )
+      .sort((a, b) => (b.winRate - 0.5) * b.pickRate - (a.winRate - 0.5) * a.pickRate)
       .slice(0, 10);
   });
 
@@ -156,10 +137,7 @@ export function TierLists() {
             <Show
               when={isOk()}
               fallback={
-                <SectionError
-                  message={errMsg()}
-                  onRetry={() => tierCache.refetch(role())}
-                />
+                <SectionError message={errMsg()} onRetry={() => tierCache.refetch(role())} />
               }
             >
               <For each={strong()}>{(t) => <StrongRow entry={t} />}</For>
@@ -180,10 +158,7 @@ export function TierLists() {
             <Show
               when={isOk()}
               fallback={
-                <SectionError
-                  message={errMsg()}
-                  onRetry={() => tierCache.refetch(role())}
-                />
+                <SectionError message={errMsg()} onRetry={() => tierCache.refetch(role())} />
               }
             >
               <For each={bans()}>{(t) => <BanRow entry={t} />}</For>

@@ -77,7 +77,9 @@ pub fn parse_champ_select(session: &Value) -> Option<ChampSelectEvent> {
                 .find(|m| m.get("cellId").and_then(Value::as_i64) == Some(my_cell))
         });
     let my_field = |key: &str| {
-        me.and_then(|m| m.get(key)).and_then(Value::as_i64).unwrap_or(0)
+        me.and_then(|m| m.get(key))
+            .and_then(Value::as_i64)
+            .unwrap_or(0)
     };
     let my_role = me
         .and_then(|m| m.get("assignedPosition"))
@@ -94,11 +96,25 @@ pub fn parse_champ_select(session: &Value) -> Option<ChampSelectEvent> {
     let mut enemy_picks: Vec<(i64, i64)> = Vec::new(); // (cellId, championId)
 
     let turns = session.get("actions").and_then(Value::as_array);
-    for action in turns.into_iter().flatten().filter_map(Value::as_array).flatten() {
+    for action in turns
+        .into_iter()
+        .flatten()
+        .filter_map(Value::as_array)
+        .flatten()
+    {
         let kind = action.get("type").and_then(Value::as_str).unwrap_or("");
-        let completed = action.get("completed").and_then(Value::as_bool).unwrap_or(false);
-        let champion = action.get("championId").and_then(Value::as_i64).unwrap_or(0);
-        let actor = action.get("actorCellId").and_then(Value::as_i64).unwrap_or(-1);
+        let completed = action
+            .get("completed")
+            .and_then(Value::as_bool)
+            .unwrap_or(false);
+        let champion = action
+            .get("championId")
+            .and_then(Value::as_i64)
+            .unwrap_or(0);
+        let actor = action
+            .get("actorCellId")
+            .and_then(Value::as_i64)
+            .unwrap_or(-1);
         // `isAllyAction` is missing in older session shapes (blind pick dumps);
         // fall back to checking the actor against our team's cells.
         let ally = action
@@ -155,7 +171,12 @@ pub fn parse_champ_select(session: &Value) -> Option<ChampSelectEvent> {
             .get("bans")
             .and_then(|b| b.get(key))
             .and_then(Value::as_array)
-            .map(|arr| arr.iter().filter_map(Value::as_i64).filter(|&id| id > 0).collect())
+            .map(|arr| {
+                arr.iter()
+                    .filter_map(Value::as_i64)
+                    .filter(|&id| id > 0)
+                    .collect()
+            })
             .unwrap_or_default()
     };
     let mut my_bans = ban_list("myTeamBans");

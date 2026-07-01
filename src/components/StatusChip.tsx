@@ -15,8 +15,7 @@ function formSummary(games: RecentGame[]) {
 
   let streak = 1;
   while (streak < games.length && games[streak].win === games[0].win) streak++;
-  const streakLabel =
-    streak >= 2 ? ` · ${streak}${games[0].win ? "連勝" : "連敗"}` : "";
+  const streakLabel = streak >= 2 ? ` · ${streak}${games[0].win ? "連勝" : "連敗"}` : "";
 
   return {
     text: `${wins}W ${losses}L · KDA ${kda}${streakLabel}`,
@@ -54,8 +53,7 @@ export function StatusChip() {
     const e = s();
     if (!e) return "";
     if (e.soloTier) {
-      const division =
-        e.soloDivision && e.soloDivision !== "NA" ? ` ${e.soloDivision}` : "";
+      const division = e.soloDivision && e.soloDivision !== "NA" ? ` ${e.soloDivision}` : "";
       const gameCount = e.soloWins + e.soloLosses;
       const winRate =
         gameCount > 0
@@ -81,12 +79,10 @@ export function StatusChip() {
             </Show>
             <div class="flex flex-col leading-tight">
               <span class="text-hx-text-strong font-semibold">
-                {e().tagLine
-                  ? `${e().gameName} #${e().tagLine}`
-                  : e().gameName}
+                {e().tagLine ? `${e().gameName} #${e().tagLine}` : e().gameName}
               </span>
               <span class="text-hx-muted text-[11px]">{rankText()}</span>
-              <Show when={games() && games()!.length > 0}>
+              <Show when={games()?.length}>
                 <div class="flex flex-col gap-0.5 mt-1">
                   <div class="flex gap-0.5">
                     <Show when={assetsReady()}>

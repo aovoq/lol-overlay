@@ -28,7 +28,7 @@ use overlay_live_client::LiveClient;
 use overlay_provider::{classify_threats, BuildProvider, ProviderKind, ProviderProxy};
 
 /// How often the poller checks phase / in-game state.
-const POLL_INTERVAL: Duration = Duration::from_millis(2000);
+const POLL_INTERVAL: Duration = Duration::from_secs(2);
 
 /// User-tunable settings. Serialized camelCase because the frontend mirrors
 /// this shape directly, and persisted in the app config store.
@@ -92,22 +92,13 @@ pub struct UiLayout {
     pub ingame_collapsed: bool,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct StoredState {
     #[serde(default)]
     settings: Settings,
     #[serde(default)]
     ui_layout: UiLayout,
-}
-
-impl Default for StoredState {
-    fn default() -> Self {
-        Self {
-            settings: Settings::default(),
-            ui_layout: UiLayout::default(),
-        }
-    }
 }
 
 /// Which synthetic scenario the debug hotkey is driving
@@ -437,7 +428,6 @@ fn rank_value(tier: &str, division: &str) -> i32 {
         .position(|&t| t == tier)
         .map_or(-1, |i| i as i32);
     let d = match division {
-        "IV" => 0,
         "III" => 1,
         "II" => 2,
         "I" => 3,
@@ -510,7 +500,7 @@ pub async fn poller(app: AppHandle, engine: Arc<Engine>, tx: UnboundedSender<Val
                                     rank_change: match new.cmp(&old) {
                                         std::cmp::Ordering::Greater => "promoted".into(),
                                         std::cmp::Ordering::Less => "demoted".into(),
-                                        std::cmp::Ordering::Equal => "".into(),
+                                        std::cmp::Ordering::Equal => String::new(),
                                     },
                                 },
                             );

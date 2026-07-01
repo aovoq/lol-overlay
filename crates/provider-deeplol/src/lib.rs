@@ -207,7 +207,8 @@ impl DeepLolProvider {
         // return `{ "build_by_lane": {} }` for champions that are present in
         // that KR tier list, so fall back to KR build data instead of showing
         // an empty/error panel.
-        self.fetch_build_for_platform(champion_id, patch, "KR").await
+        self.fetch_build_for_platform(champion_id, patch, "KR")
+            .await
     }
 
     async fn fetch_build_for_platform(
@@ -218,8 +219,7 @@ impl DeepLolProvider {
     ) -> Result<BuildResponse> {
         // NOTE: `language` is deliberately omitted — DeepLoL returns an empty
         // body for `/champion/build` when it is present.
-        self
-            .http
+        self.http
             .get(format!("{DEEPLOL}/champion/build"))
             .query(&[
                 ("champion_id", champion_id.to_string()),
@@ -499,7 +499,9 @@ impl BuildProvider for DeepLolProvider {
         let id = self
             .champion_id(&snapshot.self_raw_name)
             .await
-            .ok_or_else(|| ProviderError::Other(format!("unknown champion: {:?}", snapshot.self_champion)))?;
+            .ok_or_else(|| {
+                ProviderError::Other(format!("unknown champion: {:?}", snapshot.self_champion))
+            })?;
         let build = self.get_build(id).await?;
         let (_, entry) = pick(&build, Some(&snapshot.self_position))
             .ok_or_else(|| ProviderError::Other("no build data for champion".into()))?;
@@ -539,7 +541,9 @@ impl BuildProvider for DeepLolProvider {
         let id = self
             .champion_id(&snapshot.self_raw_name)
             .await
-            .ok_or_else(|| ProviderError::Other(format!("unknown champion: {:?}", snapshot.self_champion)))?;
+            .ok_or_else(|| {
+                ProviderError::Other(format!("unknown champion: {:?}", snapshot.self_champion))
+            })?;
         let build = self.get_build(id).await?;
         let (_, entry) = pick(&build, Some(&snapshot.self_position))
             .ok_or_else(|| ProviderError::Other("no skill data for champion".into()))?;
@@ -758,7 +762,11 @@ fn tier_rows(now: &RankResponse, prev: Option<&RankResponse>, lane: &str) -> Vec
             })
         })
         .collect();
-    rows.sort_by(|a, b| b.win_rate.partial_cmp(&a.win_rate).unwrap_or(Ordering::Equal));
+    rows.sort_by(|a, b| {
+        b.win_rate
+            .partial_cmp(&a.win_rate)
+            .unwrap_or(Ordering::Equal)
+    });
     rows
 }
 
@@ -1191,8 +1199,8 @@ mod tests {
         assert_eq!(lane, "Middle");
         assert_eq!(e.item.build, vec![6692, 3047, 0, 3814]);
         // Rune flatten is keystone+3 / +2 / +3 shards = 9 perks (LCU page size).
-        let perks = (e.rune.main_build.len() - 1) + (e.rune.sub_build.len() - 1)
-            + e.rune.stat_build.len();
+        let perks =
+            (e.rune.main_build.len() - 1) + (e.rune.sub_build.len() - 1) + e.rune.stat_build.len();
         assert_eq!(perks, 9);
     }
 
@@ -1526,7 +1534,10 @@ mod tests {
                 "games calibration produced no estimates"
             );
             // Second invoke must come from the cache (and stay identical).
-            let again = p.tier_list("jungle").await.expect("cached tier_list failed");
+            let again = p
+                .tier_list("jungle")
+                .await
+                .expect("cached tier_list failed");
             assert_eq!(again.len(), rows.len());
         });
     }
@@ -1539,7 +1550,10 @@ mod tests {
             let counters = p.counters(35, "jungle").await.expect("counters failed");
             println!("COUNTERS OK ({}):", counters.len());
             for c in &counters {
-                println!("  {:>4} wr={:.3} games={}", c.champion_id, c.win_rate, c.games);
+                println!(
+                    "  {:>4} wr={:.3} games={}",
+                    c.champion_id, c.win_rate, c.games
+                );
             }
             assert!(!counters.is_empty());
             assert!(counters.len() <= 8);

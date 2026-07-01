@@ -1,0 +1,67 @@
+name: checks
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+
+jobs:
+  frontend:
+    name: frontend
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: enable corepack
+        run: corepack enable
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "lts/*"
+          cache: "pnpm"
+      - name: install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: check frontend formatting
+        run: pnpm format:frontend:check
+      - name: lint frontend
+        run: pnpm lint:frontend
+      - name: typecheck frontend
+        run: pnpm typecheck
+      - name: build frontend
+        run: pnpm build
+
+  rust:
+    name: rust
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: install Tauri Linux dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
+      - name: install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - name: cache Rust build artifacts
+        uses: Swatinem/rust-cache@v2
+      - name: check Rust formatting
+        run: cargo fmt --all -- --check
+      - name: lint Rust
+        run: cargo clippy --workspace --all-targets -- -D warnings
+      - name: test Rust
+        run: cargo test --workspace --lib
+
+  toml:
+    name: toml
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: enable corepack
+        run: corepack enable
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "lts/*"
+          cache: "pnpm"
+      - name: install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: check TOML formatting
+        run: pnpm format:toml:check

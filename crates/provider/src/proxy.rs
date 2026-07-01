@@ -86,7 +86,7 @@ impl ProviderProxy {
 
     pub fn available(&self) -> Vec<ProviderKind> {
         let mut kinds: Vec<_> = self.providers.keys().copied().collect();
-        kinds.sort_by_key(|k| k.as_str());
+        kinds.sort_by_key(ProviderKind::as_str);
         kinds
     }
 

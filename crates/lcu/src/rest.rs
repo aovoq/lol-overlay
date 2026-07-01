@@ -20,9 +20,8 @@ pub async fn fetch_summoner() -> Result<SummonerInfo, LcuError> {
         .await
         .map_err(ie)?;
 
-    let str_of = |v: &Value, key: &str| {
-        v.get(key).and_then(Value::as_str).unwrap_or("").to_string()
-    };
+    let str_of =
+        |v: &Value, key: &str| v.get(key).and_then(Value::as_str).unwrap_or("").to_string();
     let int_of = |v: &Value, key: &str| v.get(key).and_then(Value::as_i64).unwrap_or(0);
 
     let ranked: Value = client
@@ -173,10 +172,7 @@ pub async fn apply_runes(page: &RunePagePayload) -> Result<(), LcuError> {
     }
 
     // POST returns the created page; capture as Value so deserialize succeeds.
-    let _created: Option<Value> = client
-        .post("/lol-perks/v1/pages", page)
-        .await
-        .map_err(ie)?;
+    let _created: Option<Value> = client.post("/lol-perks/v1/pages", page).await.map_err(ie)?;
     Ok(())
 }
 
@@ -226,7 +222,11 @@ pub async fn apply_spells(spell1: i64, spell2: i64) -> Result<(), LcuError> {
 /// Pick a deletable page id to free a slot — prefer the active one.
 fn deletable_page_id(pages: &Value) -> Option<i64> {
     let arr = pages.as_array()?;
-    let is_deletable = |p: &&Value| p.get("isDeletable").and_then(Value::as_bool).unwrap_or(false);
+    let is_deletable = |p: &&Value| {
+        p.get("isDeletable")
+            .and_then(Value::as_bool)
+            .unwrap_or(false)
+    };
     arr.iter()
         .find(|p| is_deletable(p) && p.get("current").and_then(Value::as_bool).unwrap_or(false))
         .or_else(|| arr.iter().find(is_deletable))

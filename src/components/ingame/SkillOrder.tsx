@@ -23,10 +23,7 @@ function skillOrderIds(order: SkillOrderType | null | undefined): number[] {
   return derived;
 }
 
-function SkillCard(props: {
-  skillId: number;
-  championImageId: string;
-}) {
+function SkillCard(props: { skillId: number; championImageId: string }) {
   const [hasIcon, setHasIcon] = createSignal(false);
   const [abilityName, setAbilityName] = createSignal("");
   let imgEl!: HTMLImageElement;
@@ -84,9 +81,7 @@ export function SkillOrder(props: {
   const ids = () => skillOrderIds(props.order);
   const title = () => {
     const o = props.order;
-    return o && o.games > 0
-      ? `${Math.round(o.winRate * 100)}% WR · ${o.games} games`
-      : "";
+    return o && o.games > 0 ? `${Math.round(o.winRate * 100)}% WR · ${o.games} games` : "";
   };
 
   return (
@@ -102,10 +97,7 @@ export function SkillOrder(props: {
           <Index each={ids()}>
             {(skillId, i) => (
               <>
-                <SkillCard
-                  skillId={skillId()}
-                  championImageId={props.championImageId}
-                />
+                <SkillCard skillId={skillId()} championImageId={props.championImageId} />
                 <Show when={i < ids().length - 1}>
                   <span class="skill-arrow" />
                 </Show>

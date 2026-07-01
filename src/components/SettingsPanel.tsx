@@ -1,5 +1,5 @@
-import { Show } from "solid-js";
 import { invoke } from "@tauri-apps/api/core";
+import { Show } from "solid-js";
 import {
   autoImport,
   dataSource,
@@ -9,8 +9,8 @@ import {
   setDataSource,
   setImportSpells,
   setThemeMode,
-  themeMode,
   type ThemeMode,
+  themeMode,
 } from "../state/settings";
 
 export function SettingsForm() {
@@ -21,9 +21,7 @@ export function SettingsForm() {
 
   return (
     <div class="settings-form flex flex-col gap-2">
-      <div class="font-hx-serif text-[11px] font-bold tracking-[0.28em] text-hx-gold">
-        SETTINGS
-      </div>
+      <div class="font-hx-serif text-[11px] font-bold tracking-[0.28em] text-hx-gold">SETTINGS</div>
       <label class="flex items-center gap-2 cursor-pointer text-hx-text">
         <input
           type="checkbox"
@@ -52,6 +50,7 @@ export function SettingsForm() {
         <div class="grid grid-cols-2 gap-1 rounded border border-hx-border bg-hx-bg-raised p-1">
           {themeOptions.map((option) => (
             <button
+              type="button"
               class={`rounded px-2 py-1 font-hx-serif text-[10px] font-semibold tracking-[0.16em] cursor-pointer ${
                 themeMode() === option.value
                   ? "bg-hx-gold-wash text-hx-gold"

@@ -5,7 +5,7 @@ import type { PanelPosition, UiLayout } from "../types";
 const [ingameCollapsed, setIngameCollapsedState] = createSignal(false);
 const [ingamePos, setIngamePos] = createSignal<PanelPosition | null>(null);
 
-export { ingameCollapsed, setIngameCollapsedState, ingamePos, setIngamePos };
+export { ingameCollapsed, ingamePos, setIngameCollapsedState, setIngamePos };
 
 export function setIngameCollapsed(collapsed: boolean) {
   setIngameCollapsedState(collapsed);

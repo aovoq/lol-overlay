@@ -35,6 +35,12 @@ pub struct DdragonClient {
     cache: RwLock<Option<StaticData>>,
 }
 
+impl Default for DdragonClient {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl DdragonClient {
     pub fn new() -> Self {
         let http = reqwest::Client::builder()
@@ -179,7 +185,7 @@ async fn fetch_item_map(
 /// all collapse to the same key.
 pub fn normalize(name: &str) -> String {
     name.chars()
-        .filter(|c| c.is_ascii_alphanumeric())
+        .filter(char::is_ascii_alphanumeric)
         .map(|c| c.to_ascii_lowercase())
         .collect()
 }

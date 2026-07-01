@@ -86,8 +86,8 @@ fn cursor_in_regions(app: &AppHandle, win: &WebviewWindow, engine: &Engine) -> b
     };
     // Global physical cursor → window-relative logical (CSS) coordinates.
     // The window is undecorated, so its outer position is the webview origin.
-    let x = (cursor.x - origin.x as f64) / scale;
-    let y = (cursor.y - origin.y as f64) / scale;
+    let x = (cursor.x - f64::from(origin.x)) / scale;
+    let y = (cursor.y - f64::from(origin.y)) / scale;
     point_in_regions(&regions, x, y)
 }
 

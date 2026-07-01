@@ -1,19 +1,8 @@
 import { createMemo, For, Show } from "solid-js";
-import {
-  champName,
-  getPerk,
-  getShard,
-  getStyle,
-} from "../../assets";
+import { champName, getPerk, getShard, getStyle } from "../../assets";
 import { HEX_SVG, roleLabel } from "../../lib/hexgate";
+import { activeTab, champSelect, hoverChampId, selectedRole, vsEnemyId } from "../../state/backend";
 import { buildCache, buildKey } from "../../state/caches";
-import {
-  activeTab,
-  champSelect,
-  hoverChampId,
-  selectedRole,
-  vsEnemyId,
-} from "../../state/backend";
 import type { RuneBuild } from "../../types";
 import { Icon } from "../Icon";
 import { SectionError } from "./SectionError";
@@ -38,7 +27,7 @@ function TreeHead(props: { styleId: number; primary: boolean }) {
   return (
     <div
       class="flex items-center gap-2 my-2 mx-0 font-hx-serif font-semibold text-xs tracking-[0.16em] text-hx-gold"
-      style={!props.primary && s() ? { color: s()!.color } : undefined}
+      style={!props.primary && s() ? { color: s()?.color ?? "" } : undefined}
     >
       <Show when={s()?.icon}>
         <Icon url={s()?.icon ?? ""} class="w-4 h-4" />
@@ -53,9 +42,7 @@ function KeystoneCard(props: { perkId: number }) {
   return (
     <div class="flex items-center gap-3 px-3 py-2 bg-hx-bg-raised border border-hx-keystone-border rounded-md">
       <Icon url={perk()?.icon ?? ""} class="w-11 h-11" />
-      <span class="text-[15px] font-bold text-hx-text">
-        {perk()?.name ?? `#${props.perkId}`}
-      </span>
+      <span class="text-[15px] font-bold text-hx-text">{perk()?.name ?? `#${props.perkId}`}</span>
     </div>
   );
 }
@@ -90,9 +77,7 @@ function RunePage(props: { build: RuneBuild }) {
   return (
     <div class="flex flex-col gap-1.5">
       <TreeHead styleId={b().primaryStyleId} primary={true} />
-      <Show when={keystone() !== undefined}>
-        <KeystoneCard perkId={keystone()!} />
-      </Show>
+      <Show when={keystone()}>{(id) => <KeystoneCard perkId={id()} />}</Show>
       <For each={minors()}>{(id) => <RuneRow perkId={id} />}</For>
 
       <TreeHead styleId={b().subStyleId} primary={false} />
@@ -112,9 +97,7 @@ function BuildSkeleton() {
   return (
     <div class="flex flex-col gap-1.5">
       <div class="hx-skel h-[62px] rounded-md" />
-      <For each={[0, 1, 2, 3, 4]}>
-        {() => <div class="hx-skel h-9 rounded-md" />}
-      </For>
+      <For each={[0, 1, 2, 3, 4]}>{() => <div class="hx-skel h-9 rounded-md" />}</For>
     </div>
   );
 }
@@ -122,10 +105,7 @@ function BuildSkeleton() {
 function BigEmpty(props: { role: string }) {
   return (
     <div class="flex flex-col items-center gap-2.5 mt-14 mx-auto max-w-[340px] text-center text-hx-muted">
-      <div
-        class="text-hx-gold-dim w-11 h-11 [&_svg]:w-full [&_svg]:h-full"
-        innerHTML={HEX_SVG}
-      />
+      <div class="text-hx-gold-dim w-11 h-11 [&_svg]:w-full [&_svg]:h-full" innerHTML={HEX_SVG} />
       <div class="font-hx-serif font-bold text-sm tracking-[0.2em] text-hx-gold">
         {roleLabel(props.role)}
       </div>
@@ -137,15 +117,11 @@ function BigEmpty(props: { role: string }) {
 function NotEnoughData(props: { championId: number; matchup: boolean }) {
   return (
     <div class="flex flex-col items-center gap-2.5 mt-14 mx-auto max-w-[340px] text-center text-hx-muted">
-      <div
-        class="text-hx-gold-dim w-11 h-11 [&_svg]:w-full [&_svg]:h-full"
-        innerHTML={HEX_SVG}
-      />
+      <div class="text-hx-gold-dim w-11 h-11 [&_svg]:w-full [&_svg]:h-full" innerHTML={HEX_SVG} />
       <div class="text-base text-hx-text">Not enough data</div>
       <Show when={props.matchup}>
         <div class="text-xs leading-normal">
-          Too few games for{" "}
-          {champName(props.championId) || "this champion"} in this matchup to
+          Too few games for {champName(props.championId) || "this champion"} in this matchup to
           provide reliable rune recommendations.
         </div>
       </Show>
@@ -188,16 +164,10 @@ export function BuildArea() {
                 <Show
                   when={err() === "not-enough-data"}
                   fallback={
-                    <SectionError
-                      message={err()}
-                      onRetry={() => buildCache.refetch(cacheKey())}
-                    />
+                    <SectionError message={err()} onRetry={() => buildCache.refetch(cacheKey())} />
                   }
                 >
-                  <NotEnoughData
-                    championId={t().champ}
-                    matchup={t().enemy !== null}
-                  />
+                  <NotEnoughData championId={t().champ} matchup={t().enemy !== null} />
                 </Show>
               }
             >

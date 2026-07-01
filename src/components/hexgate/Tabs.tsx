@@ -40,6 +40,7 @@ export function Tabs() {
   return (
     <nav class="relative flex gap-[26px] border-b border-hx-border mt-1.5">
       <button
+        type="button"
         class={`inline-flex items-center gap-1.5 bg-none border-b-2 -mb-px py-2.5 px-0.5 font-hx-serif font-semibold text-xs tracking-[0.12em] cursor-pointer ${
           activeTab() === "best"
             ? "text-hx-gold border-b-hx-gold"
@@ -51,6 +52,7 @@ export function Tabs() {
       </button>
 
       <button
+        type="button"
         class={`hx-tab-vs inline-flex items-center gap-1.5 bg-none border-b-2 -mb-px py-2.5 px-0.5 font-hx-serif font-semibold text-xs tracking-[0.12em] ${
           activeTab() === "vs"
             ? "text-hx-gold border-b-hx-gold"
@@ -66,10 +68,7 @@ export function Tabs() {
           setActiveTab("vs");
         }}
       >
-        <Show
-          when={enemy()}
-          fallback="VS ..."
-        >
+        <Show when={enemy()} fallback="VS ...">
           <Show when={assetsReady()}>
             <Icon
               url={champIconByKey(enemy())}
@@ -86,6 +85,7 @@ export function Tabs() {
           <For each={revealedEnemies()}>
             {(id) => (
               <button
+                type="button"
                 class="flex items-center gap-2 w-full text-left bg-none border-none rounded px-2.5 py-1.5 text-hx-text text-[13px] cursor-pointer hover:bg-hx-bg hover:text-hx-gold"
                 onClick={() => {
                   setVsEnemyId(id);

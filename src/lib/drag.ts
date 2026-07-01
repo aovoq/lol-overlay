@@ -1,7 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import type { WindowMode } from "../types";
 import { setIngamePos } from "../state/layout";
+import type { WindowMode } from "../types";
 import { reportHitRegions } from "./hitRegions";
 
 const appWindow = getCurrentWindow();
@@ -14,11 +14,7 @@ export function shouldStartDrag(event: PointerEvent): boolean {
   return !target.closest("button, input, label, select, textarea, a");
 }
 
-export function applyPanelPosition(
-  panel: HTMLElement,
-  left: number,
-  top: number,
-) {
+export function applyPanelPosition(panel: HTMLElement, left: number, top: number) {
   panel.style.left = `${Math.max(0, left)}px`;
   panel.style.top = `${Math.max(0, top)}px`;
   panel.style.right = "auto";
@@ -29,14 +25,8 @@ export function clampPanelToViewport(panel: HTMLElement) {
   const rect = panel.getBoundingClientRect();
   if (rect.width === 0 || rect.height === 0) return;
 
-  const left = Math.min(
-    Math.max(0, rect.left),
-    Math.max(0, window.innerWidth - rect.width),
-  );
-  const top = Math.min(
-    Math.max(0, rect.top),
-    Math.max(0, window.innerHeight - rect.height),
-  );
+  const left = Math.min(Math.max(0, rect.left), Math.max(0, window.innerWidth - rect.width));
+  const top = Math.min(Math.max(0, rect.top), Math.max(0, window.innerHeight - rect.height));
   applyPanelPosition(panel, left, top);
 }
 
@@ -48,10 +38,7 @@ export function saveIngamePanelPosition(panel: HTMLElement) {
   invoke("set_ingame_panel_position", { left, top }).catch(() => {});
 }
 
-async function saveChampselectWindowPosition(position: {
-  x: number;
-  y: number;
-}) {
+async function saveChampselectWindowPosition(position: { x: number; y: number }) {
   const scale = await appWindow.scaleFactor();
   await invoke("set_champselect_window_position", {
     x: Math.round(position.x / scale),
@@ -71,8 +58,7 @@ export function initWindowMoveSave(getMode: () => WindowMode) {
   appWindow
     .onMoved(({ payload }) => {
       if (getMode() !== "champselect") return;
-      if (champselectMoveSaveTimer)
-        window.clearTimeout(champselectMoveSaveTimer);
+      if (champselectMoveSaveTimer) window.clearTimeout(champselectMoveSaveTimer);
       champselectMoveSaveTimer = window.setTimeout(() => {
         if (getMode() !== "champselect") return;
         saveChampselectWindowPosition(payload).catch(() => {});
@@ -81,10 +67,7 @@ export function initWindowMoveSave(getMode: () => WindowMode) {
     .catch(() => {});
 }
 
-export function initPanelDrag(
-  panel: HTMLElement,
-  handle: HTMLElement | undefined,
-) {
+export function initPanelDrag(panel: HTMLElement, handle: HTMLElement | undefined) {
   handle?.addEventListener("pointerdown", (event) => {
     if (!shouldStartDrag(event)) return;
     event.preventDefault();
@@ -105,14 +88,8 @@ export function initPanelDrag(
     const onPointerMove = (moveEvent: PointerEvent) => {
       const maxLeft = Math.max(0, window.innerWidth - rect.width);
       const maxTop = Math.max(0, window.innerHeight - rect.height);
-      const left = Math.min(
-        Math.max(0, startLeft + moveEvent.clientX - startX),
-        maxLeft,
-      );
-      const top = Math.min(
-        Math.max(0, startTop + moveEvent.clientY - startY),
-        maxTop,
-      );
+      const left = Math.min(Math.max(0, startLeft + moveEvent.clientX - startX), maxLeft);
+      const top = Math.min(Math.max(0, startTop + moveEvent.clientY - startY), maxTop);
       panel.style.left = `${left}px`;
       panel.style.top = `${top}px`;
     };

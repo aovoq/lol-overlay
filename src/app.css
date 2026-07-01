@@ -28,11 +28,8 @@
     --hx-bg: #0b0a08;
     --hx-bg-raised: #15120d;
     --hx-panel: #15120d;
-    --hx-panel-bg: linear-gradient(
-        180deg,
-        rgba(200, 170, 110, 0.06),
-        rgba(200, 170, 110, 0) 18%
-      ),
+    --hx-panel-bg:
+      linear-gradient(180deg, rgba(200, 170, 110, 0.06), rgba(200, 170, 110, 0) 18%),
       rgba(11, 10, 8, 0.94);
     --hx-border: #3a3022;
     --hx-keystone-border: #463f2e;
@@ -64,11 +61,8 @@
     --hx-bg: #f6f0e2;
     --hx-bg-raised: #fffaf0;
     --hx-panel: #fff8ea;
-    --hx-panel-bg: linear-gradient(
-        180deg,
-        rgba(126, 92, 36, 0.08),
-        rgba(126, 92, 36, 0) 22%
-      ),
+    --hx-panel-bg:
+      linear-gradient(180deg, rgba(126, 92, 36, 0.08), rgba(126, 92, 36, 0) 22%),
       rgba(255, 248, 234, 0.94);
     --hx-border: #cdbb96;
     --hx-keystone-border: #ad8f55;

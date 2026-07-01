@@ -1,17 +1,11 @@
 import { createMemo, For, Show } from "solid-js";
 import { fmtPct, fmtThousands, getSpell } from "../../assets";
+import { activeTab, champSelect, hoverChampId, selectedRole, vsEnemyId } from "../../state/backend";
 import { buildCache, buildKey } from "../../state/caches";
 import {
-  activeTab,
-  champSelect,
-  hoverChampId,
-  selectedRole,
-  vsEnemyId,
-} from "../../state/backend";
-import {
   importSpells,
-  setImportSpells,
   setSpellsFlipped as persistSpellsFlipped,
+  setImportSpells,
   spellsFlipped as spellsFlippedSetting,
 } from "../../state/settings";
 import { Icon } from "../Icon";
@@ -38,30 +32,24 @@ export function StatsRow() {
     const t = target();
     return t ? buildKey(t.champ, role(), t.enemy) : "";
   });
-  const entry = createMemo(() =>
-    cacheKey() ? buildCache.get(cacheKey()) : null,
-  );
+  const entry = createMemo(() => (cacheKey() ? buildCache.get(cacheKey()) : null));
   const build = createMemo(() => {
     const e = entry();
-    if (!e || e.state !== "ok") return null;
+    if (e?.state !== "ok") return null;
     return e.value;
   });
 
   const spells = createMemo(() => {
     const b = build();
     if (!b) return [];
-    return spellsFlippedSetting()
-      ? [...b.spellIds].reverse()
-      : b.spellIds;
+    return spellsFlippedSetting() ? [...b.spellIds].reverse() : b.spellIds;
   });
 
   return (
     <Show when={build()}>
       {(b) => (
         <div class="flex items-center gap-2 py-2.5">
-          <span class="font-bold text-sm text-hx-text">
-            {fmtPct(b().winRate)} WR
-          </span>
+          <span class="font-bold text-sm text-hx-text">{fmtPct(b().winRate)} WR</span>
           <span class="text-hx-muted"> · {fmtThousands(b().games)} games</span>
           <span class="flex-1" />
           <div class="flex gap-1">
@@ -77,6 +65,7 @@ export function StatsRow() {
           </div>
           <Show when={b().spellIds.length >= 2}>
             <button
+              type="button"
               class="bg-none border border-hx-border rounded px-2 py-1 font-hx-serif font-semibold text-[10px] tracking-widest text-hx-gold-dim hover:text-hx-gold hover:border-hx-gold-dim cursor-pointer"
               onClick={() => persistSpellsFlipped(!spellsFlippedSetting())}
             >

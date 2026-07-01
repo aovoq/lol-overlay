@@ -1,11 +1,7 @@
 import { createMemo, For, Show } from "solid-js";
 import { assetsReady, champIconByKey, champName, fmtPct } from "../../assets";
+import { champSelect, selectedRole, setHoverChampId } from "../../state/backend";
 import { counterCache } from "../../state/caches";
-import {
-  champSelect,
-  selectedRole,
-  setHoverChampId,
-} from "../../state/backend";
 import type { CounterEntry } from "../../types";
 import { Icon } from "../Icon";
 
@@ -29,7 +25,7 @@ export function Counters() {
 
   const counters = createMemo((): CounterEntry[] => {
     const e = entry();
-    if (!e || e.state !== "ok") return [];
+    if (e?.state !== "ok") return [];
     return e.value.slice(0, 8);
   });
 
@@ -45,9 +41,7 @@ export function Counters() {
             fallback={
               <Show
                 when={counters().length > 0}
-                fallback={
-                  <span class="text-hx-muted">Not enough data yet</span>
-                }
+                fallback={<span class="text-hx-muted">Not enough data yet</span>}
               >
                 <For each={counters()}>
                   {(c) => (
@@ -64,9 +58,7 @@ export function Counters() {
                         />
                       </Show>
                       <span
-                        class={`text-[10px] ${
-                          c.winRate > 0.51 ? "text-hx-up" : "text-hx-muted"
-                        }`}
+                        class={`text-[10px] ${c.winRate > 0.51 ? "text-hx-up" : "text-hx-muted"}`}
                       >
                         {fmtPct(c.winRate)}
                       </span>

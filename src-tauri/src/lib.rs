@@ -30,7 +30,7 @@ use overlay_provider::{ProviderKind, ProviderProxy};
 use overlay_provider_deeplol::DeepLolProvider;
 use overlay_provider_ugg::UggProvider;
 
-use crate::engine::{Engine, MockStage, Settings};
+use crate::engine::{Engine, MockStage, Settings, UiLayout};
 use overlay_live_client::LiveClient;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -51,7 +51,7 @@ pub fn run() {
         provider,
         live: LiveClient::new().expect("failed to build Live Client http client"),
         settings: Mutex::new(Settings::default()),
-        ui_layout: Mutex::new(Default::default()),
+        ui_layout: Mutex::new(UiLayout::default()),
         store_path: Mutex::new(None),
         mock: AtomicBool::new(false),
         mock_stage: Mutex::new(MockStage::Off),
@@ -100,7 +100,7 @@ pub fn run() {
             if window.label() == "control" {
                 if let WindowEvent::CloseRequested { api, .. } = event {
                     api.prevent_close();
-                    let _ = window.hide();
+                    window.app_handle().exit(0);
                 }
             }
         })

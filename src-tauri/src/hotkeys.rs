@@ -19,7 +19,7 @@ pub fn setup(app: &App, engine: Arc<Engine>) -> tauri::Result<()> {
     let toggle = Shortcut::new(Some(ctrl_shift), Code::KeyO);
     let cycle = Shortcut::new(Some(ctrl_shift), Code::KeyM);
     let mock = Shortcut::new(Some(ctrl_shift), Code::KeyD);
-    let (toggle_h, cycle_h, mock_h) = (toggle.clone(), cycle.clone(), mock.clone());
+    let (toggle_h, cycle_h, mock_h) = (toggle, cycle, mock);
 
     let engine_hk = engine;
 

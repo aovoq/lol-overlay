@@ -1,5 +1,5 @@
-import { createMemo, Show } from "solid-js";
 import { invoke } from "@tauri-apps/api/core";
+import { createMemo, Show } from "solid-js";
 import {
   activeTab,
   champSelect,
@@ -33,9 +33,7 @@ export function ImportButton() {
       case "failed":
         return "FAILED — RETRY";
       default:
-        return importSpells()
-          ? "IMPORT RUNES & SPELLS"
-          : "IMPORT RUNES";
+        return importSpells() ? "IMPORT RUNES & SPELLS" : "IMPORT RUNES";
     }
   });
 
@@ -47,8 +45,7 @@ export function ImportButton() {
     invoke("import_build", {
       championId: champ,
       role: effectiveRole(),
-      enemyChampionId:
-        activeTab() === "vs" && vsEnemyId() ? vsEnemyId() : null,
+      enemyChampionId: activeTab() === "vs" && vsEnemyId() ? vsEnemyId() : null,
       includeSpells: importSpells(),
       flipSpells: spellsFlipped(),
     }).then(
@@ -60,10 +57,9 @@ export function ImportButton() {
   return (
     <Show when={my()}>
       <button
+        type="button"
         class={`hx-primary-button w-full h-11 border rounded-md font-hx-serif font-bold text-[13px] tracking-[0.18em] cursor-pointer disabled:opacity-65 disabled:cursor-default ${
-          importState() === "failed"
-            ? "border-hx-red text-hx-red"
-            : "border-hx-gold text-hx-gold"
+          importState() === "failed" ? "border-hx-red text-hx-red" : "border-hx-gold text-hx-gold"
         }`}
         disabled={importState() === "importing"}
         onClick={onClick}

@@ -9,9 +9,7 @@ const THEME_MODES: ThemeMode[] = ["dark", "light"];
 
 function storedTheme(): ThemeMode {
   const stored = window.localStorage.getItem(THEME_STORAGE_KEY);
-  return THEME_MODES.includes(stored as ThemeMode)
-    ? (stored as ThemeMode)
-    : "light";
+  return THEME_MODES.includes(stored as ThemeMode) ? (stored as ThemeMode) : "light";
 }
 
 function applyTheme(mode: ThemeMode) {
@@ -31,12 +29,12 @@ applyTheme(themeMode());
 
 export {
   autoImport,
-  setAutoImport,
-  importSpells,
-  spellsFlipped,
-  pinned,
   dataSource,
   dataSources,
+  importSpells,
+  pinned,
+  setAutoImport,
+  spellsFlipped,
   themeMode,
 };
 

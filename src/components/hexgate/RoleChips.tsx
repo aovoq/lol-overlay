@@ -12,6 +12,7 @@ export function RoleChips() {
         <For each={ROLES}>
           {(r) => (
             <button
+              type="button"
               class={`flex-1 font-hx-serif font-semibold text-[11px] tracking-[0.1em] py-[5px] rounded border cursor-pointer ${
                 selectedRole() === r.lcu
                   ? "text-hx-gold border-hx-gold"

@@ -1,10 +1,4 @@
-import {
-  createEffect,
-  createSignal,
-  For,
-  onMount,
-  Show,
-} from "solid-js";
+import { createEffect, createSignal, For, onMount, Show } from "solid-js";
 import { assetsReady, champIconByName, itemIconUrl } from "../../assets";
 import {
   applyPanelPosition,
@@ -14,11 +8,7 @@ import {
 } from "../../lib/drag";
 import { reportHitRegions } from "../../lib/hitRegions";
 import { phase, recommendations } from "../../state/backend";
-import {
-  ingameCollapsed,
-  ingamePos,
-  setIngameCollapsed,
-} from "../../state/layout";
+import { ingameCollapsed, ingamePos, setIngameCollapsed } from "../../state/layout";
 import { Icon } from "../Icon";
 import { SkillOrder } from "./SkillOrder";
 
@@ -110,6 +100,7 @@ function PanelBody() {
             IN GAME
           </span>
           <button
+            type="button"
             class="w-[22px] h-[22px] flex items-center justify-center p-0 bg-transparent border border-hx-border rounded text-hx-muted hover:text-hx-gold hover:border-hx-gold cursor-pointer"
             title="折りたたみ切替"
             onClick={toggleCollapse}
@@ -178,9 +169,7 @@ function PanelBody() {
                           }`}
                         >
                           <Show when={chip.count !== undefined} fallback={chip.label}>
-                            <b class={`font-bold ${threatColor(chip.kind)}`}>
-                              {chip.count}
-                            </b>
+                            <b class={`font-bold ${threatColor(chip.kind)}`}>{chip.count}</b>
                             {` ${chip.label}`}
                           </Show>
                         </span>
@@ -189,10 +178,7 @@ function PanelBody() {
                   </div>
                 </div>
 
-                <SkillOrder
-                  order={e().skillOrder}
-                  championImageId={e().selfRawName}
-                />
+                <SkillOrder order={e().skillOrder} championImageId={e().selfRawName} />
 
                 <div class="px-3 py-2 pb-1.5 font-hx-serif text-[10px] font-semibold tracking-[0.24em] text-hx-gold-dim">
                   RECOMMENDED BUILD
@@ -213,12 +199,8 @@ function PanelBody() {
                           />
                         </Show>
                         <div class="flex flex-col min-w-0 flex-1">
-                          <span class="font-semibold text-hx-text truncate">
-                            {it.name}
-                          </span>
-                          <span class="text-[10.5px] text-hx-muted">
-                            {it.reason}
-                          </span>
+                          <span class="font-semibold text-hx-text truncate">{it.name}</span>
+                          <span class="text-[10.5px] text-hx-muted">{it.reason}</span>
                           <div
                             class="h-0.5 mt-1 rounded-sm bg-gradient-to-r from-hx-gold to-hx-gold-dim opacity-85"
                             style={{ width: `${Math.round(it.score * 100)}%` }}

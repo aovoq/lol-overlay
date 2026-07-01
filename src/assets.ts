@@ -76,7 +76,10 @@ const SHARDS: Record<number, ShardInfo> = {
   5010: { label: "+2.5% Move Speed", icon: `${CDRAGON_STATMODS}statmodsmovementspeedicon.png` },
   5001: { label: "+10-180 Health", icon: `${CDRAGON_STATMODS}statmodshealthplusicon.png` },
   5011: { label: "+65 Health", icon: `${CDRAGON_STATMODS}statmodshealthscalingicon.png` },
-  5013: { label: "+15% Tenacity and Slow Resist", icon: `${CDRAGON_STATMODS}statmodstenacityicon.png` },
+  5013: {
+    label: "+15% Tenacity and Slow Resist",
+    icon: `${CDRAGON_STATMODS}statmodstenacityicon.png`,
+  },
   5002: { label: "Armor", icon: "" },
   5003: { label: "Magic Resist", icon: "" },
 };
@@ -96,9 +99,7 @@ export const itemIconUrl = (id: number) => {
 /** Icon by Data Dragon image id (what the Live Client API calls rawName). */
 export const champIconByName = (imageId: string) => {
   assetsReady();
-  return ddVersion && imageId
-    ? `${DD}/cdn/${ddVersion}/img/champion/${imageId}.png`
-    : "";
+  return ddVersion && imageId ? `${DD}/cdn/${ddVersion}/img/champion/${imageId}.png` : "";
 };
 
 export const champIconByKey = (key: number) => {
@@ -124,8 +125,7 @@ export const getSpell = (key: number) => {
   assetsReady();
   return spellByKey.get(key);
 };
-export const getShard = (id: number): ShardInfo =>
-  SHARDS[id] ?? { label: `Shard ${id}`, icon: "" };
+export const getShard = (id: number): ShardInfo => SHARDS[id] ?? { label: `Shard ${id}`, icon: "" };
 
 export async function getAbility(
   imageId: string,
@@ -182,6 +182,7 @@ export function setIcon(img: HTMLImageElement, url: string) {
 import { createSignal } from "solid-js";
 
 const [assetsReady, setAssetsReady] = createSignal(false);
+
 export { assetsReady };
 
 let ready: Promise<void> | null = null;

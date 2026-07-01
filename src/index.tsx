@@ -1,12 +1,9 @@
-import { render } from "solid-js/web";
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import { initAssets } from "./assets";
+import { render } from "solid-js/web";
 import { ControlApp, OverlayApp } from "./App";
+import { initAssets } from "./assets";
 import "./app.css";
-import {
-  clampPanelToViewport,
-  saveIngamePanelPosition,
-} from "./lib/drag";
+import { clampPanelToViewport, saveIngamePanelPosition } from "./lib/drag";
 import { startHitRegionInterval } from "./lib/hitRegions";
 import "./state/backend";
 import "./state/settings";
@@ -17,10 +14,10 @@ const isControl = windowLabel === "control";
 document.body.classList.toggle("control-window", isControl);
 document.body.classList.toggle("overlay-window", !isControl);
 
-render(
-  () => (isControl ? <ControlApp /> : <OverlayApp />),
-  document.getElementById("root")!,
-);
+const root = document.getElementById("root");
+if (!root) throw new Error("missing #root element");
+
+render(() => (isControl ? <ControlApp /> : <OverlayApp />), root);
 
 if (!isControl) startHitRegionInterval();
 initAssets().catch(() => {});

@@ -1,0 +1,1 @@
+include = ["Cargo.toml", "src-tauri/Cargo.toml", "crates/*/Cargo.toml"]

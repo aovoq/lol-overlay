@@ -20,9 +20,7 @@ impl Subscriber for SessionForwarder {
 /// Subscribes to champ-select session events and forwards payloads onto `tx`.
 /// The underlying socket handle is intentionally leaked so the subscription
 /// lives for the lifetime of the process (mirrors previous mem::forget in lib.rs).
-pub fn subscribe_champ_select(
-    tx: UnboundedSender<Value>,
-) -> Result<(), LcuError> {
+pub fn subscribe_champ_select(tx: UnboundedSender<Value>) -> Result<(), LcuError> {
     let mut ws = LcuWebSocket::new();
     let _ = ws.subscribe(
         EventKind::json_api_event_callback("/lol-champ-select/v1/session"),

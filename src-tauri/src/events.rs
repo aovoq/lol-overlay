@@ -6,9 +6,7 @@ use serde::Serialize;
 use tauri::{AppHandle, Emitter};
 
 use overlay_types::EnemyChampion;
-pub use overlay_types::{
-    ChampSelectEvent, ItemRecommendation, SkillOrder, ThreatProfile,
-};
+pub use overlay_types::{ChampSelectEvent, ItemRecommendation, SkillOrder, ThreatProfile};
 
 #[derive(Serialize, Clone)]
 #[serde(rename_all = "camelCase")]

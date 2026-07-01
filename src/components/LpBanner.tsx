@@ -1,6 +1,6 @@
 import { createEffect, createSignal, onCleanup, Show } from "solid-js";
-import { lpChange } from "../state/backend";
 import { fmtTier } from "../lib/hexgate";
+import { lpChange } from "../state/backend";
 
 export function LpBanner() {
   const [visible, setVisible] = createSignal(false);

@@ -1,6 +1,6 @@
-import { listen } from "@tauri-apps/api/event";
 import { invoke } from "@tauri-apps/api/core";
-import { createSignal, type Accessor } from "solid-js";
+import { listen } from "@tauri-apps/api/event";
+import { type Accessor, createSignal } from "solid-js";
 import type { CounterEntry, RuneBuild, TierEntry } from "../types";
 
 type CacheEntry<T> =
@@ -69,9 +69,7 @@ export function makeCache<T>(fetcher: (key: string) => Promise<T>) {
   };
 }
 
-export const tierCache = makeCache<TierEntry[]>((role) =>
-  invoke("get_tier_list", { role }),
-);
+export const tierCache = makeCache<TierEntry[]>((role) => invoke("get_tier_list", { role }));
 
 export const counterCache = makeCache<CounterEntry[]>((key) => {
   const [champ, role] = key.split("|");
@@ -87,11 +85,8 @@ export const buildCache = makeCache<RuneBuild>((key) => {
   });
 });
 
-export const buildKey = (
-  champ: number,
-  role: string,
-  enemy: number | null,
-) => `${champ}|${role}|${enemy ?? 0}`;
+export const buildKey = (champ: number, role: string, enemy: number | null) =>
+  `${champ}|${role}|${enemy ?? 0}`;
 
 listen<string>("data-source", () => {
   tierCache.clear();
