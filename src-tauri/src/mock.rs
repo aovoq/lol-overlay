@@ -14,7 +14,7 @@ use std::time::Duration;
 
 use tauri::{AppHandle, Emitter};
 
-use crate::engine::{self, Engine, MockStage};
+use crate::engine::{self, Engine, MockStage, WindowMode};
 use crate::events::{log, ChampSelectEvent, PhaseEvent, RecommendationsEvent, RuneImportedEvent};
 use overlay_provider::{classify_threats, BuildProvider};
 use overlay_types::{EnemyChampion, GameSnapshot};
@@ -24,7 +24,7 @@ use overlay_types::{EnemyChampion, GameSnapshot};
 /// drives tier list / counters / runes through the live provider, so the
 /// whole panel is testable end to end.
 pub async fn mock_champ_select_loop(app: AppHandle, engine: Arc<Engine>) {
-    engine::apply_window_mode(&app, true);
+    engine::apply_window_mode(&app, WindowMode::ChampSelect);
 
     let ev = champ_select_scenario(&engine).await;
 
@@ -48,7 +48,7 @@ pub async fn mock_champ_select_loop(app: AppHandle, engine: Arc<Engine>) {
     // switches to the in-game overlay panel.
     let _ = app.emit("champ-select", ChampSelectEvent::default());
     if engine.mock_stage() == MockStage::Off {
-        engine::apply_window_mode(&app, false);
+        engine::apply_window_mode(&app, WindowMode::Overlay);
     }
 }
 
@@ -102,7 +102,13 @@ async fn champ_select_scenario(engine: &Engine) -> ChampSelectEvent {
 /// (so a stray poller `phase` event can't hide the panel); clears the UI when
 /// the cycle moves on.
 pub async fn mock_loop(app: AppHandle, engine: Arc<Engine>) {
-    engine::apply_window_mode(&app, false);
+    engine
+        .phase_champselect
+        .store(false, std::sync::atomic::Ordering::SeqCst);
+    engine
+        .phase_in_game
+        .store(true, std::sync::atomic::Ordering::SeqCst);
+    engine::apply_desired_window_mode(&app, &engine);
 
     let (snapshot, my_champion_id) = ingame_scenario(&engine).await;
     let threats = classify_threats(&snapshot);
@@ -173,7 +179,10 @@ pub async fn mock_loop(app: AppHandle, engine: Arc<Engine>) {
             in_game: false,
         },
     );
-    engine::apply_window_mode(&app, false);
+    engine
+        .phase_in_game
+        .store(false, std::sync::atomic::Ordering::SeqCst);
+    engine::apply_window_mode(&app, WindowMode::Overlay);
 }
 
 /// Build the in-game scene from live tier lists: the top meta pick of every

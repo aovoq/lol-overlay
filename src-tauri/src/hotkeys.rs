@@ -92,7 +92,10 @@ pub fn setup(app: &App, engine: Arc<Engine>) -> tauri::Result<()> {
                                     in_game: false,
                                 },
                             );
-                            crate::engine::apply_window_mode(app, false);
+                            crate::engine::apply_window_mode(
+                                app,
+                                crate::engine::WindowMode::Overlay,
+                            );
                         }
                     }
                 }

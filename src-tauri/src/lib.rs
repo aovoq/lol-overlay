@@ -30,7 +30,7 @@ use overlay_provider::{ProviderKind, ProviderProxy};
 use overlay_provider_deeplol::DeepLolProvider;
 use overlay_provider_ugg::UggProvider;
 
-use crate::engine::{Engine, MockStage, Settings, UiLayout};
+use crate::engine::{Engine, MockStage, Settings, UiLayout, WindowMode};
 use overlay_live_client::LiveClient;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -61,6 +61,9 @@ pub fn run() {
         forced_interactive: AtomicBool::new(false),
         interactive_applied: AtomicBool::new(false),
         window_champselect: AtomicBool::new(false),
+        window_ingame: AtomicBool::new(false),
+        phase_champselect: AtomicBool::new(false),
+        phase_in_game: AtomicBool::new(false),
     });
 
     tauri::Builder::default()
@@ -77,7 +80,7 @@ pub fn run() {
             // regardless of resolution / HiDPI scaling. The normal control
             // window starts as a compact status window near the lower-left.
             engine::apply_overlay_bounds(app.handle());
-            engine::apply_control_layout(app.handle(), false);
+            engine::apply_control_layout(app.handle(), WindowMode::Overlay);
 
             #[cfg(desktop)]
             hotkeys::setup(app, engine.clone())?;
@@ -114,6 +117,7 @@ pub fn run() {
             commands::set_pinned,
             commands::set_import_spells,
             commands::set_spells_flipped,
+            commands::set_presentation_mode,
             commands::get_ui_layout,
             commands::set_ingame_panel_position,
             commands::set_champselect_window_position,

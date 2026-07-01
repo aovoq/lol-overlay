@@ -13,27 +13,29 @@ import { ingameCollapsed, ingamePos, setIngameCollapsed } from "../../state/layo
 import { Icon } from "../Icon";
 import { SkillOrder } from "./SkillOrder";
 
-function PanelBody() {
+function PanelBody(props: { embedded?: boolean }) {
   let panelEl!: HTMLDivElement;
   let headEl!: HTMLElement;
 
   createEffect(() => {
+    if (props.embedded) return;
     const pos = ingamePos();
     if (pos) applyPanelPosition(panelEl, pos.left, pos.top);
   });
 
   createEffect(() => {
     recommendations();
+    if (props.embedded) return;
     requestAnimationFrame(() => {
       if (panelEl) clampPanelToViewport(panelEl);
     });
   });
 
   onMount(() => {
-    initPanelDrag(panelEl, headEl);
+    if (!props.embedded) initPanelDrag(panelEl, headEl);
 
     panelEl.addEventListener("transitionend", (event) => {
-      if (event.target !== panelEl || event.propertyName !== "width") return;
+      if (props.embedded || event.target !== panelEl || event.propertyName !== "width") return;
       clampPanelToViewport(panelEl);
       saveIngamePanelPosition(panelEl);
       reportHitRegions();
@@ -43,7 +45,7 @@ function PanelBody() {
   const toggleCollapse = () => {
     const next = !ingameCollapsed();
     setIngameCollapsed(next);
-    reportHitRegions();
+    if (!props.embedded) reportHitRegions();
   };
 
   const recs = () => recommendations();
@@ -75,16 +77,18 @@ function PanelBody() {
   return (
     <div
       ref={panelEl}
-      class={`ingame-panel panel fixed top-20 right-4 p-0 overflow-hidden pointer-events-auto transition-[width] duration-200 ease-[cubic-bezier(0.2,0,0,1)] ${
-        ingameCollapsed() ? "collapsed w-[280px]" : "w-[448px]"
-      }`}
+      class={`ingame-panel panel p-0 overflow-hidden pointer-events-auto ${
+        props.embedded
+          ? "relative w-full"
+          : "fixed top-20 right-4 transition-[width] duration-200 ease-[cubic-bezier(0.2,0,0,1)]"
+      } ${props.embedded ? "" : ingameCollapsed() ? "collapsed w-[280px]" : "w-[448px]"}`}
     >
       <header
         ref={headEl}
-        class={`ig-head flex justify-between items-center px-3 py-[9px] border-b cursor-grab active:cursor-grabbing transition-[border-color] duration-200 ${
-          ingameCollapsed() ? "border-b-transparent" : "border-b-hx-border"
-        }`}
-        data-hit
+        class={`ig-head flex justify-between items-center px-3 py-[9px] border-b transition-[border-color] duration-200 ${
+          props.embedded ? "cursor-default" : "cursor-grab active:cursor-grabbing"
+        } ${ingameCollapsed() ? "border-b-transparent cursor-default" : "border-b-hx-border"}`}
+        data-hit={!props.embedded ? true : undefined}
       >
         <span class="inline-flex items-center gap-[7px] text-hx-gold font-hx-serif text-xs font-bold tracking-[0.32em] whitespace-nowrap">
           <svg
@@ -220,7 +224,7 @@ function PanelBody() {
   );
 }
 
-export function InGamePanel() {
+export function InGamePanel(props: { embedded?: boolean }) {
   const [visible, setVisible] = createSignal(false);
   let wasInGame = false;
 
@@ -237,7 +241,7 @@ export function InGamePanel() {
 
   return (
     <Show when={visible()}>
-      <PanelBody />
+      <PanelBody embedded={props.embedded} />
     </Show>
   );
 }

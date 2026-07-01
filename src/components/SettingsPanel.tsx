@@ -5,18 +5,25 @@ import {
   dataSource,
   dataSources,
   importSpells,
+  presentationMode,
   setAutoImport,
   setDataSource,
   setImportSpells,
+  setPresentationMode,
   setThemeMode,
   type ThemeMode,
   themeMode,
 } from "../state/settings";
+import type { PresentationMode } from "../types";
 
 export function SettingsForm() {
   const themeOptions: { value: ThemeMode; label: string }[] = [
     { value: "dark", label: "Dark" },
     { value: "light", label: "Light" },
+  ];
+  const presentationOptions: { value: PresentationMode; label: string }[] = [
+    { value: "overlay", label: "Overlay" },
+    { value: "window", label: "Window" },
   ];
 
   return (
@@ -45,6 +52,24 @@ export function SettingsForm() {
         />
         <span>スペルも書き込む</span>
       </label>
+      <div class="flex flex-col gap-1">
+        <span class="text-[11px] text-hx-muted">表示モード</span>
+        <div class="grid grid-cols-2 gap-1 rounded border border-hx-border bg-hx-bg-raised p-1">
+          {presentationOptions.map((option) => (
+            <button
+              type="button"
+              class={`rounded px-2 py-1 font-hx-serif text-[10px] font-semibold tracking-[0.16em] cursor-pointer ${
+                presentationMode() === option.value
+                  ? "bg-hx-gold-wash text-hx-gold"
+                  : "bg-transparent text-hx-muted hover:text-hx-gold"
+              }`}
+              onClick={() => setPresentationMode(option.value)}
+            >
+              {option.label}
+            </button>
+          ))}
+        </div>
+      </div>
       <div class="flex flex-col gap-1">
         <span class="text-[11px] text-hx-muted">テーマ</span>
         <div class="grid grid-cols-2 gap-1 rounded border border-hx-border bg-hx-bg-raised p-1">

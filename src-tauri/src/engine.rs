@@ -48,10 +48,30 @@ pub struct Settings {
     pub pinned: bool,
     #[serde(default)]
     pub data_source: ProviderKind,
+    #[serde(default)]
+    pub presentation_mode: PresentationMode,
 }
 
 fn default_true() -> bool {
     true
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum PresentationMode {
+    #[default]
+    Overlay,
+    Window,
+}
+
+impl PresentationMode {
+    pub fn parse(value: &str) -> Option<Self> {
+        match value {
+            "overlay" => Some(Self::Overlay),
+            "window" => Some(Self::Window),
+            _ => None,
+        }
+    }
 }
 
 impl Default for Settings {
@@ -62,6 +82,24 @@ impl Default for Settings {
             spells_flipped: false,
             pinned: false,
             data_source: ProviderKind::default(),
+            presentation_mode: PresentationMode::default(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum WindowMode {
+    Overlay,
+    ChampSelect,
+    InGame,
+}
+
+impl WindowMode {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Overlay => "overlay",
+            Self::ChampSelect => "champselect",
+            Self::InGame => "ingame",
         }
     }
 }
@@ -139,6 +177,12 @@ pub struct Engine {
     pub interactive_applied: AtomicBool,
     /// Control-window mode last applied by `apply_window_mode`.
     pub window_champselect: AtomicBool,
+    /// In-game UI currently presented in the normal control window.
+    pub window_ingame: AtomicBool,
+    /// Current gameflow summary for settings changes that need immediate
+    /// re-layout between poll ticks.
+    pub phase_champselect: AtomicBool,
+    pub phase_in_game: AtomicBool,
 }
 
 impl Engine {
@@ -220,6 +264,7 @@ pub fn emit_champ_select(app: &AppHandle, engine: &Engine, ev: ChampSelectEvent)
 /// normal-window version of the old OPENLOL champ-select panel.
 const CONTROL_COMPACT_SIZE: (f64, f64) = (520.0, 220.0);
 const CONTROL_PICK_SIZE: (f64, f64) = (1040.0, 860.0);
+const CONTROL_INGAME_SIZE: (f64, f64) = (540.0, 820.0);
 const CONTROL_MARGIN: f64 = 16.0;
 const CONTROL_PICK_X: f64 = 48.0;
 
@@ -244,6 +289,7 @@ pub fn apply_overlay_bounds(app: &AppHandle) {
     let Some(win) = app.get_webview_window("main") else {
         return;
     };
+    let _ = win.show();
     let monitor = win
         .current_monitor()
         .ok()
@@ -259,28 +305,30 @@ pub fn apply_overlay_bounds(app: &AppHandle) {
     let _ = win.set_ignore_cursor_events(true);
 }
 
-fn control_position(monitor: &Monitor, pick: bool) -> (LogicalPosition<f64>, LogicalSize<f64>) {
+fn control_position(
+    monitor: &Monitor,
+    mode: WindowMode,
+) -> (LogicalPosition<f64>, LogicalSize<f64>) {
     let scale = monitor.scale_factor();
     let area = monitor.work_area();
     let origin = area.position.to_logical::<f64>(scale);
     let bounds = area.size.to_logical::<f64>(scale);
-    let (w, h) = if pick {
-        CONTROL_PICK_SIZE
-    } else {
-        CONTROL_COMPACT_SIZE
+    let (w, h) = match mode {
+        WindowMode::Overlay => CONTROL_COMPACT_SIZE,
+        WindowMode::ChampSelect => CONTROL_PICK_SIZE,
+        WindowMode::InGame => CONTROL_INGAME_SIZE,
     };
     let max_x = origin.x + (bounds.width - w).max(0.0);
     let max_y = origin.y + (bounds.height - h).max(0.0);
-    let x = if pick {
-        origin.x + CONTROL_PICK_X
-    } else {
-        origin.x + CONTROL_MARGIN
+    let x = match mode {
+        WindowMode::ChampSelect => origin.x + CONTROL_PICK_X,
+        WindowMode::Overlay | WindowMode::InGame => origin.x + CONTROL_MARGIN,
     }
     .clamp(origin.x, max_x);
-    let y = if pick {
-        origin.y + ((bounds.height - h) / 2.0).max(0.0)
-    } else {
-        origin.y + (bounds.height - h - CONTROL_MARGIN).max(0.0)
+    let y = match mode {
+        WindowMode::ChampSelect => origin.y + ((bounds.height - h) / 2.0).max(0.0),
+        WindowMode::Overlay => origin.y + (bounds.height - h - CONTROL_MARGIN).max(0.0),
+        WindowMode::InGame => origin.y + CONTROL_MARGIN,
     }
     .clamp(origin.y, max_y);
     (LogicalPosition::new(x, y), LogicalSize::new(w, h))
@@ -289,7 +337,7 @@ fn control_position(monitor: &Monitor, pick: bool) -> (LogicalPosition<f64>, Log
 /// Place the normal control window in either compact status mode or expanded
 /// pick mode. Automatic layout does not force focus, so game input is not
 /// stolen during phase transitions.
-pub fn apply_control_layout(app: &AppHandle, pick: bool) {
+pub fn apply_control_layout(app: &AppHandle, mode: WindowMode) {
     let Some(win) = app.get_webview_window("control") else {
         return;
     };
@@ -301,7 +349,7 @@ pub fn apply_control_layout(app: &AppHandle, pick: bool) {
     let Some(monitor) = monitor else {
         return;
     };
-    let (pos, size) = control_position(&monitor, pick);
+    let (pos, size) = control_position(&monitor, mode);
     let _ = win.set_size(size);
     let _ = win.set_position(pos);
     let _ = win.show();
@@ -310,11 +358,11 @@ pub fn apply_control_layout(app: &AppHandle, pick: bool) {
 /// Show the normal control window on demand. Unlike automatic phase changes,
 /// the explicit hotkey brings it to the front and focuses it.
 pub fn show_control_window(app: &AppHandle) {
-    let pick = app
+    let mode = app
         .try_state::<Arc<Engine>>()
-        .map(|engine| engine.window_champselect.load(Ordering::SeqCst))
-        .unwrap_or(false);
-    apply_control_layout(app, pick);
+        .map(|engine| current_window_mode(&engine))
+        .unwrap_or(WindowMode::Overlay);
+    apply_control_layout(app, mode);
     if let Some(win) = app.get_webview_window("control") {
         let _ = win.unminimize();
         let _ = win.show();
@@ -322,11 +370,51 @@ pub fn show_control_window(app: &AppHandle) {
     }
 }
 
-/// Switch app presentation between compact control and pick control modes.
-/// The transparent overlay itself always remains full-monitor and click-through.
-pub fn apply_window_mode(app: &AppHandle, champselect: bool) {
-    apply_overlay_bounds(app);
-    apply_control_layout(app, champselect);
+pub fn current_window_mode(engine: &Engine) -> WindowMode {
+    if engine.window_champselect.load(Ordering::SeqCst) {
+        WindowMode::ChampSelect
+    } else if engine.window_ingame.load(Ordering::SeqCst) {
+        WindowMode::InGame
+    } else {
+        WindowMode::Overlay
+    }
+}
+
+fn desired_window_mode(settings: &Settings, champselect: bool, in_game: bool) -> WindowMode {
+    if champselect {
+        WindowMode::ChampSelect
+    } else if in_game && settings.presentation_mode == PresentationMode::Window {
+        WindowMode::InGame
+    } else {
+        WindowMode::Overlay
+    }
+}
+
+/// Recompute presentation from phase + settings and update windows only when
+/// the effective mode changes.
+pub fn apply_desired_window_mode(app: &AppHandle, engine: &Engine) {
+    let mode = desired_window_mode(
+        &engine.settings(),
+        engine.phase_champselect.load(Ordering::SeqCst),
+        engine.phase_in_game.load(Ordering::SeqCst),
+    );
+    if current_window_mode(engine) != mode {
+        apply_window_mode(app, mode);
+    }
+}
+
+/// Switch app presentation between compact control, pick control, and in-game
+/// normal-window modes.
+pub fn apply_window_mode(app: &AppHandle, mode: WindowMode) {
+    if mode == WindowMode::InGame {
+        if let Some(win) = app.get_webview_window("main") {
+            let _ = win.set_ignore_cursor_events(true);
+            let _ = win.hide();
+        }
+    } else {
+        apply_overlay_bounds(app);
+    }
+    apply_control_layout(app, mode);
 
     // Reset to click-through and clear the emergency override, keeping the
     // watcher's applied-state cache in sync with the actual window style.
@@ -335,18 +423,14 @@ pub fn apply_window_mode(app: &AppHandle, champselect: bool) {
         engine.interactive_applied.store(false, Ordering::SeqCst);
         engine
             .window_champselect
-            .store(champselect, Ordering::SeqCst);
+            .store(mode == WindowMode::ChampSelect, Ordering::SeqCst);
+        engine
+            .window_ingame
+            .store(mode == WindowMode::InGame, Ordering::SeqCst);
     }
     let _ = app.emit("interactive", false);
 
-    let _ = app.emit(
-        "window-mode",
-        if champselect {
-            "champselect"
-        } else {
-            "overlay"
-        },
-    );
+    let _ = app.emit("window-mode", mode.as_str());
 }
 
 /// Drains champ-select sessions and imports runes whenever our pick changes.
@@ -461,15 +545,15 @@ pub async fn poller(app: AppHandle, engine: Arc<Engine>, tx: UnboundedSender<Val
         let client_up = phase.is_ok();
         let phase = phase.unwrap_or(Phase::None);
 
-        // Window-mode transitions: the normal control window expands for champ
-        // select and returns to compact mode when it ends. Leaving also closes
-        // the OPENLOL panel — the WebSocket has no "session gone" signal we
-        // consume, so the poller owns the `active: false` sentinel.
-        if phase == Phase::ChampSelect && prev_phase != Phase::ChampSelect {
-            apply_window_mode(&app, true);
-        } else if phase != Phase::ChampSelect && prev_phase == Phase::ChampSelect {
+        engine
+            .phase_champselect
+            .store(phase == Phase::ChampSelect, Ordering::SeqCst);
+
+        // Leaving champ select closes the OPENLOL panel — the WebSocket has no
+        // "session gone" signal we consume, so the poller owns the inactive
+        // sentinel.
+        if phase != Phase::ChampSelect && prev_phase == Phase::ChampSelect {
             emit_champ_select(&app, &engine, ChampSelectEvent::default());
-            apply_window_mode(&app, false);
         }
         let game_just_ended = prev_phase == Phase::InProgress && phase != Phase::InProgress;
         prev_phase = phase;
@@ -582,6 +666,7 @@ pub async fn poller(app: AppHandle, engine: Arc<Engine>, tx: UnboundedSender<Val
                 },
             );
         }
+        engine.phase_in_game.store(in_game, Ordering::SeqCst);
 
         let _ = app.emit(
             "phase",
@@ -591,6 +676,7 @@ pub async fn poller(app: AppHandle, engine: Arc<Engine>, tx: UnboundedSender<Val
                 in_game,
             },
         );
+        apply_desired_window_mode(&app, &engine);
 
         tokio::time::sleep(POLL_INTERVAL).await;
     }

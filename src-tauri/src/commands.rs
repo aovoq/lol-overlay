@@ -10,7 +10,9 @@ use std::sync::Arc;
 
 use tauri::{AppHandle, Emitter, State};
 
-use crate::engine::{Engine, PanelPosition, Settings, UiLayout, WindowPosition};
+use crate::engine::{
+    self, Engine, PanelPosition, PresentationMode, Settings, UiLayout, WindowPosition,
+};
 use crate::error;
 use crate::events::{log, RuneImportedEvent};
 use crate::hittest::HitRegion;
@@ -64,6 +66,22 @@ pub fn set_spells_flipped(engine: State<'_, Arc<Engine>>, flipped: bool) -> erro
         engine.settings.lock().unwrap().spells_flipped = flipped;
     }
     engine.persist()
+}
+
+#[tauri::command]
+pub fn set_presentation_mode(
+    app: AppHandle,
+    engine: State<'_, Arc<Engine>>,
+    mode: String,
+) -> error::Result<()> {
+    let parsed = PresentationMode::parse(&mode)
+        .ok_or_else(|| error::Error::Other(format!("unknown presentation mode: {mode}")))?;
+    {
+        engine.settings.lock().unwrap().presentation_mode = parsed;
+    }
+    engine.persist()?;
+    engine::apply_desired_window_mode(&app, &engine);
+    Ok(())
 }
 
 #[tauri::command]

@@ -1,6 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { createSignal } from "solid-js";
-import type { Settings } from "../types";
+import type { PresentationMode, Settings } from "../types";
 
 export type ThemeMode = "dark" | "light";
 
@@ -23,6 +23,7 @@ const [spellsFlipped, setSpellsFlippedState] = createSignal(false);
 const [pinned, setPinnedState] = createSignal(false);
 const [dataSource, setDataSourceState] = createSignal("deeplol");
 const [dataSources, setDataSources] = createSignal<string[]>(["deeplol"]);
+const [presentationMode, setPresentationModeState] = createSignal<PresentationMode>("overlay");
 const [themeMode, setThemeModeState] = createSignal<ThemeMode>(storedTheme());
 
 applyTheme(themeMode());
@@ -33,6 +34,7 @@ export {
   dataSources,
   importSpells,
   pinned,
+  presentationMode,
   setAutoImport,
   spellsFlipped,
   themeMode,
@@ -58,6 +60,11 @@ export function setDataSource(kind: string) {
   invoke("set_data_source", { kind }).catch(() => {});
 }
 
+export function setPresentationMode(mode: PresentationMode) {
+  setPresentationModeState(mode);
+  invoke("set_presentation_mode", { mode }).catch(() => {});
+}
+
 export function setThemeMode(mode: ThemeMode) {
   setThemeModeState(mode);
   applyTheme(mode);
@@ -70,6 +77,7 @@ export function applySettings(s: Partial<Settings>) {
   if (s.spellsFlipped !== undefined) setSpellsFlippedState(s.spellsFlipped);
   if (s.pinned !== undefined) setPinnedState(s.pinned);
   if (s.dataSource !== undefined) setDataSourceState(s.dataSource);
+  if (s.presentationMode !== undefined) setPresentationModeState(s.presentationMode);
 }
 
 invoke<Settings>("get_settings")

@@ -228,6 +228,22 @@
     overflow: auto;
   }
 
+  .control-ingame {
+    min-height: 100vh;
+    padding: 12px;
+    box-sizing: border-box;
+    overflow: auto;
+  }
+
+  .control-ingame .ingame-panel {
+    max-width: none;
+    box-sizing: border-box;
+  }
+
+  .control-ingame .rec-list {
+    max-height: 320px;
+  }
+
   .hx-scroll::-webkit-scrollbar {
     width: 6px;
   }

@@ -120,7 +120,8 @@ export interface ChampSelectEvent {
 }
 
 /** Payload of the "window-mode" event. */
-export type WindowMode = "overlay" | "champselect";
+export type WindowMode = "overlay" | "champselect" | "ingame";
+export type PresentationMode = "overlay" | "window";
 
 // ---- command results (provider/mod.rs) ----
 
@@ -178,6 +179,7 @@ export interface Settings {
   pinned: boolean;
   /** "deeplol" | "ugg" */
   dataSource?: string;
+  presentationMode?: PresentationMode;
 }
 
 export interface PanelPosition {
