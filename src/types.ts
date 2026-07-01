@@ -102,7 +102,7 @@ export interface LogEvent {
   message: string;
 }
 
-/** Champ-select state for the HEXGATE panel (events.rs::ChampSelectEvent). */
+/** Champ-select state for the OPENLOL panel (events.rs::ChampSelectEvent). */
 export interface ChampSelectEvent {
   active: boolean;
   /** "top" | "jungle" | "middle" | "bottom" | "utility" | "" (unknown). */

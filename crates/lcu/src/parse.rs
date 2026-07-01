@@ -35,7 +35,7 @@ pub fn parse_my_pick(session: &Value) -> Option<MyPick> {
     })
 }
 
-/// Parse the full champ-select session into the HEXGATE panel event.
+/// Parse the full champ-select session into the OPENLOL panel event.
 /// `active` is always true here — the poller emits the `active: false`
 /// sentinel when champ select ends.
 ///

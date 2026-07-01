@@ -1,6 +1,6 @@
 import { createMemo, For, Show } from "solid-js";
 import { assetsReady, champIconByKey, champName, profileIconUrl } from "../assets";
-import { fmtTier } from "../lib/hexgate";
+import { fmtTier } from "../lib/openlol";
 import { matchHistory, phase, summoner } from "../state/backend";
 import type { RecentGame } from "../types";
 import { Icon } from "./Icon";

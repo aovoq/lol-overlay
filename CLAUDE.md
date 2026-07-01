@@ -74,13 +74,13 @@ Three concurrent pieces share the channel `tokio::sync::mpsc`:
 
 `phase`, `champ-select`, `recommendations`, `summoner`, `match-history`, `lp-change`, `rune-imported`, `window-mode`, `interactive`, `log`, `data-source`. Payload structs live in `events.rs` / `overlay-types` and are mirrored as TypeScript interfaces in `src/types.ts`. **All payloads use `#[serde(rename_all = "camelCase")]`** — keep both sides in sync when changing a payload.
 
-Frontend → backend commands (`commands.rs`): settings/layout setters, data-source switching (`get_data_source`, `list_data_sources`, `set_data_source`), HEXGATE data lookups (`get_tier_list`, `get_rune_build`, `get_counters`, `import_build`), and click-through plumbing (`set_hit_regions`, `set_drag_active`, `set_interactive`).
+Frontend → backend commands (`commands.rs`): settings/layout setters, data-source switching (`get_data_source`, `list_data_sources`, `set_data_source`), OPENLOL data lookups (`get_tier_list`, `get_rune_build`, `get_counters`, `import_build`), and click-through plumbing (`set_hit_regions`, `set_drag_active`, `set_interactive`).
 
 ### Data provider abstraction (`overlay-provider`)
 
 Everything the overlay needs "from the internet" flows through the `BuildProvider` trait. Runtime routing goes through **`ProviderProxy`**, which forwards to the active backend (`ProviderKind`: `deeplol` | `ugg`). Both backends share one `Arc<DdragonClient>` for static maps.
 
-- **`overlay-provider-deeplol`** (`DeepLolProvider`) — DeepLoL CDN + Data Dragon. Full HEXGATE support (tier list, counters, matchup runes).
+- **`overlay-provider-deeplol`** (`DeepLolProvider`) — DeepLoL CDN + Data Dragon. Full OPENLOL support (tier list, counters, matchup runes).
 - **`overlay-provider-ugg`** (`UggProvider`) — u.gg stats2 API. In-game items/skills/runes + counters; tier list returns `NotEnoughData` (no site-wide tier JSON on stats2).
 - **`HardcodedProvider`** (`overlay-provider`) — offline fallback with a tiny champion-damage table. Also home to `champion_damage_type`, used by `classify_threats`.
 
@@ -91,7 +91,7 @@ The active source is persisted in `settings.json` as `dataSource` and switchable
 Configured in `tauri.conf.json` as two windows:
 
 - `main` is the transparent, decorations-off, always-on-top, click-through, **`focusable: false`** overlay. On startup `lib.rs` resizes it to fill the primary monitor and enables click-through. **LoL must run in Borderless mode** — exclusive fullscreen hides the overlay.
-- `control` is a normal focusable window. It starts as the compact status/settings window near the lower-left of the primary monitor, then expands for champ select rune import / HEXGATE UI and returns to compact mode afterward.
+- `control` is a normal focusable window. It starts as the compact status/settings window near the lower-left of the primary monitor, then expands for champ select rune import / OPENLOL UI and returns to compact mode afterward.
 
 **Region-based click-through (`hittest.rs`):** the OS only supports click-through per window, so per-element clickability is emulated: the frontend reports the rects of visible `[data-hit]` elements (`set_hit_regions`), and a ~60 Hz cursor-watcher task flips `set_ignore_cursor_events` only while the cursor is inside one, a drag is held via `set_drag_active`, or forced interactivity is enabled by command.
 

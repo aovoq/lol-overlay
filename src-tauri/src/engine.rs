@@ -217,7 +217,7 @@ pub fn emit_champ_select(app: &AppHandle, engine: &Engine, ev: ChampSelectEvent)
 }
 
 /// Control window sizes. Compact is the startup/status view; pick is the
-/// normal-window version of the old HEXGATE champ-select panel.
+/// normal-window version of the old OPENLOL champ-select panel.
 const CONTROL_COMPACT_SIZE: (f64, f64) = (520.0, 220.0);
 const CONTROL_PICK_SIZE: (f64, f64) = (1040.0, 860.0);
 const CONTROL_MARGIN: f64 = 16.0;
@@ -355,7 +355,7 @@ pub async fn rune_processor(app: AppHandle, engine: Arc<Engine>, mut rx: Unbound
     let mut last_imported: i64 = 0;
 
     while let Some(session) = rx.recv().await {
-        // HEXGATE panel state: every session parses into a ChampSelectEvent,
+        // OPENLOL panel state: every session parses into a ChampSelectEvent,
         // emitted only on change (the poller emits the `active: false` end).
         if let Some(ev) = lcu::parse_champ_select(&session) {
             emit_champ_select(&app, &engine, ev);
@@ -463,7 +463,7 @@ pub async fn poller(app: AppHandle, engine: Arc<Engine>, tx: UnboundedSender<Val
 
         // Window-mode transitions: the normal control window expands for champ
         // select and returns to compact mode when it ends. Leaving also closes
-        // the HEXGATE panel — the WebSocket has no "session gone" signal we
+        // the OPENLOL panel — the WebSocket has no "session gone" signal we
         // consume, so the poller owns the `active: false` sentinel.
         if phase == Phase::ChampSelect && prev_phase != Phase::ChampSelect {
             apply_window_mode(&app, true);

@@ -1,5 +1,5 @@
 import { createEffect, createSignal, onCleanup, Show } from "solid-js";
-import { fmtTier } from "../lib/hexgate";
+import { fmtTier } from "../lib/openlol";
 import { lpChange } from "../state/backend";
 
 export function LpBanner() {

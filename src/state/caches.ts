@@ -36,7 +36,7 @@ export function makeCache<T>(fetcher: (key: string) => Promise<T>) {
       (value) => set({ state: "ok", value }),
       (err) => {
         const message = errorMessage(err);
-        console.warn("HEXGATE data fetch failed", { key, error: err, message });
+        console.warn("OPENLOL data fetch failed", { key, error: err, message });
         set({ state: "err", error: message });
       },
     );

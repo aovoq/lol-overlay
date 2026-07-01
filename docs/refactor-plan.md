@@ -576,7 +576,7 @@ module_name_repetitions = "allow"
 | モック動作 | `pnpm tauri dev` → Ctrl+Shift+D を 2 回 | champ-select パネル → in-game パネルがデータ付きで表示 |
 | 切替動作 | 設定パネルで deeplol ⇄ ugg 切替 | エラーなし、パネル再描画、`settings.json` に `dataSource` 永続化 |
 | 旧設定互換 | 既存 `settings.json`(`dataSource` 無し)で起動 | deeplol で起動し例外なし |
-| Windows 実機 | LoL クライアント起動 → champ-select → 試合 | ルーン自動インポート / HEXGATE / in-game 推薦が従来どおり(ユーザーが実施) |
+| Windows 実機 | LoL クライアント起動 → champ-select → 試合 | ルーン自動インポート / OPENLOL / in-game 推薦が従来どおり(ユーザーが実施) |
 
 ---
 

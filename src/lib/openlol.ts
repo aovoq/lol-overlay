@@ -1,5 +1,7 @@
 import type { PhaseEvent } from "../types";
 
+export const APP_NAME = "OPENLOL";
+
 export const ROLES = [
   { lcu: "top", chip: "TOP", label: "TOP" },
   { lcu: "jungle", chip: "JG", label: "JUNGLE" },
@@ -11,7 +13,7 @@ export const ROLES = [
 export const roleLabel = (lcu: string) =>
   ROLES.find((r) => r.lcu === lcu)?.label ?? lcu.toUpperCase();
 
-export const HEX_SVG =
+export const OPENLOL_MARK_SVG =
   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2"><polygon points="12 2.5 20.2 7.25 20.2 16.75 12 21.5 3.8 16.75 3.8 7.25"/></svg>';
 
 export function phaseChipLabel(p: PhaseEvent): string {

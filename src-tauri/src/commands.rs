@@ -1,6 +1,6 @@
 //! Commands invoked from the frontend (`@tauri-apps/api` `invoke`).
 //!
-//! The HEXGATE data commands are thin proxies to the provider — it caches
+//! The OPENLOL data commands are thin proxies to the provider — it caches
 //! per (patch, role, champion), so after the first load these are instant.
 //! Errors cross the boundary as their `Display` string; the frontend branches
 //! on the literal `"not-enough-data"` (`Error::NotEnoughData`).

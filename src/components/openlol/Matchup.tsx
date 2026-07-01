@@ -1,6 +1,6 @@
 import { createMemo, Show } from "solid-js";
 import { assetsReady, champIconByKey, champName } from "../../assets";
-import { roleLabel } from "../../lib/hexgate";
+import { roleLabel } from "../../lib/openlol";
 import { champSelect, selectedRole, vsEnemyId } from "../../state/backend";
 import { Icon } from "../Icon";
 

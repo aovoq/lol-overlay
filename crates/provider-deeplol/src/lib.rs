@@ -3,7 +3,7 @@
 //!
 //! * Item / rune recommendations come from `/champion/build`, which returns the
 //!   most-picked build per lane at a given patch & rank tier.
-//! * The HEXGATE champ-select panel additionally uses `/champion/rank` (per-role
+//! * The OPENLOL champ-select panel additionally uses `/champion/rank` (per-role
 //!   tier list), the build's `match_up` block (counters), and `/matchup/*`
 //!   (matchup stats + raw one-trick games). DeepLoL has **no aggregated
 //!   matchup-rune endpoint**, so the "VS enemy" rune page is aggregated here
@@ -341,7 +341,7 @@ impl DeepLolProvider {
         }
         let name = self.champion_name(champion_id).await;
         Ok(RuneBuild {
-            page_name: format!("HEXGATE {name} {lane}"),
+            page_name: format!("OPENLOL {name} {lane}"),
             lane: lane.to_string(),
             win_rate: entry.win_rate,
             games: entry.games,
@@ -442,7 +442,7 @@ impl DeepLolProvider {
         let me = self.champion_name(champion_id).await;
         let foe = self.champion_name(enemy_champion_id).await;
         let build = RuneBuild {
-            page_name: format!("HEXGATE {me} vs {foe}"),
+            page_name: format!("OPENLOL {me} vs {foe}"),
             lane,
             win_rate: pos.my_win_rate / 100.0, // percent → fraction
             games: pos.games,
@@ -1566,7 +1566,7 @@ mod tests {
 
     #[test]
     #[ignore]
-    fn live_hexgate_tier_list() {
+    fn live_openlol_tier_list() {
         live(|p| async move {
             let rows = p.tier_list("jungle").await.expect("tier_list failed");
             println!("TIER LIST OK ({} rows):", rows.len());
@@ -1603,7 +1603,7 @@ mod tests {
 
     #[test]
     #[ignore]
-    fn live_hexgate_counters() {
+    fn live_openlol_counters() {
         live(|p| async move {
             // Who counters Shaco (35) in the jungle?
             let counters = p.counters(35, "jungle").await.expect("counters failed");
@@ -1626,7 +1626,7 @@ mod tests {
 
     #[test]
     #[ignore]
-    fn live_hexgate_rune_build() {
+    fn live_openlol_rune_build() {
         live(|p| async move {
             // Viego (234) jungle, no enemy → the plain best-build page.
             let b = p
@@ -1634,7 +1634,7 @@ mod tests {
                 .await
                 .expect("rune_build failed");
             println!("RUNE BUILD OK: {b:?}");
-            assert!(b.page_name.starts_with("HEXGATE Viego"), "{}", b.page_name);
+            assert!(b.page_name.starts_with("OPENLOL Viego"), "{}", b.page_name);
             assert_eq!(b.lane, "Jungle");
             assert!(b.primary_style_id > 0 && b.sub_style_id > 0);
             assert_eq!(b.primary_perk_ids.len(), 4);
@@ -1724,7 +1724,7 @@ mod tests {
 
     #[test]
     #[ignore]
-    fn live_hexgate_matchup_build() {
+    fn live_openlol_matchup_build() {
         live(|p| async move {
             // Viego (234) vs Shaco (35) in the jungle. The matchup may
             // legitimately be too thin at the current patch, so the only

@@ -253,7 +253,7 @@ impl UggProvider {
         }
 
         Ok(RuneBuild {
-            page_name: format!("HEXGATE {champ_name} {lane}"),
+            page_name: format!("OPENLOL {champ_name} {lane}"),
             lane: lane.to_string(),
             win_rate,
             games,

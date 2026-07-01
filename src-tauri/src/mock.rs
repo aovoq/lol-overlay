@@ -1,7 +1,7 @@
 //! Debug/mock mode (Ctrl+Shift+D cycles: off → champ select → in game → off).
 //!
 //! Drives the overlay with synthetic state through the *real* provider
-//! pipeline, so both the HEXGATE champ-select panel and the in-game UI can be
+//! pipeline, so both the OPENLOL champ-select panel and the in-game UI can be
 //! exercised without launching League (e.g. on macOS).
 //!
 //! The scenarios themselves are built from **live DeepLoL data**: the current

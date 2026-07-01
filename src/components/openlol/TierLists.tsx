@@ -1,6 +1,6 @@
 import { createEffect, createMemo, For, type JSX, Show } from "solid-js";
 import { assetsReady, champIconByKey, champName, fmtCompact, fmtPct } from "../../assets";
-import { roleLabel } from "../../lib/hexgate";
+import { roleLabel } from "../../lib/openlol";
 import { champSelect, selectedRole, setHoverChampId } from "../../state/backend";
 import { tierCache } from "../../state/caches";
 import type { TierEntry } from "../../types";

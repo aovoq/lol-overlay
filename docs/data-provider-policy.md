@@ -55,4 +55,4 @@ provider's semantics.
 
 Mock champ-select scenarios may use hardcoded offline data when the active
 provider cannot produce a scenario. That is a debug/mock fallback, not a runtime
-provider fallback for HEXGATE commands.
+provider fallback for OPENLOL commands.

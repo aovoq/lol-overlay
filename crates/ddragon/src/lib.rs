@@ -124,7 +124,7 @@ async fn fetch_ddragon_version(http: &reqwest::Client) -> Result<String, Ddragon
 }
 
 /// All directions of the champion map: normalized-name → id for resolving
-/// Live Client names, id → display name for HEXGATE page labels, id → Data
+/// Live Client names, id → display name for OPENLOL page labels, id → Data
 /// Dragon image id for synthesizing mock state, and id → numeric key string
 /// for u.gg URLs.
 async fn fetch_champion_map(

@@ -1,5 +1,5 @@
 import { For, Show } from "solid-js";
-import { ROLES } from "../../lib/hexgate";
+import { ROLES } from "../../lib/openlol";
 import { champSelect, selectedRole, setSelectedRole } from "../../state/backend";
 
 export function RoleChips() {

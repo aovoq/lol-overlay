@@ -1,5 +1,5 @@
 import { createEffect } from "solid-js";
-import { HexgatePanel } from "./components/hexgate/HexgatePanel";
+import { OpenLolPanel } from "./components/openlol/OpenLolPanel";
 import { InGamePanel } from "./components/ingame/InGamePanel";
 import { LpBanner } from "./components/LpBanner";
 import { RuneBanner } from "./components/RuneBanner";
@@ -26,7 +26,7 @@ export function ControlApp() {
   return (
     <div class="control-root">
       {pickActive() ? (
-        <HexgatePanel />
+        <OpenLolPanel />
       ) : (
         <div class="control-home">
           <section class="panel control-status-panel">

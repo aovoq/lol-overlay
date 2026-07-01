@@ -7,6 +7,7 @@ import {
   saveIngamePanelPosition,
 } from "../../lib/drag";
 import { reportHitRegions } from "../../lib/hitRegions";
+import { APP_NAME } from "../../lib/openlol";
 import { phase, recommendations } from "../../state/backend";
 import { ingameCollapsed, ingamePos, setIngameCollapsed } from "../../state/layout";
 import { Icon } from "../Icon";
@@ -93,7 +94,7 @@ function PanelBody() {
           >
             <polygon points="12 2.5 20.2 7.25 20.2 16.75 12 21.5 3.8 16.75 3.8 7.25" />
           </svg>
-          HEXGATE
+          {APP_NAME}
         </span>
         <span class="inline-flex items-center gap-2">
           <span class="px-[9px] py-[3px] border border-hx-border rounded-[3px] font-hx-serif text-[9px] font-semibold tracking-[0.22em] text-hx-text whitespace-nowrap">

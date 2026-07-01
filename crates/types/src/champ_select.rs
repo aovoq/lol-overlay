@@ -1,4 +1,4 @@
-//! Champ-select state for the HEXGATE panel.
+//! Champ-select state for the OPENLOL panel.
 
 use serde::Serialize;
 

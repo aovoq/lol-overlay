@@ -1,6 +1,6 @@
 import { createMemo, onMount, Show } from "solid-js";
 import { initWindowDrag } from "../../lib/drag";
-import { phaseChipLabel } from "../../lib/hexgate";
+import { APP_NAME, phaseChipLabel } from "../../lib/openlol";
 import { champSelect, phase } from "../../state/backend";
 import { BuildArea } from "./BuildArea";
 import { Counters } from "./Counters";
@@ -12,7 +12,7 @@ import { StatsRow } from "./StatsRow";
 import { Tabs } from "./Tabs";
 import { TierLists } from "./TierLists";
 
-export function HexgatePanel() {
+export function OpenLolPanel() {
   const show = createMemo(() => champSelect()?.active ?? false);
 
   const phaseLabel = createMemo(() => {
@@ -21,17 +21,17 @@ export function HexgatePanel() {
   });
 
   onMount(() => {
-    const header = document.querySelector<HTMLElement>(".hexgate-header");
+    const header = document.querySelector<HTMLElement>(".openlol-header");
     initWindowDrag(header ?? undefined);
   });
 
   return (
     <Show when={show()}>
       <section
-        class="hexgate hexgate-shell fixed inset-0 flex flex-col box-border pointer-events-auto bg-hx-bg border border-hx-border rounded-lg text-hx-text text-[13px] tabular-nums overflow-hidden"
+        class="openlol openlol-shell fixed inset-0 flex flex-col box-border pointer-events-auto bg-hx-bg border border-hx-border rounded-lg text-hx-text text-[13px] tabular-nums overflow-hidden"
         data-hit
       >
-        <header class="hexgate-header flex-none h-12 flex items-center px-3.5 border-b border-hx-border relative cursor-grab active:cursor-grabbing">
+        <header class="openlol-header flex-none h-12 flex items-center px-3.5 border-b border-hx-border relative cursor-grab active:cursor-grabbing">
           <div class="flex items-center gap-2 text-hx-gold font-hx-serif font-bold text-[15px] tracking-[0.24em]">
             <svg
               viewBox="0 0 24 24"
@@ -40,7 +40,7 @@ export function HexgatePanel() {
             >
               <polygon points="12 2.5 20.2 7.25 20.2 16.75 12 21.5 3.8 16.75 3.8 7.25" />
             </svg>
-            <span>HEXGATE</span>
+            <span>{APP_NAME}</span>
           </div>
           <div class="absolute left-1/2 -translate-x-1/2 border border-hx-border rounded px-3.5 py-1 font-hx-serif font-semibold text-[10px] tracking-[0.18em] text-hx-text">
             {phaseLabel()}
