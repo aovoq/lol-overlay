@@ -1,7 +1,7 @@
 use std::fmt;
 
-use serde::Serialize;
 use serde::de::{Deserialize, Deserializer, IgnoredAny, SeqAccess, Visitor};
+use serde::Serialize;
 
 use super::default_overview::{Abilities, Items, LateItem};
 use super::overview::handle_unknown;

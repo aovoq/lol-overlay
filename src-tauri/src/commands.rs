@@ -177,7 +177,7 @@ pub async fn get_counters(
 }
 
 /// Detailed rune page (incl. shards + spells). `enemy_champion_id` asks for a
-/// matchup-specific page, which legitimately fails with "not-enough-data".
+/// matchup-specific page; thin matchups can still return "not-enough-data".
 #[tauri::command]
 pub async fn get_rune_build(
     engine: State<'_, Arc<Engine>>,

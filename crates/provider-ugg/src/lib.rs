@@ -1,10 +1,10 @@
 //! u.gg stats provider implementing [`BuildProvider`].
 //!
-//! Data comes from u.gg's stats2 JSON API. Tier list is intentionally
-//! unsupported (returns `NotEnoughData`); a future GraphQL integration could
-//! fill that gap.
+//! Data comes from u.gg's stats2 JSON API, including site-wide tier lists via
+//! the `champion_ranking` endpoint used by <https://u.gg/lol/tier-list>.
 
 mod api;
+mod tier_list;
 mod types;
 
 use std::collections::{HashMap, HashSet};
@@ -16,20 +16,23 @@ use overlay_provider::{
     BuildProvider, CounterEntry, ItemRecommendation, ProviderError, Result, RuneBuild,
     RuneRecommendation, SkillOrder,
 };
-use overlay_types::GameSnapshot;
+use overlay_types::{GameSnapshot, TierEntry};
+use tokio::sync::RwLock;
 
 use crate::api::{select_matchups, select_overview, UggApi};
+use crate::tier_list::{region_slug, tier_entries_from_ranking, TIER_LIST_RANK};
 use crate::types::default_overview::{LateItem, OverviewData};
 use crate::types::mappings::{Mode, Region, Role};
 use crate::types::matchups::Matchup;
 
-/// Minimum games for a counter matchup (aligned with DeepLoL).
+/// Minimum games for a counter matchup (aligned with `DeepLoL`).
 const MIN_MATCHUP_GAMES: i64 = 30;
 
 pub struct UggProvider {
     ddragon: Arc<DdragonClient>,
     api: UggApi,
     platform_id: std::sync::RwLock<String>,
+    tier_lists: RwLock<HashMap<String, Vec<TierEntry>>>,
 }
 
 impl UggProvider {
@@ -38,11 +41,15 @@ impl UggProvider {
             ddragon,
             api: UggApi::new()?,
             platform_id: std::sync::RwLock::new("KR".into()),
+            tier_lists: RwLock::new(HashMap::new()),
         })
     }
 
     fn set_platform_id_internal(&self, platform_id: &str) {
         *self.platform_id.write().unwrap() = platform_id.to_string();
+        if let Ok(mut cache) = self.tier_lists.try_write() {
+            cache.clear();
+        }
     }
 
     fn current_region(&self) -> Region {
@@ -81,8 +88,7 @@ impl UggProvider {
         self.ensure_static().await.ok();
         self.champion_names(champion_id)
             .await
-            .map(|(n, _)| n)
-            .unwrap_or_else(|| format!("Champion {champion_id}"))
+            .map_or_else(|| format!("Champion {champion_id}"), |(n, _)| n)
     }
 
     async fn fetch_overview_for_snapshot(
@@ -98,7 +104,8 @@ impl UggProvider {
             .ok_or_else(|| {
                 ProviderError::Other(format!("unknown champion: {:?}", snapshot.self_champion))
             })?;
-        self.fetch_overview(id, &snapshot.self_position, snapshot_mode(snapshot)).await
+        self.fetch_overview(id, &snapshot.self_position, snapshot_mode(snapshot))
+            .await
     }
 
     async fn fetch_overview(
@@ -118,7 +125,34 @@ impl UggProvider {
         select_overview(&overview, region, role)
     }
 
-    fn overview_to_items(&self, data: &OverviewData, item_names: &HashMap<i64, String>) -> Vec<ItemRecommendation> {
+    async fn fetch_matchup_overview(
+        &self,
+        champion_id: i64,
+        enemy_champion_id: i64,
+        position: &str,
+    ) -> Result<(OverviewData, Role)> {
+        self.ensure_static().await?;
+        let champ_key = self.champion_key(champion_id).await?;
+        let enemy_champ_key = self.champion_key(enemy_champion_id).await?;
+        let role = ugg_role(position, Mode::Normal);
+        let region = self.current_region();
+        let overview = self
+            .api
+            .get_matchup_overview(
+                &champ_key,
+                &enemy_champ_key,
+                Mode::Normal,
+                crate::types::mappings::Build::Recommended,
+            )
+            .await?;
+        select_overview(&overview, region, role)
+    }
+
+    #[allow(clippy::cast_precision_loss)]
+    fn overview_to_items(
+        data: &OverviewData,
+        item_names: &HashMap<i64, String>,
+    ) -> Vec<ItemRecommendation> {
         let wr = if data.core_items.matches > 0 {
             data.core_items.wins as f64 / data.core_items.matches as f64 * 100.0
         } else if data.matches > 0 {
@@ -170,6 +204,7 @@ impl UggProvider {
         recs
     }
 
+    #[allow(clippy::cast_precision_loss)]
     fn overview_to_skill_order(data: &OverviewData) -> SkillOrder {
         let max_order = parse_max_order(&data.abilities.ability_max_order);
         let level_order = parse_level_order(&data.abilities.ability_order);
@@ -186,10 +221,12 @@ impl UggProvider {
         }
     }
 
+    #[allow(clippy::cast_precision_loss)]
     fn overview_to_rune_build(
         data: &OverviewData,
         resolved_role: Role,
         champ_name: &str,
+        matchup: bool,
     ) -> Result<RuneBuild> {
         let lane = role_lane_name(resolved_role);
         let (primary_perks, sub_perks) = split_rune_ids(&data.runes.rune_ids);
@@ -224,7 +261,7 @@ impl UggProvider {
             sub_perk_ids: sub_perks,
             shard_ids: data.shards.shard_ids.clone(),
             spell_ids: data.summoner_spells.spell_ids.clone(),
-            matchup: false,
+            matchup,
         })
     }
 }
@@ -243,7 +280,7 @@ impl BuildProvider for UggProvider {
             .items()
             .await
             .map_err(|e| ProviderError::Other(e.to_string()))?;
-        let recs = self.overview_to_items(&data, &items);
+        let recs = Self::overview_to_items(&data, &items);
         if recs.is_empty() {
             return Err(ProviderError::Other("build had no items".into()));
         }
@@ -277,12 +314,74 @@ impl BuildProvider for UggProvider {
         let champ_key = self.champion_key(champion_id).await?;
         let ugg_role = ugg_role(role, Mode::Normal);
         let region = self.current_region();
-        let matchups = self
-            .api
-            .get_matchups(&champ_key, Mode::Normal)
-            .await?;
+        let matchups = self.api.get_matchups(&champ_key, Mode::Normal).await?;
         let (data, _) = select_matchups(&matchups, region, ugg_role)?;
-        Ok(counter_entries_from_worst(&data.worst_matchups))
+        let counters = counter_entries_from_worst(&data.worst_matchups);
+        if !counters.is_empty() {
+            return Ok(counters);
+        }
+
+        let Some(prev_patch) = self.api.previous_patch().await? else {
+            return Ok(counters);
+        };
+        let previous = match self
+            .api
+            .get_matchups_for_patch(&champ_key, Mode::Normal, &prev_patch)
+            .await
+        {
+            Ok(previous) => previous,
+            Err(e) => {
+                eprintln!("ugg: previous-patch matchups failed (no counter fallback): {e}");
+                return Ok(counters);
+            }
+        };
+        let Ok((data, _)) = select_matchups(&previous, region, ugg_role) else {
+            return Ok(counters);
+        };
+        let previous_counters = counter_entries_from_worst(&data.worst_matchups);
+        if previous_counters.is_empty() {
+            Ok(counters)
+        } else {
+            Ok(previous_counters)
+        }
+    }
+
+    async fn tier_list(&self, role: &str) -> Result<Vec<TierEntry>> {
+        self.ensure_static().await?;
+        let region = region_slug(&self.platform_id.read().unwrap());
+        let cache_key = format!("{region}:{}", role.to_ascii_lowercase());
+
+        {
+            let cache = self.tier_lists.read().await;
+            if let Some(rows) = cache.get(&cache_key) {
+                return Ok(rows.clone());
+            }
+        }
+
+        let ranking = self
+            .api
+            .get_champion_ranking(region, Mode::Normal, TIER_LIST_RANK)
+            .await?;
+        let previous = match self.api.previous_patch().await? {
+            Some(prev_patch) => self
+                .api
+                .get_champion_ranking_for_patch(region, Mode::Normal, TIER_LIST_RANK, &prev_patch)
+                .await
+                .map_or_else(
+                    |e| {
+                        eprintln!("ugg: previous-patch tier list failed (no wr deltas): {e}");
+                        None
+                    },
+                    Some,
+                ),
+            None => None,
+        };
+        let rows = tier_entries_from_ranking(&ranking, previous.as_ref(), role)?;
+        self.tier_lists
+            .write()
+            .await
+            .insert(cache_key, rows.clone());
+        Ok(rows)
     }
 
     async fn rune_build(
@@ -291,14 +390,20 @@ impl BuildProvider for UggProvider {
         role: Option<&str>,
         enemy_champion_id: Option<i64>,
     ) -> Result<RuneBuild> {
-        if enemy_champion_id.is_some() {
-            return Err(ProviderError::NotEnoughData);
-        }
-        let mode = Mode::Normal;
         let position = role.unwrap_or("");
-        let (data, resolved_role) = self.fetch_overview(champion_id, position, mode).await?;
+        let (data, resolved_role, matchup) = if let Some(enemy) = enemy_champion_id {
+            let (data, resolved_role) = self
+                .fetch_matchup_overview(champion_id, enemy, position)
+                .await?;
+            (data, resolved_role, true)
+        } else {
+            let (data, resolved_role) = self
+                .fetch_overview(champion_id, position, Mode::Normal)
+                .await?;
+            (data, resolved_role, false)
+        };
         let name = self.champion_name(champion_id).await;
-        Self::overview_to_rune_build(&data, resolved_role, &name)
+        Self::overview_to_rune_build(&data, resolved_role, &name, matchup)
     }
 
     async fn champion_names(&self, champion_id: i64) -> Option<(String, String)> {
@@ -320,8 +425,7 @@ fn snapshot_mode(snapshot: &GameSnapshot) -> Mode {
 }
 
 fn is_arena_mode(game_mode: &str) -> bool {
-    game_mode.eq_ignore_ascii_case("arena")
-        || game_mode.eq_ignore_ascii_case("cherry")
+    game_mode.eq_ignore_ascii_case("arena") || game_mode.eq_ignore_ascii_case("cherry")
 }
 
 #[must_use]
@@ -348,6 +452,7 @@ pub fn platform_to_region(platform_id: &str) -> Region {
     }
 }
 
+#[must_use]
 fn ugg_role(position: &str, mode: Mode) -> Role {
     if mode == Mode::ARAM {
         return Role::None;
@@ -399,9 +504,13 @@ pub fn parse_max_order(s: &str) -> Vec<i64> {
 
 #[must_use]
 pub fn parse_level_order(chars: &[char]) -> Vec<i64> {
-    chars.iter().filter_map(|c| ability_char_to_id(*c)).collect()
+    chars
+        .iter()
+        .filter_map(|c| ability_char_to_id(*c))
+        .collect()
 }
 
+#[allow(clippy::cast_precision_loss)]
 fn best_late_item(options: &[LateItem]) -> Option<&LateItem> {
     options.iter().max_by(|a, b| {
         let wr_a = if a.matches > 0 {
@@ -429,7 +538,7 @@ fn split_rune_ids(rune_ids: &[i64]) -> (Vec<i64>, Vec<i64>) {
 }
 
 /// Counters from u.gg `worst_matchups`: invert win rate to the opponent's
-/// perspective (same contract as DeepLoL's `counter_entries`).
+/// perspective (same contract as `DeepLoL`'s `counter_entries`).
 #[must_use]
 pub fn counter_entries_from_worst(worst: &[Matchup]) -> Vec<CounterEntry> {
     let mut entries: Vec<CounterEntry> = worst
@@ -456,7 +565,10 @@ mod tests {
 
     #[test]
     fn ability_chars_map_to_skill_ids() {
-        assert_eq!(parse_level_order(&['Q', 'W', 'E', 'Q', 'W', 'E']), vec![1, 2, 3, 1, 2, 3]);
+        assert_eq!(
+            parse_level_order(&['Q', 'W', 'E', 'Q', 'W', 'E']),
+            vec![1, 2, 3, 1, 2, 3]
+        );
         assert_eq!(parse_max_order("QWE"), vec![1, 2, 3]);
         assert_eq!(parse_max_order("3>1>2"), vec![3, 1, 2]);
     }
@@ -466,6 +578,16 @@ mod tests {
         assert_eq!(platform_to_region("JP1"), Region::JP1);
         assert_eq!(platform_to_region("kr"), Region::KR);
         assert_eq!(platform_to_region("unknown"), Region::World);
+    }
+
+    #[test]
+    fn provider_defaults_to_kr_until_platform_id_is_set() {
+        use std::sync::Arc;
+
+        let provider = UggProvider::new(Arc::new(DdragonClient::new())).expect("provider");
+        assert_eq!(provider.current_region(), Region::KR);
+        provider.set_platform_id("JP1");
+        assert_eq!(provider.current_region(), Region::JP1);
     }
 
     #[test]
@@ -537,5 +659,26 @@ mod tests {
         assert!(!build.primary_perk_ids.is_empty());
         assert!(build.win_rate >= 0.0 && build.win_rate <= 1.0);
         println!("rune_build: {build:?}");
+    }
+
+    #[tokio::test]
+    #[ignore = "network: live u.gg matchup overview for Vladimir vs Ahri"]
+    async fn fetch_vladimir_ahri_matchup_rune_build_from_live_api() {
+        use std::sync::Arc;
+
+        let ddragon = Arc::new(DdragonClient::new());
+        let provider = UggProvider::new(ddragon).expect("provider");
+        let build = provider
+            .rune_build(8, Some("middle"), Some(103))
+            .await
+            .expect("matchup rune_build");
+
+        assert!(build.matchup);
+        assert_eq!(build.lane, "Middle");
+        assert!(build.primary_style_id >= 8000);
+        assert!(!build.primary_perk_ids.is_empty());
+        assert!(build.win_rate >= 0.0 && build.win_rate <= 1.0);
+        assert!(build.games > 0);
+        println!("matchup rune_build: {build:?}");
     }
 }

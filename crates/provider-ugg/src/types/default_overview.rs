@@ -1,8 +1,8 @@
 // Credit to https://github.com/pradishb/ugg-parser for figuring out the
 // structure of the champ overview stats data.
 
-use serde::Serialize;
 use serde::de::{Deserialize, Deserializer, IgnoredAny, SeqAccess, Visitor};
+use serde::Serialize;
 use std::fmt;
 
 use super::overview::handle_unknown;

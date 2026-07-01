@@ -51,7 +51,8 @@ impl ProviderKind {
 
 /// Routes every [`BuildProvider`] call to the currently active backend.
 /// Switching is O(1); each backend keeps its own caches, so flipping
-/// back and forth costs nothing after warm-up.
+/// back and forth costs nothing after warm-up. Calls are never retried against
+/// another provider; fallback policy lives inside each active provider.
 pub struct ProviderProxy {
     providers: HashMap<ProviderKind, Arc<dyn BuildProvider>>,
     active: RwLock<ProviderKind>,

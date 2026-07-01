@@ -2,8 +2,8 @@
 // structure of the champ overview stats data.
 
 use super::mappings;
-use serde::Serialize;
 use serde::de::{Deserialize, Deserializer, IgnoredAny, SeqAccess, Visitor};
+use serde::Serialize;
 use std::collections::HashMap;
 use std::fmt;
 

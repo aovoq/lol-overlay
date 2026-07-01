@@ -4,6 +4,7 @@ use std::collections::HashMap;
 use std::time::Duration;
 
 use overlay_provider::{ProviderError, Result};
+use serde_json::Value;
 use tokio::sync::RwLock;
 
 use crate::types::default_overview::OverviewData;
@@ -19,6 +20,7 @@ pub type UggApiVersions = HashMap<String, HashMap<String, String>>;
 
 struct UggStatic {
     patch: String,
+    prev_patch: Option<String>,
     api_versions: UggApiVersions,
 }
 
@@ -27,6 +29,7 @@ pub struct UggApi {
     static_data: RwLock<Option<UggStatic>>,
     overview_cache: RwLock<HashMap<String, ChampOverview>>,
     matchups_cache: RwLock<HashMap<String, Matchups>>,
+    champion_ranking_cache: RwLock<HashMap<String, Value>>,
 }
 
 impl UggApi {
@@ -43,6 +46,7 @@ impl UggApi {
             static_data: RwLock::new(None),
             overview_cache: RwLock::new(HashMap::new()),
             matchups_cache: RwLock::new(HashMap::new()),
+            champion_ranking_cache: RwLock::new(HashMap::new()),
         })
     }
 
@@ -73,11 +77,13 @@ impl UggApi {
             .error_for_status()?
             .json()
             .await?;
+        let prev_patch = previous_patch_key(&patch, &api_versions);
 
         let mut guard = self.static_data.write().await;
         if guard.is_none() {
             *guard = Some(UggStatic {
                 patch,
+                prev_patch,
                 api_versions,
             });
         }
@@ -102,6 +108,15 @@ impl UggApi {
             .ok_or_else(|| ProviderError::Other("ugg static data not initialized".into()))
     }
 
+    pub async fn previous_patch(&self) -> Result<Option<String>> {
+        self.static_data
+            .read()
+            .await
+            .as_ref()
+            .map(|s| s.prev_patch.clone())
+            .ok_or_else(|| ProviderError::Other("ugg static data not initialized".into()))
+    }
+
     fn overview_api_version(api_versions: &UggApiVersions, patch: &str) -> String {
         if let Some(versions) = api_versions.get(patch) {
             if let Some(v) = versions.get("overview") {
@@ -118,6 +133,70 @@ impl UggApi {
             }
         }
         "1.5.0".to_string()
+    }
+
+    fn champion_ranking_api_version(api_versions: &UggApiVersions, patch: &str) -> String {
+        if let Some(versions) = api_versions.get(patch) {
+            if let Some(v) = versions.get("champion_ranking") {
+                return v.clone();
+            }
+        }
+        "1.5.0".to_string()
+    }
+
+    /// Site-wide tier list data for a region / queue / rank bracket.
+    pub async fn get_champion_ranking(
+        &self,
+        region: &str,
+        mode: Mode,
+        rank_tier: &str,
+    ) -> Result<Value> {
+        let patch = self.patch().await?;
+        self.get_champion_ranking_for_patch(region, mode, rank_tier, &patch)
+            .await
+    }
+
+    /// Site-wide tier list data for a specific patch.
+    pub async fn get_champion_ranking_for_patch(
+        &self,
+        region: &str,
+        mode: Mode,
+        rank_tier: &str,
+        patch: &str,
+    ) -> Result<Value> {
+        let api_versions = self.api_versions().await?;
+        let api_version = Self::champion_ranking_api_version(&api_versions, patch);
+        let cache_key = format!(
+            "champion_ranking/{region}/{patch}/{}/{rank_tier}/{api_version}",
+            mode.to_api_string()
+        );
+
+        {
+            let guard = self.champion_ranking_cache.read().await;
+            if let Some(cached) = guard.get(&cache_key) {
+                return Ok(cached.clone());
+            }
+        }
+
+        let data_path = format!(
+            "champion_ranking/{region}/{patch}/{}/{rank_tier}/{api_version}.json",
+            mode.to_api_string()
+        );
+        let url = format!("{STATS_BASE}/{data_path}");
+        let data: Value = self
+            .http
+            .get(&url)
+            .send()
+            .await?
+            .error_for_status()?
+            .json()
+            .await?;
+
+        self.champion_ranking_cache
+            .write()
+            .await
+            .insert(cache_key, data.clone());
+        Ok(data)
     }
 
     pub async fn get_overview(
@@ -164,10 +243,64 @@ impl UggApi {
         Ok(data)
     }
 
-    pub async fn get_matchups(&self, champ_key: &str, mode: Mode) -> Result<Matchups> {
+    pub async fn get_matchup_overview(
+        &self,
+        champ_key: &str,
+        enemy_champ_key: &str,
+        mode: Mode,
+        build: Build,
+    ) -> Result<ChampOverview> {
         let patch = self.patch().await?;
         let api_versions = self.api_versions().await?;
-        let api_version = Self::matchups_api_version(&api_versions, &patch);
+        let api_version = Self::overview_api_version(&api_versions, &patch);
+        let cache_key = format!(
+            "overview-matchup/{patch}/{}/{champ_key}_{enemy_champ_key}/{api_version}",
+            mode.to_api_string()
+        );
+
+        {
+            let guard = self.overview_cache.read().await;
+            if let Some(cached) = guard.get(&cache_key) {
+                return Ok(cached.clone());
+            }
+        }
+
+        let data_path = format!(
+            "{}/{}/{}/matchups/{champ_key}_{enemy_champ_key}/{api_version}",
+            build.to_api_string(),
+            patch,
+            mode.to_api_string()
+        );
+        let url = format!("{STATS_BASE}/{data_path}.json");
+        let data: ChampOverview = self
+            .http
+            .get(&url)
+            .send()
+            .await?
+            .error_for_status()?
+            .json()
+            .await?;
+
+        self.overview_cache
+            .write()
+            .await
+            .insert(cache_key, data.clone());
+        Ok(data)
+    }
+
+    pub async fn get_matchups(&self, champ_key: &str, mode: Mode) -> Result<Matchups> {
+        let patch = self.patch().await?;
+        self.get_matchups_for_patch(champ_key, mode, &patch).await
+    }
+
+    pub async fn get_matchups_for_patch(
+        &self,
+        champ_key: &str,
+        mode: Mode,
+        patch: &str,
+    ) -> Result<Matchups> {
+        let api_versions = self.api_versions().await?;
+        let api_version = Self::matchups_api_version(&api_versions, patch);
         let cache_key = format!(
             "matchups/{patch}/{}/{champ_key}/{api_version}",
             mode.to_api_string()
@@ -180,10 +313,7 @@ impl UggApi {
             }
         }
 
-        let data_path = format!(
-            "{patch}/{}/{champ_key}/{api_version}",
-            mode.to_api_string()
-        );
+        let data_path = format!("{patch}/{}/{champ_key}/{api_version}", mode.to_api_string());
         let url = format!("{STATS_BASE}/matchups/{data_path}.json");
         let data: Matchups = self
             .http
@@ -210,9 +340,10 @@ pub fn select_overview(
     role: Role,
 ) -> Result<(OverviewData, Role)> {
     for reg in [region, Region::World] {
-        let Some(data_by_role) = Rank::preferred_order().iter().find_map(|rank| {
-            data.get(&reg).and_then(|region_data| region_data.get(rank))
-        }) else {
+        let Some(data_by_role) = Rank::preferred_order()
+            .iter()
+            .find_map(|rank| data.get(&reg).and_then(|region_data| region_data.get(rank)))
+        else {
             continue;
         };
 
@@ -237,15 +368,12 @@ pub fn select_overview(
 
 /// Pick matchup data for `region`/`role`, falling back to World and the
 /// role with the most games (mirrors reference `get_matchups`).
-pub fn select_matchups(
-    data: &Matchups,
-    region: Region,
-    role: Role,
-) -> Result<(MatchupData, Role)> {
+pub fn select_matchups(data: &Matchups, region: Region, role: Role) -> Result<(MatchupData, Role)> {
     for reg in [region, Region::World] {
-        let Some(data_by_role) = Rank::preferred_order().iter().find_map(|rank| {
-            data.get(&reg).and_then(|region_data| region_data.get(rank))
-        }) else {
+        let Some(data_by_role) = Rank::preferred_order()
+            .iter()
+            .find_map(|rank| data.get(&reg).and_then(|region_data| region_data.get(rank)))
+        else {
             continue;
         };
 
@@ -264,13 +392,48 @@ pub fn select_matchups(
     Err(ProviderError::Other("no matchup data for champion".into()))
 }
 
+fn parse_patch_key(key: &str) -> Option<(u16, u16)> {
+    let (major, minor) = key.split_once('_')?;
+    Some((major.parse().ok()?, minor.parse().ok()?))
+}
+
+fn previous_patch_key(current: &str, api_versions: &UggApiVersions) -> Option<String> {
+    let current = parse_patch_key(current)?;
+    api_versions
+        .keys()
+        .filter_map(|key| parse_patch_key(key).map(|parsed| (key, parsed)))
+        .filter(|(_, parsed)| *parsed < current)
+        .max_by_key(|(_, parsed)| *parsed)
+        .map(|(key, _)| key.clone())
+}
+
 #[cfg(test)]
 mod tests {
-    use super::UggApi;
+    use super::{previous_patch_key, UggApi};
+    use std::collections::HashMap;
 
     #[test]
     fn patch_from_ddragon_strips_patch_segment() {
         assert_eq!(UggApi::patch_from_ddragon("15.12.1"), "15_12");
         assert_eq!(UggApi::patch_from_ddragon("16.11"), "16");
+    }
+
+    #[test]
+    fn previous_patch_key_picks_nearest_lower_patch() {
+        let api_versions = HashMap::from([
+            ("15_24".to_string(), HashMap::new()),
+            ("16_1".to_string(), HashMap::new()),
+            ("16_10".to_string(), HashMap::new()),
+            ("16_12".to_string(), HashMap::new()),
+        ]);
+
+        assert_eq!(
+            previous_patch_key("16_12", &api_versions),
+            Some("16_10".to_string())
+        );
+        assert_eq!(
+            previous_patch_key("16_1", &api_versions),
+            Some("15_24".to_string())
+        );
     }
 }
