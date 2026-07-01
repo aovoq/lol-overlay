@@ -82,7 +82,7 @@ export function Tabs() {
       </button>
 
       <Show when={vsMenuOpen() && enemy()}>
-        <div class="hx-vs-menu absolute top-[calc(100%+4px)] left-[140px] z-10 min-w-[180px] flex flex-col bg-hx-bg-raised border border-hx-border rounded-md p-1 shadow-[0_6px_24px_rgba(0,0,0,0.55)]">
+        <div class="hx-vs-menu hx-menu absolute top-[calc(100%+4px)] left-[140px] z-10 min-w-[180px] flex flex-col bg-hx-bg-raised border border-hx-border rounded-md p-1">
           <For each={revealedEnemies()}>
             {(id) => (
               <button

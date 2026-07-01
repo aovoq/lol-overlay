@@ -2,14 +2,34 @@ import { invoke } from "@tauri-apps/api/core";
 import { createSignal } from "solid-js";
 import type { Settings } from "../types";
 
+export type ThemeMode = "dark" | "light";
+
+const THEME_STORAGE_KEY = "lol-overlay.theme";
+const THEME_MODES: ThemeMode[] = ["dark", "light"];
+
+function storedTheme(): ThemeMode {
+  const stored = window.localStorage.getItem(THEME_STORAGE_KEY);
+  return THEME_MODES.includes(stored as ThemeMode)
+    ? (stored as ThemeMode)
+    : "light";
+}
+
+function applyTheme(mode: ThemeMode) {
+  document.documentElement.dataset.theme = mode;
+  document.documentElement.style.colorScheme = mode;
+}
+
 const [autoImport, setAutoImport] = createSignal(true);
 const [importSpells, setImportSpellsState] = createSignal(true);
 const [spellsFlipped, setSpellsFlippedState] = createSignal(false);
 const [pinned, setPinnedState] = createSignal(false);
 const [dataSource, setDataSourceState] = createSignal("deeplol");
 const [dataSources, setDataSources] = createSignal<string[]>(["deeplol"]);
+const [themeMode, setThemeModeState] = createSignal<ThemeMode>(storedTheme());
 /** Gear toggles hidden state (starts hidden like the original DOM). */
 const [gearHidden, setGearHidden] = createSignal(true);
+
+applyTheme(themeMode());
 
 export {
   autoImport,
@@ -19,6 +39,7 @@ export {
   pinned,
   dataSource,
   dataSources,
+  themeMode,
   gearHidden,
   setGearHidden,
 };
@@ -45,6 +66,12 @@ export function togglePinned() {
 export function setDataSource(kind: string) {
   setDataSourceState(kind);
   invoke("set_data_source", { kind }).catch(() => {});
+}
+
+export function setThemeMode(mode: ThemeMode) {
+  setThemeModeState(mode);
+  applyTheme(mode);
+  window.localStorage.setItem(THEME_STORAGE_KEY, mode);
 }
 
 export function applySettings(s: Partial<Settings>) {

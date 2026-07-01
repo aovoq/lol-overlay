@@ -11,7 +11,7 @@ export function SectionError(props: { message: string; onRetry: () => void }) {
         Retry
       </button>
       <Show when={props.message}>
-        <div class="basis-full wrap-anywhere text-[rgba(230,217,181,0.62)] font-mono text-[10px] leading-snug">
+        <div class="basis-full wrap-anywhere text-hx-muted-soft font-mono text-[10px] leading-snug">
           {props.message}
         </div>
       </Show>

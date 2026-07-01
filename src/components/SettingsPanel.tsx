@@ -11,6 +11,9 @@ import {
   setDataSource,
   setGearHidden,
   setImportSpells,
+  setThemeMode,
+  themeMode,
+  type ThemeMode,
 } from "../state/settings";
 
 export function SettingsPanel() {
@@ -21,6 +24,10 @@ export function SettingsPanel() {
   });
 
   const open = () => interactive() || !gearHidden();
+  const themeOptions: { value: ThemeMode; label: string }[] = [
+    { value: "dark", label: "Dark" },
+    { value: "light", label: "Light" },
+  ];
 
   return (
     <Show when={open()}>
@@ -54,6 +61,23 @@ export function SettingsPanel() {
           />
           <span>スペルも書き込む</span>
         </label>
+        <div class="flex flex-col gap-1">
+          <span class="text-[11px] text-hx-muted">テーマ</span>
+          <div class="grid grid-cols-2 gap-1 rounded border border-hx-border bg-hx-bg-raised p-1">
+            {themeOptions.map((option) => (
+              <button
+                class={`rounded px-2 py-1 font-hx-serif text-[10px] font-semibold tracking-[0.16em] cursor-pointer ${
+                  themeMode() === option.value
+                    ? "bg-hx-gold-wash text-hx-gold"
+                    : "bg-transparent text-hx-muted hover:text-hx-gold"
+                }`}
+                onClick={() => setThemeMode(option.value)}
+              >
+                {option.label}
+              </button>
+            ))}
+          </div>
+        </div>
         <Show when={dataSources().length > 1}>
           <label class="flex flex-col gap-1 text-hx-text">
             <span class="text-[11px] text-hx-muted">データソース</span>

@@ -1,20 +1,125 @@
 @import "tailwindcss";
 
 @theme {
-  --color-hx-bg: #0b0a08;
-  --color-hx-bg-raised: #15120d;
-  --color-hx-border: #3a3022;
-  --color-hx-gold: #c8aa6e;
-  --color-hx-gold-dim: #7a6a4d;
-  --color-hx-text: #f0e6d2;
-  --color-hx-muted: #847b6a;
-  --color-hx-up: #3fc380;
-  --color-hx-red: #e84057;
-  --color-hx-keystone-border: #463f2e;
+  --color-hx-bg: var(--hx-bg);
+  --color-hx-bg-raised: var(--hx-bg-raised);
+  --color-hx-panel: var(--hx-panel);
+  --color-hx-border: var(--hx-border);
+  --color-hx-gold: var(--hx-gold);
+  --color-hx-gold-dim: var(--hx-gold-dim);
+  --color-hx-gold-wash: var(--hx-gold-wash);
+  --color-hx-text: var(--hx-text);
+  --color-hx-text-strong: var(--hx-text-strong);
+  --color-hx-muted: var(--hx-muted);
+  --color-hx-muted-soft: var(--hx-muted-soft);
+  --color-hx-up: var(--hx-up);
+  --color-hx-red: var(--hx-red);
+  --color-hx-red-soft: var(--hx-red-soft);
+  --color-hx-physical: var(--hx-physical);
+  --color-hx-magic: var(--hx-magic);
+  --color-hx-durable: var(--hx-durable);
+  --color-hx-keystone-border: var(--hx-keystone-border);
   --font-hx-serif: "Beaufort for LOL", "Cinzel", Georgia, serif;
 }
 
 @layer base {
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --hx-bg: #0b0a08;
+    --hx-bg-raised: #15120d;
+    --hx-panel: #15120d;
+    --hx-panel-bg: linear-gradient(
+        180deg,
+        rgba(200, 170, 110, 0.06),
+        rgba(200, 170, 110, 0) 18%
+      ),
+      rgba(11, 10, 8, 0.94);
+    --hx-border: #3a3022;
+    --hx-keystone-border: #463f2e;
+    --hx-gold: #c8aa6e;
+    --hx-gold-dim: #7a6a4d;
+    --hx-gold-wash: rgba(200, 170, 110, 0.12);
+    --hx-text: #f0e6d2;
+    --hx-text-strong: #e8e0cc;
+    --hx-muted: #847b6a;
+    --hx-muted-soft: rgba(230, 217, 181, 0.62);
+    --hx-up: #3fc380;
+    --hx-red: #e84057;
+    --hx-red-soft: rgba(232, 64, 87, 0.42);
+    --hx-physical: #e8923f;
+    --hx-magic: #9faafc;
+    --hx-durable: #a1d586;
+    --hx-shadow-panel: 0 6px 28px rgba(0, 0, 0, 0.55);
+    --hx-shadow-shell:
+      inset 0 1px 0 rgba(240, 230, 210, 0.07),
+      0 8px 40px rgba(0, 0, 0, 0.55);
+    --hx-shadow-menu: 0 6px 24px rgba(0, 0, 0, 0.55);
+    --hx-shadow-card:
+      inset 0 0 0 1px rgba(200, 170, 110, 0.08),
+      0 2px 8px rgba(0, 0, 0, 0.28);
+    --hx-skel-mid: #1f1a12;
+    --hx-skill-key-bg: rgba(11, 10, 8, 0.9);
+    --hx-skill-key-border: rgba(200, 170, 110, 0.42);
+    --hx-skill-label-bg: rgba(21, 18, 13, 0.86);
+    --hx-text-shadow-strong:
+      0 2px 4px rgba(0, 0, 0, 0.95),
+      0 0 9px rgba(0, 0, 0, 0.7);
+    --hx-text-shadow-key: 0 1px 2px rgba(0, 0, 0, 0.95);
+    --hx-overlay-ring: rgba(200, 170, 110, 0.45);
+    --hx-overlay-glow: rgba(200, 170, 110, 0.12);
+    --hx-button-bg: #131009;
+    --hx-button-hover: #e3cb95;
+    --hx-button-glow: rgba(200, 170, 110, 0.28);
+  }
+
+  :root,
+  :root[data-theme="light"] {
+    color-scheme: light;
+    --hx-bg: #f6f0e2;
+    --hx-bg-raised: #fffaf0;
+    --hx-panel: #fff8ea;
+    --hx-panel-bg: linear-gradient(
+        180deg,
+        rgba(126, 92, 36, 0.08),
+        rgba(126, 92, 36, 0) 22%
+      ),
+      rgba(255, 248, 234, 0.94);
+    --hx-border: #cdbb96;
+    --hx-keystone-border: #ad8f55;
+    --hx-gold: #8d6828;
+    --hx-gold-dim: #9b8252;
+    --hx-gold-wash: rgba(166, 121, 45, 0.13);
+    --hx-text: #2b2419;
+    --hx-text-strong: #1f1a12;
+    --hx-muted: #6f6656;
+    --hx-muted-soft: rgba(82, 72, 55, 0.64);
+    --hx-up: #24784d;
+    --hx-red: #ba2f44;
+    --hx-red-soft: rgba(186, 47, 68, 0.34);
+    --hx-physical: #a75c20;
+    --hx-magic: #5d66b5;
+    --hx-durable: #4d7b3b;
+    --hx-shadow-panel: 0 8px 26px rgba(69, 49, 20, 0.2);
+    --hx-shadow-shell:
+      inset 0 1px 0 rgba(255, 255, 255, 0.74),
+      0 10px 34px rgba(87, 66, 31, 0.22);
+    --hx-shadow-menu: 0 8px 24px rgba(87, 66, 31, 0.2);
+    --hx-shadow-card:
+      inset 0 0 0 1px rgba(141, 104, 40, 0.09),
+      0 2px 8px rgba(87, 66, 31, 0.12);
+    --hx-skel-mid: #e9dcc5;
+    --hx-skill-key-bg: rgba(255, 248, 234, 0.92);
+    --hx-skill-key-border: rgba(141, 104, 40, 0.36);
+    --hx-skill-label-bg: rgba(255, 250, 240, 0.88);
+    --hx-text-shadow-strong: 0 1px 0 rgba(255, 255, 255, 0.7);
+    --hx-text-shadow-key: 0 1px 0 rgba(255, 255, 255, 0.86);
+    --hx-overlay-ring: rgba(141, 104, 40, 0.42);
+    --hx-overlay-glow: rgba(141, 104, 40, 0.12);
+    --hx-button-bg: #fff3d8;
+    --hx-button-hover: #6f4f1e;
+    --hx-button-glow: rgba(141, 104, 40, 0.22);
+  }
+
   html,
   body {
     margin: 0;
@@ -31,18 +136,35 @@
 @layer components {
   .panel {
     position: fixed;
-    background: linear-gradient(
-        180deg,
-        rgba(200, 170, 110, 0.06),
-        rgba(200, 170, 110, 0) 18%
-      ),
-      rgba(11, 10, 8, 0.94);
+    background: var(--hx-panel-bg);
     border: 1px solid var(--color-hx-border);
     border-radius: 8px;
     padding: 10px 14px;
     backdrop-filter: blur(6px);
-    box-shadow: 0 6px 28px rgba(0, 0, 0, 0.55);
+    box-shadow: var(--hx-shadow-panel);
     font-size: 13px;
+  }
+
+  .hexgate-shell {
+    box-shadow: var(--hx-shadow-shell);
+  }
+
+  .hx-menu {
+    box-shadow: var(--hx-shadow-menu);
+  }
+
+  .hx-primary-button {
+    background: var(--hx-button-bg);
+    transition:
+      border-color 120ms ease,
+      box-shadow 120ms ease,
+      color 120ms ease;
+  }
+
+  .hx-primary-button:hover:not(:disabled) {
+    border-color: var(--hx-button-hover);
+    color: var(--hx-button-hover);
+    box-shadow: 0 0 14px var(--hx-button-glow);
   }
 
   .skill-arrow {
@@ -75,16 +197,32 @@
   }
 
   .text-shadow-skill {
-    text-shadow:
-      0 2px 4px rgba(0, 0, 0, 0.95),
-      0 0 9px rgba(0, 0, 0, 0.7);
+    text-shadow: var(--hx-text-shadow-strong);
+  }
+
+  .skill-order-row {
+    background: linear-gradient(90deg, var(--color-hx-gold-wash), transparent);
+  }
+
+  .skill-label {
+    background: var(--hx-skill-label-bg);
+  }
+
+  .skill-card {
+    box-shadow: var(--hx-shadow-card);
+  }
+
+  .skill-card-key--icon {
+    background: var(--hx-skill-key-bg);
+    border-color: var(--hx-skill-key-border);
+    text-shadow: var(--hx-text-shadow-key);
   }
 
   .hx-skel {
     background: linear-gradient(
       90deg,
       var(--color-hx-bg-raised) 25%,
-      #1f1a12 37%,
+      var(--hx-skel-mid) 37%,
       var(--color-hx-bg-raised) 63%
     );
     background-size: 400% 100%;
@@ -122,8 +260,8 @@ body.interactive::after {
   position: fixed;
   inset: 0;
   pointer-events: none;
-  border: 2px solid rgba(200, 170, 110, 0.45);
-  box-shadow: inset 0 0 48px rgba(200, 170, 110, 0.12);
+  border: 2px solid var(--hx-overlay-ring);
+  box-shadow: inset 0 0 48px var(--hx-overlay-glow);
 }
 
 body.champselect .status-chip,

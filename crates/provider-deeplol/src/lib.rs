@@ -333,7 +333,9 @@ impl DeepLolProvider {
 
         if primary_style == 0
             || sub_style == 0
-            || primary_perks.len() + sub_perks.len() + shards.len() < 6
+            || primary_perks.len() != 4
+            || sub_perks.len() != 2
+            || shards.len() != 3
         {
             return Err(ProviderError::Other("incomplete rune data".into()));
         }

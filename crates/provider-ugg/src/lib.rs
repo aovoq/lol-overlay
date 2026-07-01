@@ -245,7 +245,9 @@ impl UggProvider {
 
         if data.runes.primary_style_id == 0
             || data.runes.secondary_style_id == 0
-            || primary_perks.len() + sub_perks.len() + data.shards.shard_ids.len() < 6
+            || primary_perks.len() != 4
+            || sub_perks.len() != 2
+            || data.shards.shard_ids.len() != 3
         {
             return Err(ProviderError::Other("incomplete rune data".into()));
         }

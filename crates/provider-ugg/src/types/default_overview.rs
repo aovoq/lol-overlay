@@ -221,6 +221,23 @@ pub struct Shards {
     pub shard_ids: Vec<i64>,
 }
 
+#[derive(Debug, Clone, serde::Deserialize)]
+#[serde(untagged)]
+enum ShardId {
+    Number(i64),
+    String(String),
+}
+
+impl ShardId {
+    fn into_i64(self) -> Option<i64> {
+        match self {
+            ShardId::Number(id) => Some(id),
+            ShardId::String(id) => id.parse().ok(),
+        }
+        .filter(|id| *id > 0)
+    }
+}
+
 impl<'de> Deserialize<'de> for Shards {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
@@ -242,15 +259,40 @@ impl<'de> Deserialize<'de> for Shards {
                 Ok(Shards {
                     matches: handle_unknown(visitor.next_element::<i64>()),
                     wins: handle_unknown(visitor.next_element::<i64>()),
-                    shard_ids: handle_unknown(visitor.next_element::<Vec<String>>())
-                        .iter()
-                        .map(|x| x.parse::<i64>().unwrap_or_default())
+                    shard_ids: handle_unknown(visitor.next_element::<Vec<ShardId>>())
+                        .into_iter()
+                        .filter_map(ShardId::into_i64)
                         .collect::<Vec<i64>>(),
                 })
             }
         }
 
         deserializer.deserialize_seq(AbilitiesVisitor)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::Shards;
+
+    #[test]
+    fn shards_parse_string_ids() {
+        let shards: Shards =
+            serde_json::from_str(r#"[123, 45, ["5005", "5008", "5001"]]"#).expect("shards");
+
+        assert_eq!(shards.matches, 123);
+        assert_eq!(shards.wins, 45);
+        assert_eq!(shards.shard_ids, vec![5005, 5008, 5001]);
+    }
+
+    #[test]
+    fn shards_parse_numeric_ids() {
+        let shards: Shards =
+            serde_json::from_str(r#"[123, 45, [5005, 5008, 5001]]"#).expect("shards");
+
+        assert_eq!(shards.matches, 123);
+        assert_eq!(shards.wins, 45);
+        assert_eq!(shards.shard_ids, vec![5005, 5008, 5001]);
     }
 }
 

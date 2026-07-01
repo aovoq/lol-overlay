@@ -161,6 +161,8 @@ pub async fn fetch_session() -> Result<Option<Value>, LcuError> {
 
 /// Replace the current rune page with `page` and make it active.
 pub async fn apply_runes(page: &RunePagePayload) -> Result<(), LcuError> {
+    validate_rune_page(page)?;
+
     let client = LcuClient::connect().map_err(ie)?;
 
     let pages: Option<Value> = client.get("/lol-perks/v1/pages").await.map_err(ie)?;
@@ -175,6 +177,21 @@ pub async fn apply_runes(page: &RunePagePayload) -> Result<(), LcuError> {
         .post("/lol-perks/v1/pages", page)
         .await
         .map_err(ie)?;
+    Ok(())
+}
+
+fn validate_rune_page(page: &RunePagePayload) -> Result<(), LcuError> {
+    if page.primary_style_id <= 0 || page.sub_style_id <= 0 || page.selected_perk_ids.len() != 9 {
+        return Err(LcuError::Other(format!(
+            "invalid rune page: expected 2 styles and 9 selected perks, got {} selected perks",
+            page.selected_perk_ids.len()
+        )));
+    }
+    if page.selected_perk_ids.iter().any(|id| *id <= 0) {
+        return Err(LcuError::Other(
+            "invalid rune page: selected perks must be positive ids".into(),
+        ));
+    }
     Ok(())
 }
 
@@ -296,5 +313,21 @@ mod tests {
             games.iter().map(|g| g.champion_id).collect::<Vec<_>>(),
             vec![1, 3]
         );
+    }
+
+    #[test]
+    fn rune_page_validation_requires_complete_page() {
+        let mut page = RunePagePayload {
+            name: "test".into(),
+            primary_style_id: 8000,
+            sub_style_id: 8400,
+            selected_perk_ids: vec![8010, 9111, 9104, 8299, 8473, 8451, 5005, 5008, 5001],
+            current: true,
+        };
+
+        assert!(validate_rune_page(&page).is_ok());
+
+        page.selected_perk_ids.pop();
+        assert!(validate_rune_page(&page).is_err());
     }
 }

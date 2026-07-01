@@ -54,7 +54,7 @@ function SkillCard(props: {
 
   return (
     <span
-      class={`skill-card relative w-[38px] h-[38px] flex items-center justify-center overflow-hidden border rounded-[5px] bg-hx-bg-raised shadow-[inset_0_0_0_1px_rgba(200,170,110,0.08),0_2px_8px_rgba(0,0,0,0.28)] ${
+      class={`skill-card relative w-[38px] h-[38px] flex items-center justify-center overflow-hidden border rounded-[5px] bg-hx-bg-raised ${
         hasIcon() ? "border-hx-gold-dim" : "border-hx-border"
       }`}
       title={title()}
@@ -67,7 +67,7 @@ function SkillCard(props: {
       <span
         class={`skill-card-key absolute flex items-center justify-center text-hx-gold font-hx-serif font-bold leading-none ${
           hasIcon()
-            ? "inset-auto right-0 bottom-0 w-[17px] h-[15px] border-t border-l border-[rgba(200,170,110,0.42)] rounded-tl text-[10px] text-hx-text bg-[rgba(11,10,8,0.9)] text-shadow-[0_1px_2px_rgba(0,0,0,0.95)]"
+            ? "skill-card-key--icon inset-auto right-0 bottom-0 w-[17px] h-[15px] border-t border-l rounded-tl text-[10px] text-hx-text"
             : "inset-0 text-[17px] text-shadow-skill"
         }`}
       >
@@ -92,10 +92,10 @@ export function SkillOrder(props: {
   return (
     <Show when={ids().length > 0}>
       <div
-        class="flex items-center gap-3 px-3 py-2 pb-2.5 border-b border-hx-border bg-gradient-to-r from-[rgba(200,170,110,0.04)] to-transparent"
+        class="skill-order-row flex items-center gap-3 px-3 py-2 pb-2.5 border-b border-hx-border"
         title={title()}
       >
-        <div class="skill-label flex-none w-28 h-[38px] flex items-center box-border px-2.5 border border-hx-border rounded bg-[rgba(21,18,13,0.86)] text-hx-gold-dim font-hx-serif text-[10px] font-semibold leading-tight tracking-[0.14em] uppercase whitespace-nowrap">
+        <div class="skill-label flex-none w-28 h-[38px] flex items-center box-border px-2.5 border border-hx-border rounded text-hx-gold-dim font-hx-serif text-[10px] font-semibold leading-tight tracking-[0.14em] uppercase whitespace-nowrap">
           Skill Order
         </div>
         <div class="flex items-center gap-2">

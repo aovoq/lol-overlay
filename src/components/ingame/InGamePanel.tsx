@@ -71,11 +71,11 @@ function PanelBody() {
   const threatColor = (kind: string) => {
     switch (kind) {
       case "ad":
-        return "text-[#e8923f]";
+        return "text-hx-physical";
       case "ap":
-        return "text-[#9faafc]";
+        return "text-hx-magic";
       case "tank":
-        return "text-[#a1d586]";
+        return "text-hx-durable";
       default:
         return "";
     }
@@ -160,7 +160,7 @@ function PanelBody() {
                         {(en) => (
                           <Icon
                             url={champIconByName(en.rawName)}
-                            class="w-[26px] h-[26px] rounded border border-[rgba(232,64,87,0.45)] object-cover"
+                            class="w-[26px] h-[26px] rounded border border-hx-red-soft object-cover"
                             title={en.name}
                           />
                         )}
@@ -173,7 +173,7 @@ function PanelBody() {
                         <span
                           class={`px-[7px] py-0.5 border rounded-[3px] bg-hx-bg-raised text-[10px] font-semibold tracking-[0.06em] ${
                             chip.cc
-                              ? "text-hx-red border-[rgba(232,64,87,0.35)]"
+                              ? "text-hx-red border-hx-red-soft"
                               : "text-hx-muted border-hx-border"
                           }`}
                         >

@@ -60,7 +60,7 @@ export function ImportButton() {
   return (
     <Show when={my()}>
       <button
-        class={`w-full h-11 bg-[#131009] border rounded-md font-hx-serif font-bold text-[13px] tracking-[0.18em] cursor-pointer disabled:opacity-65 disabled:cursor-default hover:not-disabled:border-[#e3cb95] hover:not-disabled:text-[#e3cb95] hover:not-disabled:shadow-[0_0_14px_rgba(200,170,110,0.28)] ${
+        class={`hx-primary-button w-full h-11 border rounded-md font-hx-serif font-bold text-[13px] tracking-[0.18em] cursor-pointer disabled:opacity-65 disabled:cursor-default ${
           importState() === "failed"
             ? "border-hx-red text-hx-red"
             : "border-hx-gold text-hx-gold"

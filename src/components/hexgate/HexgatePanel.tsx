@@ -40,7 +40,7 @@ export function HexgatePanel() {
   return (
     <Show when={show()}>
       <section
-        class="hexgate fixed inset-0 flex flex-col box-border pointer-events-auto bg-hx-bg border border-hx-border rounded-lg shadow-[inset_0_1px_0_rgba(240,230,210,0.07),0_8px_40px_rgba(0,0,0,0.55)] text-hx-text text-[13px] tabular-nums overflow-hidden"
+        class="hexgate hexgate-shell fixed inset-0 flex flex-col box-border pointer-events-auto bg-hx-bg border border-hx-border rounded-lg text-hx-text text-[13px] tabular-nums overflow-hidden"
         data-hit
       >
         <header
@@ -63,7 +63,7 @@ export function HexgatePanel() {
           <button
             class={`ml-auto w-7 h-7 flex items-center justify-center border rounded cursor-pointer ${
               pinnedSetting()
-                ? "text-hx-gold border-hx-gold bg-[rgba(200,170,110,0.12)]"
+                ? "text-hx-gold border-hx-gold bg-hx-gold-wash"
                 : "text-hx-muted border-hx-border bg-transparent"
             }`}
             title="Keep the panel open after champ select"

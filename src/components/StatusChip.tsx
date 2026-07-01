@@ -80,7 +80,7 @@ export function StatusChip() {
               />
             </Show>
             <div class="flex flex-col leading-tight">
-              <span class="text-[#e8e0cc] font-semibold">
+              <span class="text-hx-text-strong font-semibold">
                 {e().tagLine
                   ? `${e().gameName} #${e().tagLine}`
                   : e().gameName}
