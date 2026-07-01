@@ -36,10 +36,10 @@ export function StatusChip() {
 
   const dotClass = () => {
     const ph = p();
-    if (!ph) return "bg-hx-red shadow-[0_0_8px_currentColor]";
-    if (ph.inGame) return "bg-hx-up shadow-[0_0_8px_currentColor]";
-    if (ph.clientUp) return "bg-hx-gold shadow-[0_0_8px_currentColor]";
-    return "bg-hx-red shadow-[0_0_8px_currentColor]";
+    if (!ph) return "bg-hx-red";
+    if (ph.inGame) return "bg-hx-up";
+    if (ph.clientUp) return "bg-hx-gold";
+    return "bg-hx-red";
   };
 
   const statusText = () => {

@@ -68,7 +68,7 @@ function SkillCard(props: {
         class={`skill-card-key absolute flex items-center justify-center text-hx-gold font-hx-serif font-bold leading-none ${
           hasIcon()
             ? "skill-card-key--icon inset-auto right-0 bottom-0 w-[17px] h-[15px] border-t border-l rounded-tl text-[10px] text-hx-text"
-            : "inset-0 text-[17px] text-shadow-skill"
+            : "inset-0 text-[17px]"
         }`}
       >
         {label()}
