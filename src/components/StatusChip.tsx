@@ -67,7 +67,7 @@ export function StatusChip() {
   };
 
   return (
-    <div class="panel fixed left-4 bottom-4 flex items-center gap-2 text-hx-muted text-xs tracking-wide">
+    <div class="flex items-center gap-2 text-hx-muted text-xs tracking-wide">
       <span class={`w-[9px] h-[9px] rounded-full ${dotClass()}`} />
       <span>{statusText()}</span>
       <Show when={s()}>

@@ -26,8 +26,6 @@ const [pinned, setPinnedState] = createSignal(false);
 const [dataSource, setDataSourceState] = createSignal("deeplol");
 const [dataSources, setDataSources] = createSignal<string[]>(["deeplol"]);
 const [themeMode, setThemeModeState] = createSignal<ThemeMode>(storedTheme());
-/** Gear toggles hidden state (starts hidden like the original DOM). */
-const [gearHidden, setGearHidden] = createSignal(true);
 
 applyTheme(themeMode());
 
@@ -40,8 +38,6 @@ export {
   dataSource,
   dataSources,
   themeMode,
-  gearHidden,
-  setGearHidden,
 };
 
 export function setImportSpells(on: boolean) {
@@ -57,10 +53,6 @@ export function setSpellsFlipped(flipped: boolean) {
 export function setPinned(on: boolean) {
   setPinnedState(on);
   invoke("set_pinned", { pinned: on }).catch(() => {});
-}
-
-export function togglePinned() {
-  setPinned(!pinned());
 }
 
 export function setDataSource(kind: string) {

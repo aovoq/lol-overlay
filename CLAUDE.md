@@ -73,12 +73,15 @@ The active source is persisted in `settings.json` as `dataSource` and switchable
 
 ### Overlay window mechanics
 
-Configured in `tauri.conf.json` (transparent, decorations-off, always-on-top, click-through, **`focusable: false`** so overlay clicks never steal keyboard focus from the game, `macOSPrivateApi`). On startup `lib.rs` resizes the window to fill the primary monitor and enables click-through. **LoL must run in Borderless mode** — exclusive fullscreen hides the overlay.
+Configured in `tauri.conf.json` as two windows:
 
-**Region-based click-through (`hittest.rs`):** the OS only supports click-through per window, so per-element clickability is emulated: the frontend reports the rects of visible `[data-hit]` elements (`set_hit_regions`), and a ~60 Hz cursor-watcher task flips `set_ignore_cursor_events` only while the cursor is inside one (or a drag is held via `set_drag_active`, or the Ctrl+Shift+O override is on).
+- `main` is the transparent, decorations-off, always-on-top, click-through, **`focusable: false`** overlay. On startup `lib.rs` resizes it to fill the primary monitor and enables click-through. **LoL must run in Borderless mode** — exclusive fullscreen hides the overlay.
+- `control` is a normal focusable window. It starts as the compact status/settings window near the lower-left of the primary monitor, then expands for champ select rune import / HEXGATE UI and returns to compact mode afterward.
+
+**Region-based click-through (`hittest.rs`):** the OS only supports click-through per window, so per-element clickability is emulated: the frontend reports the rects of visible `[data-hit]` elements (`set_hit_regions`), and a ~60 Hz cursor-watcher task flips `set_ignore_cursor_events` only while the cursor is inside one, a drag is held via `set_drag_active`, or forced interactivity is enabled by command.
 
 Global hotkeys (`hotkeys.rs`, desktop only):
-- `Ctrl+Shift+O` — emergency override: whole-window interactive (shows the settings panel).
+- `Ctrl+Shift+O` — show/focus the normal control window.
 - `Ctrl+Shift+M` — move the overlay to the next monitor.
 - `Ctrl+Shift+D` — toggle debug/mock mode (`mock.rs`): drives the UI with synthetic game state through the real provider pipeline.
 

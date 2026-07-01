@@ -28,6 +28,22 @@
         "y": 0,
         "width": 1920,
         "height": 1080
+      },
+      {
+        "label": "control",
+        "title": "lol-overlay",
+        "transparent": false,
+        "decorations": true,
+        "alwaysOnTop": false,
+        "skipTaskbar": false,
+        "shadow": true,
+        "resizable": true,
+        "focus": true,
+        "focusable": true,
+        "x": 0,
+        "y": 0,
+        "width": 520,
+        "height": 220
       }
     ],
     "security": {

@@ -1,17 +1,12 @@
 //! Global hotkeys (desktop only):
-//!   * Ctrl+Shift+O — emergency override: whole-window interactive. Normal
-//!     mouse access goes through the always-clickable panel headers
-//!     (`hittest`); this remains for when that path is unavailable.
+//!   * Ctrl+Shift+O — show/focus the normal control window.
 //!   * Ctrl+Shift+M — move the overlay to the next monitor.
 //!   * Ctrl+Shift+D — cycle debug/mock mode (off → champ select → in game).
 
-use std::sync::atomic::Ordering;
 use std::sync::Arc;
 
 use tauri::{App, Emitter, Manager};
-use tauri_plugin_global_shortcut::{
-    Code, GlobalShortcutExt, Modifiers, Shortcut, ShortcutState,
-};
+use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut, ShortcutState};
 
 use crate::engine::{Engine, MockStage};
 use crate::events::{log, ChampSelectEvent, PhaseEvent};
@@ -38,12 +33,7 @@ pub fn setup(app: &App, engine: Arc<Engine>) -> tauri::Result<()> {
                     return;
                 };
                 if shortcut == &toggle_h {
-                    // fetch_xor(true) flips and returns the old value. The
-                    // cursor watcher applies the window style within a tick.
-                    let now = !engine_hk
-                        .forced_interactive
-                        .fetch_xor(true, Ordering::SeqCst);
-                    let _ = app.emit("interactive", now);
+                    crate::engine::show_control_window(app);
                 } else if shortcut == &cycle_h {
                     if let Ok(monitors) = win.available_monitors() {
                         if monitors.len() > 1 {
@@ -60,28 +50,20 @@ pub fn setup(app: &App, engine: Arc<Engine>) -> tauri::Result<()> {
                                 .unwrap_or(0);
                             let m = &monitors[(cur + 1) % monitors.len()];
                             // Park the window on the target monitor first so
-                            // current_monitor() resolves to it, then re-apply
-                            // the active window mode there: full-monitor bounds
-                            // for the overlay, panel size for champ select.
-                            let champ = engine_hk
-                                .window_champselect
-                                .load(Ordering::SeqCst);
+                            // current_monitor() resolves to it, then resize
+                            // using the target monitor's DPI.
                             let (pos, size) = crate::engine::overlay_bounds(m);
                             let _ = win.set_position(pos);
-                            if champ {
-                                crate::engine::apply_window_mode(app, true);
-                            } else {
-                                // Position first so the resize happens under the
-                                // target monitor's DPI, then re-assert it after
-                                // any DPI-change adjustment.
-                                let _ = win.set_size(size);
-                                let _ = win.set_position(pos);
-                            }
+                            // Position first so the resize happens under the
+                            // target monitor's DPI, then re-assert it after
+                            // any DPI-change adjustment.
+                            let _ = win.set_size(size);
+                            let _ = win.set_position(pos);
                         }
                     }
                 } else if shortcut == &mock_h {
                     // Cycle the mock scenario; each loop watches the stage and
-                    // cleans up after itself (window mode, panel, UI reset).
+                    // cleans up after itself (control mode, panel, UI reset).
                     let next = match engine_hk.mock_stage() {
                         MockStage::Off => MockStage::ChampSelect,
                         MockStage::ChampSelect => MockStage::InGame,
@@ -110,9 +92,7 @@ pub fn setup(app: &App, engine: Arc<Engine>) -> tauri::Result<()> {
                                     in_game: false,
                                 },
                             );
-                            if !engine_hk.settings().pinned {
-                                crate::engine::apply_window_mode(app, false);
-                            }
+                            crate::engine::apply_window_mode(app, false);
                         }
                     }
                 }

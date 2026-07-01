@@ -7,8 +7,8 @@
 //! The frontend reports the rects of its `data-hit` elements
 //! (`set_hit_regions`), and [`cursor_watcher`] polls the global cursor:
 //! click-through is disabled only while the cursor is inside a reported rect,
-//! while a panel drag is in progress, or while the Ctrl+Shift+O emergency
-//! override is on.
+//! while a panel drag is in progress, or while command-forced interactivity is
+//! on.
 
 use std::sync::atomic::Ordering;
 use std::sync::Arc;

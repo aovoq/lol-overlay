@@ -8,7 +8,7 @@
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
 
-use tauri::{AppHandle, Emitter, Manager, State};
+use tauri::{AppHandle, Emitter, State};
 
 use crate::engine::{Engine, PanelPosition, Settings, UiLayout, WindowPosition};
 use crate::error;
@@ -43,17 +43,9 @@ pub fn set_auto_import(engine: State<'_, Arc<Engine>>, enabled: bool) -> error::
 }
 
 #[tauri::command]
-pub fn set_pinned(
-    app: AppHandle,
-    engine: State<'_, Arc<Engine>>,
-    pinned: bool,
-) -> error::Result<()> {
+pub fn set_pinned(engine: State<'_, Arc<Engine>>, pinned: bool) -> error::Result<()> {
     {
         engine.settings.lock().unwrap().pinned = pinned;
-    }
-    if let Some(win) = app.get_webview_window("main") {
-        win.set_always_on_top(pinned)
-            .map_err(|e| error::Error::Other(e.to_string()))?;
     }
     engine.persist()
 }
@@ -109,9 +101,9 @@ pub fn set_champselect_window_position(
     engine.persist()
 }
 
-/// Emergency override: force the *whole* window interactive (same as
-/// Ctrl+Shift+O). Normal mouse input is granted per-region by
-/// `hittest::cursor_watcher` from the rects reported via `set_hit_regions`.
+/// Force the *whole* overlay window interactive. Normal mouse input is granted
+/// per-region by `hittest::cursor_watcher` from the rects reported via
+/// `set_hit_regions`.
 #[tauri::command]
 pub fn set_interactive(
     app: AppHandle,

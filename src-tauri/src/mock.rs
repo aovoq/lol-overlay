@@ -16,8 +16,8 @@ use tauri::{AppHandle, Emitter};
 
 use crate::engine::{self, Engine, MockStage};
 use crate::events::{log, ChampSelectEvent, PhaseEvent, RecommendationsEvent, RuneImportedEvent};
-use overlay_types::{EnemyChampion, GameSnapshot};
 use overlay_provider::{classify_threats, BuildProvider};
+use overlay_types::{EnemyChampion, GameSnapshot};
 
 /// Champ-select mock: me on the top meta jungler, the runner-up revealed as
 /// the enemy jungler, real ban targets in the ban slots. The frontend then
@@ -43,11 +43,11 @@ pub async fn mock_champ_select_loop(app: AppHandle, engine: Arc<Engine>) {
         tokio::time::sleep(Duration::from_millis(1500)).await;
     }
 
-    // Close the champ-select panel. Only give the screen back when the cycle
-    // is actually leaving mock mode; advancing to InGame immediately reuses
-    // the overlay window for the in-game panel.
+    // Close the champ-select control. Only return to compact mode when the
+    // cycle is actually leaving mock mode; advancing to InGame immediately
+    // switches to the in-game overlay panel.
     let _ = app.emit("champ-select", ChampSelectEvent::default());
-    if engine.mock_stage() == MockStage::Off && !engine.settings().pinned {
+    if engine.mock_stage() == MockStage::Off {
         engine::apply_window_mode(&app, false);
     }
 }
@@ -173,9 +173,7 @@ pub async fn mock_loop(app: AppHandle, engine: Arc<Engine>) {
             in_game: false,
         },
     );
-    if !engine.settings().pinned {
-        engine::apply_window_mode(&app, false);
-    }
+    engine::apply_window_mode(&app, false);
 }
 
 /// Build the in-game scene from live tier lists: the top meta pick of every

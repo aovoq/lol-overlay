@@ -131,6 +131,24 @@
     user-select: none;
     font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
   }
+
+  #root {
+    min-height: 100%;
+  }
+
+  body.control-window {
+    background: var(--hx-bg);
+    overflow: hidden;
+    pointer-events: auto;
+  }
+
+  body.control-window #root {
+    height: 100vh;
+  }
+
+  body.overlay-window #root {
+    height: 100%;
+  }
 }
 
 @layer components {
@@ -228,6 +246,38 @@
     background-size: 400% 100%;
     animation: hx-shimmer 1.4s ease infinite;
     border-radius: 6px;
+  }
+
+  .control-root {
+    min-height: 100vh;
+    background: var(--hx-bg);
+    color: var(--hx-text);
+  }
+
+  .control-home {
+    display: flex;
+    min-height: 100vh;
+    flex-direction: column;
+    gap: 10px;
+    padding: 12px;
+    box-sizing: border-box;
+  }
+
+  .control-status-panel,
+  .control-settings-panel {
+    position: relative;
+    width: auto;
+    pointer-events: auto;
+  }
+
+  .control-status-panel {
+    padding: 12px;
+  }
+
+  .control-settings-panel {
+    flex: 1;
+    min-height: 0;
+    overflow: auto;
   }
 
   .hx-scroll::-webkit-scrollbar {

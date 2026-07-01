@@ -43,7 +43,7 @@ pub struct Settings {
     /// Swap the two spells (D/F order) on import.
     #[serde(default)]
     pub spells_flipped: bool,
-    /// Keep the champ-select window mode after champ select ends.
+    /// Legacy setting kept for persisted-settings compatibility.
     #[serde(default)]
     pub pinned: bool,
     #[serde(default)]
@@ -141,14 +141,12 @@ pub struct Engine {
     /// A panel drag is in progress: hold the window interactive even when the
     /// cursor outruns the (briefly stale) reported rects.
     pub drag_active: AtomicBool,
-    /// Ctrl+Shift+O emergency override: whole window interactive.
+    /// Command-forced override: whole overlay window interactive.
     pub forced_interactive: AtomicBool,
     /// Interactivity last applied to the window, so the watcher only touches
     /// the window style on transitions.
     pub interactive_applied: AtomicBool,
-    /// Window mode last applied by `apply_window_mode`: true while the window
-    /// is the panel-sized champ-select window. The monitor-cycle hotkey uses
-    /// it to re-apply the right bounds on the target monitor.
+    /// Control-window mode last applied by `apply_window_mode`.
     pub window_champselect: AtomicBool,
 }
 
@@ -227,10 +225,12 @@ pub fn emit_champ_select(app: &AppHandle, engine: &Engine, ev: ChampSelectEvent)
     *last = Some(ev);
 }
 
-/// Logical size/offset of the champ-select panel window (HEXGATE spec:
-/// 1000×860 at x=48, vertically centered on the current monitor).
-const CHAMP_SELECT_SIZE: (f64, f64) = (1000.0, 860.0);
-const CHAMP_SELECT_X: f64 = 48.0;
+/// Control window sizes. Compact is the startup/status view; pick is the
+/// normal-window version of the old HEXGATE champ-select panel.
+const CONTROL_COMPACT_SIZE: (f64, f64) = (520.0, 220.0);
+const CONTROL_PICK_SIZE: (f64, f64) = (1040.0, 860.0);
+const CONTROL_MARGIN: f64 = 16.0;
+const CONTROL_PICK_X: f64 = 48.0;
 
 /// The screen region the overlay window may occupy on `monitor`.
 ///
@@ -248,16 +248,8 @@ pub fn overlay_bounds(monitor: &Monitor) -> (PhysicalPosition<i32>, PhysicalSize
     }
 }
 
-/// Switch the overlay window between its two modes and tell the frontend.
-///
-/// * `champselect = true`: a panel-sized champ-select window.
-/// * `champselect = false`: the normal overlay — full current monitor.
-///
-/// Both modes start click-through; `hittest::cursor_watcher` re-enables mouse
-/// input whenever the cursor is over a reported hit region (panel headers,
-/// the champ-select panel body). Ctrl+Shift+O remains as an emergency
-/// whole-window override and is cleared on every mode switch.
-pub fn apply_window_mode(app: &AppHandle, champselect: bool) {
+/// Keep the transparent overlay window covering its current monitor.
+pub fn apply_overlay_bounds(app: &AppHandle) {
     let Some(win) = app.get_webview_window("main") else {
         return;
     };
@@ -269,55 +261,100 @@ pub fn apply_window_mode(app: &AppHandle, champselect: bool) {
     let Some(monitor) = monitor else {
         return;
     };
+    let (pos, size) = overlay_bounds(&monitor);
+    let _ = win.set_position(pos);
+    let _ = win.set_size(size);
+    let _ = win.set_always_on_top(true);
+    let _ = win.set_ignore_cursor_events(true);
+}
 
-    let (area_pos, area_size) = overlay_bounds(&monitor);
-    if champselect {
-        // Monitor bounds are physical pixels; the panel is specced in logical
-        // px, so convert via the monitor's scale factor.
-        let scale = monitor.scale_factor();
-        let origin = area_pos.to_logical::<f64>(scale);
-        let bounds = area_size.to_logical::<f64>(scale);
-        let (w, h) = CHAMP_SELECT_SIZE;
-        let stored_position = app
-            .try_state::<Arc<Engine>>()
-            .and_then(|engine| engine.ui_layout().champselect_window);
-        let _ = win.set_size(LogicalSize::new(w, h));
-        let position = if let Some(pos) = stored_position {
-            LogicalPosition::new(
-                pos.x.clamp(origin.x, origin.x + (bounds.width - w).max(0.0)),
-                pos.y.clamp(origin.y, origin.y + (bounds.height - h).max(0.0)),
-            )
-        } else {
-            LogicalPosition::new(
-                origin.x + CHAMP_SELECT_X,
-                origin.y + ((bounds.height - h) / 2.0).max(0.0),
-            )
-        };
-        let _ = win.set_position(position);
-        let pinned = app
-            .try_state::<Arc<Engine>>()
-            .map(|engine| engine.settings().pinned)
-            .unwrap_or(false);
-        let _ = win.set_always_on_top(pinned);
+fn control_position(monitor: &Monitor, pick: bool) -> (LogicalPosition<f64>, LogicalSize<f64>) {
+    let scale = monitor.scale_factor();
+    let area = monitor.work_area();
+    let origin = area.position.to_logical::<f64>(scale);
+    let bounds = area.size.to_logical::<f64>(scale);
+    let (w, h) = if pick {
+        CONTROL_PICK_SIZE
     } else {
-        let _ = win.set_position(area_pos);
-        let _ = win.set_size(area_size);
-        let _ = win.set_always_on_top(true);
+        CONTROL_COMPACT_SIZE
+    };
+    let max_x = origin.x + (bounds.width - w).max(0.0);
+    let max_y = origin.y + (bounds.height - h).max(0.0);
+    let x = if pick {
+        origin.x + CONTROL_PICK_X
+    } else {
+        origin.x + CONTROL_MARGIN
     }
+    .clamp(origin.x, max_x);
+    let y = if pick {
+        origin.y + ((bounds.height - h) / 2.0).max(0.0)
+    } else {
+        origin.y + (bounds.height - h - CONTROL_MARGIN).max(0.0)
+    }
+    .clamp(origin.y, max_y);
+    (LogicalPosition::new(x, y), LogicalSize::new(w, h))
+}
+
+/// Place the normal control window in either compact status mode or expanded
+/// pick mode. Automatic layout does not force focus, so game input is not
+/// stolen during phase transitions.
+pub fn apply_control_layout(app: &AppHandle, pick: bool) {
+    let Some(win) = app.get_webview_window("control") else {
+        return;
+    };
+    let monitor = win
+        .current_monitor()
+        .ok()
+        .flatten()
+        .or_else(|| win.primary_monitor().ok().flatten());
+    let Some(monitor) = monitor else {
+        return;
+    };
+    let (pos, size) = control_position(&monitor, pick);
+    let _ = win.set_size(size);
+    let _ = win.set_position(pos);
+    let _ = win.show();
+}
+
+/// Show the normal control window on demand. Unlike automatic phase changes,
+/// the explicit hotkey brings it to the front and focuses it.
+pub fn show_control_window(app: &AppHandle) {
+    let pick = app
+        .try_state::<Arc<Engine>>()
+        .map(|engine| engine.window_champselect.load(Ordering::SeqCst))
+        .unwrap_or(false);
+    apply_control_layout(app, pick);
+    if let Some(win) = app.get_webview_window("control") {
+        let _ = win.unminimize();
+        let _ = win.show();
+        let _ = win.set_focus();
+    }
+}
+
+/// Switch app presentation between compact control and pick control modes.
+/// The transparent overlay itself always remains full-monitor and click-through.
+pub fn apply_window_mode(app: &AppHandle, champselect: bool) {
+    apply_overlay_bounds(app);
+    apply_control_layout(app, champselect);
 
     // Reset to click-through and clear the emergency override, keeping the
     // watcher's applied-state cache in sync with the actual window style.
     if let Some(engine) = app.try_state::<Arc<Engine>>() {
         engine.forced_interactive.store(false, Ordering::SeqCst);
         engine.interactive_applied.store(false, Ordering::SeqCst);
-        engine.window_champselect.store(champselect, Ordering::SeqCst);
+        engine
+            .window_champselect
+            .store(champselect, Ordering::SeqCst);
     }
-    let _ = win.set_ignore_cursor_events(true);
     let _ = app.emit("interactive", false);
 
     let _ = app.emit(
         "window-mode",
-        if champselect { "champselect" } else { "overlay" },
+        if champselect {
+            "champselect"
+        } else {
+            "overlay"
+        },
     );
 }
 
@@ -384,10 +421,21 @@ pub async fn rune_processor(app: AppHandle, engine: Arc<Engine>, mut rx: Unbound
 /// detection. Apex tiers have no real division ("NA" → 0).
 fn rank_value(tier: &str, division: &str) -> i32 {
     const TIERS: [&str; 10] = [
-        "IRON", "BRONZE", "SILVER", "GOLD", "PLATINUM", "EMERALD", "DIAMOND", "MASTER",
-        "GRANDMASTER", "CHALLENGER",
+        "IRON",
+        "BRONZE",
+        "SILVER",
+        "GOLD",
+        "PLATINUM",
+        "EMERALD",
+        "DIAMOND",
+        "MASTER",
+        "GRANDMASTER",
+        "CHALLENGER",
     ];
-    let t = TIERS.iter().position(|&t| t == tier).map_or(-1, |i| i as i32);
+    let t = TIERS
+        .iter()
+        .position(|&t| t == tier)
+        .map_or(-1, |i| i as i32);
     let d = match division {
         "IV" => 0,
         "III" => 1,
@@ -423,17 +471,15 @@ pub async fn poller(app: AppHandle, engine: Arc<Engine>, tx: UnboundedSender<Val
         let client_up = phase.is_ok();
         let phase = phase.unwrap_or(Phase::None);
 
-        // Window-mode transitions: the panel window appears with champ select
-        // and gives the screen back when it ends (unless pinned). Leaving also
-        // closes the HEXGATE panel — the WebSocket has no "session gone"
-        // signal we consume, so the poller owns the `active: false` sentinel.
+        // Window-mode transitions: the normal control window expands for champ
+        // select and returns to compact mode when it ends. Leaving also closes
+        // the HEXGATE panel — the WebSocket has no "session gone" signal we
+        // consume, so the poller owns the `active: false` sentinel.
         if phase == Phase::ChampSelect && prev_phase != Phase::ChampSelect {
             apply_window_mode(&app, true);
         } else if phase != Phase::ChampSelect && prev_phase == Phase::ChampSelect {
             emit_champ_select(&app, &engine, ChampSelectEvent::default());
-            if !engine.settings().pinned {
-                apply_window_mode(&app, false);
-            }
+            apply_window_mode(&app, false);
         }
         let game_just_ended = prev_phase == Phase::InProgress && phase != Phase::InProgress;
         prev_phase = phase;
