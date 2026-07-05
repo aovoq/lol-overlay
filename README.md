@@ -1,71 +1,77 @@
 # lol-overlay
 
-軽量 League of Legends オーバーレイ。Tauri (Rust + WebView) 製。
-ゲームプロセスへのインジェクション無し・公式ローカル API のみで動作する。
+軽量 League of Legends オーバーレイ。Tauri (Rust + WebView) と SolidJS で動く。
+ゲームプロセスへの注入はせず、Riot のローカル API と公開 CDN データだけを使う。
 
-## 何ができるか
+## 機能
 
-- **試合中のアイテム推奨** — Live Client Data API で敵構成を読み、敵のダメージ
-  タイプ(AD / AP / タンク)に応じた防具などを透明オーバーレイに表示。
-- **チャンピオン選択でのルーン自動インポート** — LCU API で自分のピックを検知し、
-  推奨ルーンページをクライアントへ書き込む。
+- 試合中のアイテム / スキル順推薦
+- チャンピオン選択中の tier list、counter、rune build 表示
+- LCU への rune page / summoner spell インポート
+- Borderless ゲーム上に重ねる透明・最前面・クリック透過 overlay
+- DeepLoL / u.gg のデータソース切り替え
+- macOS でも UI を触れる debug mock mode (`Ctrl+Shift+D`)
 
-## アーキテクチャ
+## 構成
 
+```text
+src/                         SolidJS frontend
+  components/                 overlay / OPENLOL / settings UI
+  state/                      Tauri event listeners and caches
+  lib/                        drag, hit-region, OPENLOL helpers
+src-tauri/src/                Tauri app shell
+  engine.rs                   shared state, poller, rune processor, window modes
+  commands.rs                 frontend invoke commands
+  events.rs                   camelCase event payloads
+  hittest.rs                  data-hit based click-through control
+  hotkeys.rs                  global shortcuts
+  mock.rs                     local synthetic scenarios
+crates/
+  lcu/                        League Client Update API and WebSocket helpers
+  live-client/                Live Client Data API client
+  ddragon/                    Data Dragon static maps
+  provider/                   BuildProvider trait, proxy, shared helpers
+  provider-deeplol/           DeepLoL provider
+  provider-ugg/               u.gg provider
+  types/                      shared serde payloads mirrored by src/types.ts
 ```
-src-tauri/src/
-  live_client.rs   Live Client Data API (127.0.0.1:2999) — 試合中の状態を読む
-  lcu.rs           LCU access (irelia crate) — phase / champ select / runes / WS
-  provider/        データ源の抽象 (BuildProvider trait)
-    mod.rs           trait + 共通型 + 脅威分類ヒューリスティック
-    hardcoded.rs     スタブ実装(後で実データに差し替える）
-  lib.rs           エンジン:WS + rune processor + poller + commands/events
-src/
-  main.ts          イベント購読 → オーバーレイ描画
-```
 
-LCU は [`irelia`](https://github.com/AlsoSylv/Irelia) クレート経由で、lockfile の
-探索・認証・自己署名証明書を任せている。オーケストレーションは3要素:
+Backend serde payloads use `camelCase`; keep `src/types.ts` in sync when event or
+command payloads change. `reqwest` intentionally uses native TLS because Riot's
+Live Client API does not close TLS in a rustls-friendly way.
 
-- **WebSocket** — champ-select セッション更新を購読し、チャンネルへ流す(即時)。
-- **rune processor** — チャンネルを drain し、ピック変化時にルーンをインポート。
-- **poller** — 2秒間隔で phase / in-game 状態を取得して UI に反映(かつ champ
-  select 中はセッションを REST で取り直してチャンネルへ流す取りこぼし対策)。
-
-`phase` / `recommendations` / `rune-imported` / `log` イベントをフロントが描画する。
-in-game(アイテム推奨)は Live Client Data API に WebSocket が無いため polling。
-
-## オーバーレイの仕組み(重要)
-
-LoL を **Borderless(ボーダーレス)モード**で起動すること。本アプリは透明・
-最前面・クリックスルーの OS ウィンドウをゲームに重ねるだけで、ゲームには一切
-注入しない。排他的フルスクリーンではこの方式ではオーバーレイが見えない。
-
-## 開発・ビルド
-
-ターゲットは **Windows**。Mac では UI 開発はできるが、LCU / Live Client API は
-LoL クライアントが必要なため実機検証は Windows で行う。
+## 開発
 
 ```bash
 pnpm install
-pnpm tauri dev      # 開発
-pnpm tauri build    # 配布ビルド (Windows 上で実行)
+pnpm tauri dev      # Vite dev server + Tauri shell
+pnpm dev            # frontend only
+pnpm tauri build    # distributable build, run on Windows
 ```
 
-lockfile の探索・認証は `irelia` が自動で行うため、環境変数の設定は不要。
+通常の検証:
 
-## データ源の差し替え(次のステップ)
+```bash
+pnpm check
+CI=true pnpm check
+cargo test --workspace --lib
+cargo test -p overlay-provider-deeplol --lib -- --ignored --nocapture
+cargo test -p overlay-provider-ugg --lib -- --ignored --nocapture
+```
 
-`provider/hardcoded.rs` はプレースホルダ。実データを使うには
-`BuildProvider` を実装した型を作り、`lib.rs` の `run()` 内
-`provider: Arc::new(HardcodedProvider)` を差し替えるだけ。候補:
+## 実行時メモ
 
-- Riot **Match-V5 API** から自前で勝率/ピック率を集計した DB
-- 公開データセット / スクレイピング
-- AI モデルによる推奨
+- ターゲットは Windows。LCU / Live Client API / click-through の実機確認は
+  Windows + League client が必要。
+- LoL は Borderless mode で起動する。排他的 fullscreen には重ねられない。
+- LCU lockfile の探索と認証は `irelia` が行うため、通常は環境変数不要。
+- 外部データは Data Dragon / DeepLoL / u.gg から取得し、短い timeout と retry、
+  TTL 付き cache を通す。
+- `reference-repo.local/` は gitignore 済みのローカル参照用ディレクトリ。容量が
+  大きい場合は内部の Rust `target/` に対して `cargo clean` すれば回収できる。
 
-## ⚠️ Riot ToS について
+## Riot ToS
 
-- 公式 API の読み取りとボーダーレス重ね描画は ToS 準拠(メモリ読取・注入はしない)。
-- ただし **ルーン書き込み等 LCU を使うアプリは公開前に Riot への登録・審査が必須**。
-  Developer Portal で申請すること: <https://developer.riotgames.com/>
+公式 API の読み取りと Borderless window の重ね描画はメモリ読取や注入を伴わない。
+ただし rune page 書き込みなど LCU を使うアプリを公開する前には Riot Developer
+Portal での登録・審査が必要。
