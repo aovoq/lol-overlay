@@ -27,14 +27,18 @@ function SkillCard(props: { skillId: number; championImageId: string }) {
   const [hasIcon, setHasIcon] = createSignal(false);
   const [abilityName, setAbilityName] = createSignal("");
   let imgEl!: HTMLImageElement;
+  let generation = 0;
 
   createEffect(() => {
     assetsReady();
     const id = props.skillId;
     const champ = props.championImageId;
+    const current = ++generation;
     setHasIcon(false);
+    setAbilityName("");
     imgEl.style.visibility = "hidden";
     void getAbility(champ, id).then((ability) => {
+      if (current !== generation) return;
       if (!ability) return;
       imgEl.style.visibility = "";
       setIcon(imgEl, ability.icon);

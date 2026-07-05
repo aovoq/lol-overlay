@@ -8,6 +8,7 @@
     "dev": "vite",
     "build": "pnpm typecheck && vite build",
     "preview": "vite preview",
+    "test:frontend": "vitest run",
     "typecheck": "tsc --noEmit",
     "format": "pnpm format:frontend && pnpm format:rust && pnpm format:toml",
     "format:check": "pnpm format:frontend:check && pnpm format:rust:check && pnpm format:toml:check",
@@ -20,7 +21,7 @@
     "lint": "pnpm lint:frontend && pnpm lint:rust",
     "lint:frontend": "biome lint .",
     "lint:rust": "cargo clippy --workspace --all-targets -- -D warnings",
-    "check": "pnpm format:check && pnpm lint && pnpm typecheck && cargo test --workspace --lib",
+    "check": "pnpm format:check && pnpm lint && pnpm typecheck && pnpm test:frontend && cargo test --workspace --lib",
     "tauri": "tauri"
   },
   "dependencies": {
@@ -37,6 +38,7 @@
     "tailwindcss": "^4.3.0",
     "typescript": "~5.6.2",
     "vite": "^6.0.3",
-    "vite-plugin-solid": "^2.11.12"
+    "vite-plugin-solid": "^2.11.12",
+    "vitest": "^4.1.9"
   }
 }

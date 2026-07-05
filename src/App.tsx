@@ -6,9 +6,13 @@ import { RuneBanner } from "./components/RuneBanner";
 import { ScrollArea } from "./components/ScrollArea";
 import { SettingsForm } from "./components/SettingsPanel";
 import { StatusChip } from "./components/StatusChip";
-import { champSelect, windowMode } from "./state/backend";
+import { champSelect, interactive, windowMode } from "./state/backend";
 
 export function OverlayApp() {
+  createEffect(() => {
+    document.body.classList.toggle("interactive", interactive());
+  });
+
   return (
     <>
       <LpBanner />
@@ -26,6 +30,7 @@ export function ControlApp() {
   createEffect(() => {
     document.body.classList.toggle("champselect", pickActive());
     document.body.classList.toggle("ingame-window", mode() === "ingame");
+    document.body.classList.toggle("interactive", interactive());
   });
 
   return (

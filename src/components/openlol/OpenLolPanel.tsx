@@ -1,4 +1,4 @@
-import { createMemo, onMount, Show } from "solid-js";
+import { createMemo, onCleanup, onMount, Show } from "solid-js";
 import { initWindowDrag } from "../../lib/drag";
 import { APP_NAME, phaseChipLabel } from "../../lib/openlol";
 import { champSelect, phase } from "../../state/backend";
@@ -22,7 +22,8 @@ export function OpenLolPanel() {
 
   onMount(() => {
     const header = document.querySelector<HTMLElement>(".openlol-header");
-    initWindowDrag(header ?? undefined);
+    const cleanup = initWindowDrag(header ?? undefined);
+    onCleanup(cleanup);
   });
 
   return (

@@ -58,15 +58,19 @@ export {
   windowMode,
 };
 
-listen<PhaseEvent>("phase", (e) => setPhase(e.payload));
-listen<RecommendationsEvent>("recommendations", (e) => setRecommendations(e.payload));
-listen<RuneImportedEvent>("rune-imported", (e) => setRuneImported(e.payload));
-listen<SummonerEvent | null>("summoner", (e) => setSummoner(e.payload));
-listen<RecentGame[]>("match-history", (e) => setMatchHistory(e.payload));
-listen<LpChangeEvent>("lp-change", (e) => setLpChange(e.payload));
-listen<LogEvent>("log", (e) => console.log(`[${e.payload.level}] ${e.payload.message}`));
-listen<WindowMode>("window-mode", (e) => setWindowMode(e.payload));
-listen<boolean>("interactive", (e) => setInteractive(e.payload));
+listen<PhaseEvent>("phase", (e) => setPhase(e.payload)).catch(() => {});
+listen<RecommendationsEvent>("recommendations", (e) => setRecommendations(e.payload)).catch(
+  () => {},
+);
+listen<RuneImportedEvent>("rune-imported", (e) => setRuneImported(e.payload)).catch(() => {});
+listen<SummonerEvent | null>("summoner", (e) => setSummoner(e.payload)).catch(() => {});
+listen<RecentGame[]>("match-history", (e) => setMatchHistory(e.payload)).catch(() => {});
+listen<LpChangeEvent>("lp-change", (e) => setLpChange(e.payload)).catch(() => {});
+listen<LogEvent>("log", (e) => console.log(`[${e.payload.level}] ${e.payload.message}`)).catch(
+  () => {},
+);
+listen<WindowMode>("window-mode", (e) => setWindowMode(e.payload)).catch(() => {});
+listen<boolean>("interactive", (e) => setInteractive(e.payload)).catch(() => {});
 
 listen<ChampSelectEvent>("champ-select", (e) => {
   const payload = e.payload;
@@ -83,4 +87,4 @@ listen<ChampSelectEvent>("champ-select", (e) => {
 
   if (!vsEnemyId() && activeTab() === "vs") setActiveTab("best");
   if (!payload.active) setHoverChampId(0);
-});
+}).catch(() => {});

@@ -4,10 +4,11 @@ import type { JSX } from "solid-js";
 export function ScrollArea(props: {
   class?: string;
   contentClass?: string;
+  hit?: boolean;
   children: JSX.Element;
 }) {
   return (
-    <BaseScrollArea.Root class={`hx-scroll-root ${props.class ?? ""}`}>
+    <BaseScrollArea.Root class={`hx-scroll-root ${props.class ?? ""}`} data-hit={props.hit}>
       <BaseScrollArea.Viewport class="hx-scroll-viewport">
         <BaseScrollArea.Content class={props.contentClass}>{props.children}</BaseScrollArea.Content>
       </BaseScrollArea.Viewport>

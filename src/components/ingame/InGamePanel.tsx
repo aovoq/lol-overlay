@@ -1,4 +1,4 @@
-import { createEffect, createSignal, For, onMount, Show } from "solid-js";
+import { createEffect, createSignal, For, onCleanup, onMount, Show } from "solid-js";
 import { assetsReady, champIconByName, itemIconUrl } from "../../assets";
 import {
   applyPanelPosition,
@@ -33,13 +33,18 @@ function PanelBody(props: { embedded?: boolean }) {
   });
 
   onMount(() => {
-    if (!props.embedded) initPanelDrag(panelEl, headEl);
+    const cleanupDrag = props.embedded ? undefined : initPanelDrag(panelEl, headEl);
 
-    panelEl.addEventListener("transitionend", (event) => {
+    const onTransitionEnd = (event: TransitionEvent) => {
       if (props.embedded || event.target !== panelEl || event.propertyName !== "width") return;
       clampPanelToViewport(panelEl);
       saveIngamePanelPosition(panelEl);
       reportHitRegions();
+    };
+    panelEl.addEventListener("transitionend", onTransitionEnd);
+    onCleanup(() => {
+      cleanupDrag?.();
+      panelEl.removeEventListener("transitionend", onTransitionEnd);
     });
   });
 
@@ -190,7 +195,11 @@ function PanelBody(props: { embedded?: boolean }) {
                   RECOMMENDED BUILD
                 </div>
 
-                <ScrollArea class="rec-list max-h-[52vh]" contentClass="px-2 pb-2">
+                <ScrollArea
+                  class="rec-list max-h-[52vh]"
+                  contentClass="px-2 pb-2"
+                  hit={!props.embedded}
+                >
                   <ul class="list-none m-0 flex flex-col gap-[5px]">
                     <For each={e().items}>
                       {(it, i) => (

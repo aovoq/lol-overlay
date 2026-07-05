@@ -53,12 +53,15 @@ async function saveControlWindowGeometry(mode: WindowMode) {
   });
 }
 
-export function initWindowDrag(header: HTMLElement | undefined) {
-  header?.addEventListener("pointerdown", (event) => {
+export function initWindowDrag(header: HTMLElement | undefined): () => void {
+  if (!header) return () => {};
+  const onPointerDown = (event: PointerEvent) => {
     if (!shouldStartDrag(event)) return;
     event.preventDefault();
     appWindow.startDragging().catch(() => {});
-  });
+  };
+  header.addEventListener("pointerdown", onPointerDown);
+  return () => header.removeEventListener("pointerdown", onPointerDown);
 }
 
 export function initControlWindowGeometrySave(getMode: () => WindowMode) {
@@ -81,8 +84,9 @@ export function initControlWindowGeometrySave(getMode: () => WindowMode) {
     .catch(() => {});
 }
 
-export function initPanelDrag(panel: HTMLElement, handle: HTMLElement | undefined) {
-  handle?.addEventListener("pointerdown", (event) => {
+export function initPanelDrag(panel: HTMLElement, handle: HTMLElement | undefined): () => void {
+  if (!handle) return () => {};
+  const onPointerDown = (event: PointerEvent) => {
     if (!shouldStartDrag(event)) return;
     event.preventDefault();
 
@@ -124,5 +128,7 @@ export function initPanelDrag(panel: HTMLElement, handle: HTMLElement | undefine
     handle.addEventListener("pointermove", onPointerMove);
     handle.addEventListener("pointerup", stopDragging);
     handle.addEventListener("pointercancel", stopDragging);
-  });
+  };
+  handle.addEventListener("pointerdown", onPointerDown);
+  return () => handle.removeEventListener("pointerdown", onPointerDown);
 }

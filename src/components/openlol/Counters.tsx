@@ -4,6 +4,7 @@ import { champSelect, selectedRole, setHoverChampId } from "../../state/backend"
 import { counterCache } from "../../state/caches";
 import type { CounterEntry } from "../../types";
 import { Icon } from "../Icon";
+import { SectionError } from "./SectionError";
 
 function effectiveRole() {
   const cs = champSelect();
@@ -28,6 +29,14 @@ export function Counters() {
     if (e?.state !== "ok") return [];
     return e.value.slice(0, 8);
   });
+  const cacheKey = createMemo(() => {
+    const e = enemy();
+    return e ? `${e}|${role()}` : "";
+  });
+  const err = createMemo(() => {
+    const e = entry();
+    return e?.state === "err" ? e.error : "";
+  });
 
   return (
     <Show when={enemy()}>
@@ -40,31 +49,38 @@ export function Counters() {
             when={entry()?.state === "loading"}
             fallback={
               <Show
-                when={counters().length > 0}
-                fallback={<span class="text-hx-muted">Not enough data yet</span>}
+                when={entry()?.state !== "err"}
+                fallback={
+                  <SectionError message={err()} onRetry={() => counterCache.refetch(cacheKey())} />
+                }
               >
-                <For each={counters()}>
-                  {(c) => (
-                    <div
-                      class="w-[34px] text-center flex flex-col gap-0.5 items-center"
-                      onMouseEnter={() => setHoverChampId(c.championId)}
-                      onMouseLeave={() => setHoverChampId(0)}
-                    >
-                      <Show when={assetsReady()}>
-                        <Icon
-                          url={champIconByKey(c.championId)}
-                          class="w-8 h-8 rounded border border-hx-border object-cover"
-                          title={champName(c.championId)}
-                        />
-                      </Show>
-                      <span
-                        class={`text-[10px] ${c.winRate > 0.51 ? "text-hx-up" : "text-hx-muted"}`}
+                <Show
+                  when={counters().length > 0}
+                  fallback={<span class="text-hx-muted">Not enough data yet</span>}
+                >
+                  <For each={counters()}>
+                    {(c) => (
+                      <div
+                        class="w-[34px] text-center flex flex-col gap-0.5 items-center"
+                        onMouseEnter={() => setHoverChampId(c.championId)}
+                        onMouseLeave={() => setHoverChampId(0)}
                       >
-                        {fmtPct(c.winRate)}
-                      </span>
-                    </div>
-                  )}
-                </For>
+                        <Show when={assetsReady()}>
+                          <Icon
+                            url={champIconByKey(c.championId)}
+                            class="w-8 h-8 rounded border border-hx-border object-cover"
+                            title={champName(c.championId)}
+                          />
+                        </Show>
+                        <span
+                          class={`text-[10px] ${c.winRate > 0.51 ? "text-hx-up" : "text-hx-muted"}`}
+                        >
+                          {fmtPct(c.winRate)}
+                        </span>
+                      </div>
+                    )}
+                  </For>
+                </Show>
               </Show>
             }
           >

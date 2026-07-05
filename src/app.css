@@ -283,18 +283,6 @@ body.interactive::after {
   border: 2px solid var(--hx-overlay-ring);
 }
 
-body.champselect .status-chip,
-body.champselect .ingame-panel {
-  display: none !important;
-}
-
-body.champselect .settings-panel {
-  bottom: auto;
-  top: 56px;
-  right: 10px;
-  z-index: 10;
-}
-
 body.champselect.interactive::after {
   display: none;
 }
