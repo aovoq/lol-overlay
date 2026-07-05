@@ -5,12 +5,11 @@
 
 use std::sync::Arc;
 
-use tauri::{App, Emitter, Manager};
+use tauri::{App, Manager};
 use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut, ShortcutState};
 
 use crate::engine::{Engine, MockStage};
-use crate::events::{log, ChampSelectEvent, PhaseEvent};
-use crate::mock::{mock_champ_select_loop, mock_loop};
+use crate::events::log;
 
 /// Register the global shortcuts and their handler. Registration is best-effort:
 /// a conflicting hotkey is logged rather than crashing the app.
@@ -62,6 +61,10 @@ pub fn setup(app: &App, engine: Arc<Engine>) -> tauri::Result<()> {
                         }
                     }
                 } else if shortcut == &mock_h {
+                    if !engine_hk.settings.lock().developer_mode {
+                        log(app, "info", "mock hotkey ignored: developer mode is off");
+                        return;
+                    }
                     // Cycle the mock scenario; each loop watches the stage and
                     // cleans up after itself (control mode, panel, UI reset).
                     let next = match engine_hk.mock_stage() {
@@ -69,39 +72,7 @@ pub fn setup(app: &App, engine: Arc<Engine>) -> tauri::Result<()> {
                         MockStage::ChampSelect => MockStage::InGame,
                         MockStage::InGame => MockStage::Off,
                     };
-                    let generation = engine_hk.set_mock_stage(next);
-                    log(app, "info", format!("mock stage: {next:?}"));
-                    match next {
-                        MockStage::ChampSelect => {
-                            tauri::async_runtime::spawn(mock_champ_select_loop(
-                                app.clone(),
-                                engine_hk.clone(),
-                                generation,
-                            ));
-                        }
-                        MockStage::InGame => {
-                            tauri::async_runtime::spawn(mock_loop(
-                                app.clone(),
-                                engine_hk.clone(),
-                                generation,
-                            ));
-                        }
-                        MockStage::Off => {
-                            let _ = app.emit("champ-select", ChampSelectEvent::default());
-                            let _ = app.emit(
-                                "phase",
-                                PhaseEvent {
-                                    phase: "None".into(),
-                                    client_up: false,
-                                    in_game: false,
-                                },
-                            );
-                            crate::engine::apply_window_mode(
-                                app,
-                                crate::engine::WindowMode::Overlay,
-                            );
-                        }
-                    }
+                    crate::mock::apply_stage(app, &engine_hk, next);
                 }
             })
             .build(),

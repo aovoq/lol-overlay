@@ -11,7 +11,7 @@ use std::sync::Arc;
 use tauri::{AppHandle, Emitter, State};
 
 use crate::engine::{
-    self, Engine, PanelPosition, PresentationMode, Settings, UiLayout, WindowGeometry,
+    self, Engine, MockStage, PanelPosition, PresentationMode, Settings, UiLayout, WindowGeometry,
 };
 use crate::error;
 use crate::events::{log, RuneImportedEvent};
@@ -284,6 +284,48 @@ pub async fn import_build(
             page_name: build.page_name,
         },
     );
+    Ok(())
+}
+
+/// Toggle developer mode (persisted). Turning it off also stops any running
+/// mock scenario so the overlay can't get stuck in synthetic state.
+#[tauri::command]
+pub fn set_developer_mode(
+    app: AppHandle,
+    engine: State<'_, Arc<Engine>>,
+    enabled: bool,
+) -> error::Result<()> {
+    {
+        engine.settings.lock().developer_mode = enabled;
+    }
+    engine.persist()?;
+    if !enabled && engine.mock_stage() != MockStage::Off {
+        crate::mock::apply_stage(&app, engine.inner(), MockStage::Off);
+    }
+    Ok(())
+}
+
+#[tauri::command]
+pub fn get_mock_stage(engine: State<'_, Arc<Engine>>) -> String {
+    engine.mock_stage().as_str().to_string()
+}
+
+/// Jump the mock scenario directly to `stage` (debug panel). Requires
+/// developer mode so a stray invoke can't fake game state.
+#[tauri::command]
+pub fn set_mock_stage(
+    app: AppHandle,
+    engine: State<'_, Arc<Engine>>,
+    stage: String,
+) -> error::Result<()> {
+    if !engine.settings.lock().developer_mode {
+        return Err(error::Error::Other(
+            "mock mode requires developer mode".into(),
+        ));
+    }
+    let parsed = MockStage::parse(&stage)
+        .ok_or_else(|| error::Error::Other(format!("unknown mock stage: {stage}")))?;
+    crate::mock::apply_stage(&app, engine.inner(), parsed);
     Ok(())
 }
 

@@ -4,10 +4,12 @@ import {
   autoImport,
   dataSource,
   dataSources,
+  developerMode,
   importSpells,
   presentationMode,
   setAutoImport,
   setDataSource,
+  setDeveloperMode,
   setImportSpells,
   setPresentationMode,
   setThemeMode,
@@ -102,6 +104,15 @@ export function SettingsForm() {
           </select>
         </label>
       </Show>
+      <label class="flex items-center gap-2 cursor-pointer text-hx-text">
+        <input
+          type="checkbox"
+          checked={developerMode()}
+          onChange={(e) => setDeveloperMode(e.currentTarget.checked)}
+          class="accent-hx-gold"
+        />
+        <span>開発者モード</span>
+      </label>
       <div class="text-[11px] text-hx-muted">
         Ctrl+Shift+O でこのウィンドウを表示 · Ctrl+Shift+M でオーバーレイ移動
       </div>

@@ -1,4 +1,5 @@
 import { createEffect, Show } from "solid-js";
+import { DebugPanel } from "./components/DebugPanel";
 import { InGamePanel } from "./components/ingame/InGamePanel";
 import { LpBanner } from "./components/LpBanner";
 import { OpenLolPanel } from "./components/openlol/OpenLolPanel";
@@ -7,6 +8,7 @@ import { ScrollArea } from "./components/ScrollArea";
 import { SettingsForm } from "./components/SettingsPanel";
 import { StatusChip } from "./components/StatusChip";
 import { champSelect, interactive, windowMode } from "./state/backend";
+import { developerMode } from "./state/settings";
 
 export function OverlayApp() {
   createEffect(() => {
@@ -51,6 +53,11 @@ export function ControlApp() {
           <section class="panel control-settings-panel">
             <ScrollArea class="h-full">
               <SettingsForm />
+              <Show when={developerMode()}>
+                <div class="mt-3">
+                  <DebugPanel />
+                </div>
+              </Show>
             </ScrollArea>
           </section>
         </div>

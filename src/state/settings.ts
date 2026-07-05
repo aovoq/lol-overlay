@@ -25,6 +25,7 @@ const [dataSource, setDataSourceState] = createSignal("deeplol");
 const [dataSources, setDataSources] = createSignal<string[]>(["deeplol"]);
 const [presentationMode, setPresentationModeState] = createSignal<PresentationMode>("overlay");
 const [themeMode, setThemeModeState] = createSignal<ThemeMode>(storedTheme());
+const [developerMode, setDeveloperModeState] = createSignal(false);
 
 applyTheme(themeMode());
 
@@ -32,6 +33,7 @@ export {
   autoImport,
   dataSource,
   dataSources,
+  developerMode,
   importSpells,
   presentationMode,
   setAutoImport,
@@ -54,6 +56,11 @@ export function setDataSource(kind: string) {
   invoke("set_data_source", { kind }).catch(() => {});
 }
 
+export function setDeveloperMode(enabled: boolean) {
+  setDeveloperModeState(enabled);
+  invoke("set_developer_mode", { enabled }).catch(() => {});
+}
+
 export function setPresentationMode(mode: PresentationMode) {
   setPresentationModeState(mode);
   invoke("set_presentation_mode", { mode }).catch(() => {});
@@ -71,6 +78,7 @@ export function applySettings(s: Partial<Settings>) {
   if (s.spellsFlipped !== undefined) setSpellsFlippedState(s.spellsFlipped);
   if (s.dataSource !== undefined) setDataSourceState(s.dataSource);
   if (s.presentationMode !== undefined) setPresentationModeState(s.presentationMode);
+  if (s.developerMode !== undefined) setDeveloperModeState(s.developerMode);
 }
 
 invoke<Settings>("get_settings")

@@ -48,6 +48,10 @@ pub struct Settings {
     pub data_source: ProviderKind,
     #[serde(default)]
     pub presentation_mode: PresentationMode,
+    /// Developer mode: shows the debug panel (mock scenarios + event log)
+    /// in the control window and unlocks the mock commands.
+    #[serde(default)]
+    pub developer_mode: bool,
 }
 
 fn default_true() -> bool {
@@ -80,6 +84,7 @@ impl Default for Settings {
             spells_flipped: false,
             data_source: ProviderKind::default(),
             presentation_mode: PresentationMode::default(),
+            developer_mode: false,
         }
     }
 }
@@ -176,6 +181,25 @@ pub enum MockStage {
     Off,
     ChampSelect,
     InGame,
+}
+
+impl MockStage {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            MockStage::Off => "off",
+            MockStage::ChampSelect => "champselect",
+            MockStage::InGame => "ingame",
+        }
+    }
+
+    pub fn parse(s: &str) -> Option<Self> {
+        match s {
+            "off" => Some(MockStage::Off),
+            "champselect" => Some(MockStage::ChampSelect),
+            "ingame" => Some(MockStage::InGame),
+            _ => None,
+        }
+    }
 }
 
 /// Shared application state, held in Tauri's managed state.

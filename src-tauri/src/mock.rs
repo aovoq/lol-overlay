@@ -19,6 +19,39 @@ use crate::events::{log, ChampSelectEvent, PhaseEvent, RecommendationsEvent, Run
 use overlay_provider::{classify_threats, BuildProvider};
 use overlay_types::{EnemyChampion, GameSnapshot};
 
+/// Switch the mock scenario to `next` and spawn/stop the matching loop.
+/// Shared by the Ctrl+Shift+D hotkey (cycling) and the debug-panel command
+/// (direct jump). Emits `mock-stage` so the panel tracks hotkey changes too.
+pub fn apply_stage(app: &AppHandle, engine: &Arc<Engine>, next: MockStage) {
+    let generation = engine.set_mock_stage(next);
+    log(app, "info", format!("mock stage: {next:?}"));
+    let _ = app.emit("mock-stage", next.as_str());
+    match next {
+        MockStage::ChampSelect => {
+            tauri::async_runtime::spawn(mock_champ_select_loop(
+                app.clone(),
+                engine.clone(),
+                generation,
+            ));
+        }
+        MockStage::InGame => {
+            tauri::async_runtime::spawn(mock_loop(app.clone(), engine.clone(), generation));
+        }
+        MockStage::Off => {
+            let _ = app.emit("champ-select", ChampSelectEvent::default());
+            let _ = app.emit(
+                "phase",
+                PhaseEvent {
+                    phase: "None".into(),
+                    client_up: false,
+                    in_game: false,
+                },
+            );
+            engine::apply_window_mode(app, WindowMode::Overlay);
+        }
+    }
+}
+
 /// Champ-select mock: me on the top meta jungler, the runner-up revealed as
 /// the enemy jungler, real ban targets in the ban slots. The frontend then
 /// drives tier list / counters / runes through the live provider, so the

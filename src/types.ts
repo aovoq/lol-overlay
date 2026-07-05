@@ -179,6 +179,7 @@ export interface Settings {
   /** "deeplol" | "ugg" */
   dataSource?: string;
   presentationMode?: PresentationMode;
+  developerMode?: boolean;
 }
 
 export interface PanelPosition {
