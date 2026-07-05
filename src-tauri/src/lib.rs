@@ -21,9 +21,11 @@ mod mock;
 
 use std::sync::atomic::AtomicBool;
 use std::sync::{Arc, Mutex};
+use std::time::Duration;
 
 use serde_json::Value;
-use tauri::{Manager, WindowEvent};
+use tauri::{AppHandle, Manager, WindowEvent};
+use tokio::sync::mpsc::UnboundedSender;
 
 use overlay_ddragon::DdragonClient;
 use overlay_provider::{ProviderKind, ProviderProxy};
@@ -87,11 +89,10 @@ pub fn run() {
 
             // Champ-select WebSocket → channel → rune processor (event-driven);
             // the poller tracks phase / in-game state and feeds the same channel.
-            let (tx, rx) = tokio::sync::mpsc::unbounded_channel::<Value>();
-            overlay_lcu::subscribe_champ_select(tx.clone())
-                .expect("failed to subscribe to champ-select");
-
             let handle = app.handle().clone();
+            let (tx, rx) = tokio::sync::mpsc::unbounded_channel::<Value>();
+            spawn_champ_select_subscription(handle.clone(), tx.clone());
+
             tauri::async_runtime::spawn(engine::rune_processor(handle.clone(), engine.clone(), rx));
             tauri::async_runtime::spawn(engine::poller(handle.clone(), engine.clone(), tx));
             // Region-based click-through: headers stay clickable, the rest of
@@ -132,4 +133,48 @@ pub fn run() {
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
+}
+
+const CHAMP_SELECT_WS_RETRY_DELAY: Duration = Duration::from_secs(3);
+
+fn spawn_champ_select_subscription(handle: AppHandle, tx: UnboundedSender<Value>) {
+    tauri::async_runtime::spawn(async move {
+        let mut logged_waiting_for_client = false;
+
+        loop {
+            match overlay_lcu::subscribe_champ_select(tx.clone()).await {
+                Ok(subscription) => {
+                    logged_waiting_for_client = false;
+                    events::log(&handle, "info", "Subscribed to champ-select websocket");
+
+                    while !subscription.is_finished() {
+                        tokio::time::sleep(CHAMP_SELECT_WS_RETRY_DELAY).await;
+                    }
+
+                    events::log(
+                        &handle,
+                        "warn",
+                        format!(
+                            "Champ-select websocket stopped; retrying in {}s",
+                            CHAMP_SELECT_WS_RETRY_DELAY.as_secs()
+                        ),
+                    );
+                }
+                Err(err) => {
+                    if !logged_waiting_for_client {
+                        events::log(
+                            &handle,
+                            "warn",
+                            format!(
+                                "Failed to subscribe to champ-select websocket; retrying in {}s: {err}",
+                                CHAMP_SELECT_WS_RETRY_DELAY.as_secs()
+                            ),
+                        );
+                        logged_waiting_for_client = true;
+                    }
+                }
+            }
+            tokio::time::sleep(CHAMP_SELECT_WS_RETRY_DELAY).await;
+        }
+    });
 }

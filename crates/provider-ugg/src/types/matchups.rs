@@ -86,6 +86,9 @@ impl<'de> Deserialize<'de> for MatchupData {
                 while let Ok(data_opt) = visitor.next_element::<InnerData>() {
                     match data_opt {
                         Some(data) => {
+                            if data.2 <= 0 {
+                                continue;
+                            }
                             let wins = data.2 - data.1;
                             let winrate = f64::from(wins) / f64::from(data.2);
                             all_matchups.push(Matchup {
@@ -107,7 +110,7 @@ impl<'de> Deserialize<'de> for MatchupData {
                     .into_iter()
                     .filter(|a| f64::from(a.matches) >= (f64::from(total_matches) / 200.0))
                     .collect::<Vec<Matchup>>();
-                all_matchups.sort_by(|a, b| b.winrate.partial_cmp(&a.winrate).unwrap());
+                all_matchups.sort_by(|a, b| b.winrate.total_cmp(&a.winrate));
 
                 if all_matchups.len() >= 5 {
                     let best_matchups: Vec<Matchup> = all_matchups.clone()[..5].to_vec();
@@ -174,5 +177,28 @@ impl<'de> Deserialize<'de> for InnerData {
         }
 
         deserializer.deserialize_seq(InnerSeqVisitor)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::MatchupData;
+
+    #[test]
+    fn zero_match_rows_do_not_panic() {
+        let data: MatchupData = serde_json::from_str(
+            r#"[
+                [1, 0, 0],
+                [2, 0, 0],
+                [3, 0, 0],
+                [4, 0, 0],
+                [5, 0, 0]
+            ]"#,
+        )
+        .expect("matchup data");
+
+        assert!(data.best_matchups.is_empty());
+        assert!(data.worst_matchups.is_empty());
+        assert_eq!(data.total_matches, 0);
     }
 }

@@ -23,4 +23,4 @@ pub use rest::{
     apply_runes, apply_spells, fetch_phase, fetch_platform_id, fetch_recent_matches, fetch_session,
     fetch_summoner,
 };
-pub use ws::subscribe_champ_select;
+pub use ws::{subscribe_champ_select, ChampSelectSubscription};

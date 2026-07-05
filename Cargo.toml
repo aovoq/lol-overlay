@@ -13,7 +13,10 @@ thiserror = "2"
 async-trait = "0.1"
 tokio = { version = "1", features = ["time", "sync"] }
 # native-tls on purpose — see invariant 4.
-reqwest = { version = "0.12", default-features = false, features = ["json", "native-tls"] }
+reqwest = { version = "0.12", default-features = false, features = [
+  "json",
+  "native-tls",
+] }
 irelia = { version = "0.11", features = ["ws"] }
 # internal crates (uncomment as phases land)
 overlay-types = { path = "crates/types" }

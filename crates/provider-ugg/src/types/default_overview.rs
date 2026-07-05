@@ -273,7 +273,8 @@ impl<'de> Deserialize<'de> for Shards {
 
 #[cfg(test)]
 mod tests {
-    use super::Shards;
+    use super::{OverviewData, Shards};
+    use serde_json::json;
 
     #[test]
     fn shards_parse_string_ids() {
@@ -293,6 +294,40 @@ mod tests {
         assert_eq!(shards.matches, 123);
         assert_eq!(shards.wins, 45);
         assert_eq!(shards.shard_ids, vec![5005, 5008, 5001]);
+    }
+
+    #[test]
+    fn overview_rejects_truncated_late_items() {
+        let overview = serde_json::from_value::<OverviewData>(json!([
+            [10, 6, 8000, 8100, [8112, 8143]],
+            [10, 6, [4, 14]],
+            [10, 6, [1055, 2003]],
+            [10, 6, [6672, 3006, 3031]],
+            [10, 6, ["Q", "W", "E"], "QWE"],
+            [[[3031, 6, 10]], [[3094, 5, 10]]],
+            [6, 10],
+            false,
+            [10, 6, [5005, 5008, 5001]]
+        ]));
+
+        assert!(overview.is_err());
+    }
+
+    #[test]
+    fn overview_rejects_truncated_match_info() {
+        let overview = serde_json::from_value::<OverviewData>(json!([
+            [10, 6, 8000, 8100, [8112, 8143]],
+            [10, 6, [4, 14]],
+            [10, 6, [1055, 2003]],
+            [10, 6, [6672, 3006, 3031]],
+            [10, 6, ["Q", "W", "E"], "QWE"],
+            [[[3031, 6, 10]], [[3094, 5, 10]], [[3072, 4, 10]]],
+            [6],
+            false,
+            [10, 6, [5005, 5008, 5001]]
+        ]));
+
+        assert!(overview.is_err());
     }
 }
 
@@ -333,10 +368,17 @@ impl<'de> Deserialize<'de> for OverviewData {
                     .next_element::<Vec<Vec<LateItem>>>()?
                     .ok_or(serde::de::Error::custom("Could not parse late items."))?;
                 let match_info = visitor
-                    .next_element::<Vec<i64>>()
-                    .unwrap_or_default()
-                    .unwrap_or_default();
-                let low_sample_size = match_info.get(1).is_some_and(|games| *games < 1000);
+                    .next_element::<Vec<i64>>()?
+                    .ok_or_else(|| serde::de::Error::custom("Could not parse match info."))?;
+                let wins = match_info
+                    .first()
+                    .copied()
+                    .ok_or_else(|| serde::de::Error::custom("Could not parse wins."))?;
+                let matches = match_info
+                    .get(1)
+                    .copied()
+                    .ok_or_else(|| serde::de::Error::custom("Could not parse matches."))?;
+                let low_sample_size = matches < 1000;
 
                 // this is the original low sample size value, it's always false though, so ignore.
                 let _ = visitor.next_element::<IgnoredAny>().is_ok();
@@ -349,17 +391,30 @@ impl<'de> Deserialize<'de> for OverviewData {
                 // Don't know what this is yet
                 while let Some(IgnoredAny) = visitor.next_element()? {}
 
+                let item_4_options = late_items
+                    .first()
+                    .cloned()
+                    .ok_or_else(|| serde::de::Error::custom("Could not parse item 4 options."))?;
+                let item_5_options = late_items
+                    .get(1)
+                    .cloned()
+                    .ok_or_else(|| serde::de::Error::custom("Could not parse item 5 options."))?;
+                let item_6_options = late_items
+                    .get(2)
+                    .cloned()
+                    .ok_or_else(|| serde::de::Error::custom("Could not parse item 6 options."))?;
+
                 let overview_data = OverviewData {
                     runes,
                     summoner_spells,
                     starting_items,
                     core_items,
                     abilities,
-                    item_4_options: late_items[0].clone(),
-                    item_5_options: late_items[1].clone(),
-                    item_6_options: late_items[2].clone(),
-                    wins: match_info[0],
-                    matches: match_info[1],
+                    item_4_options,
+                    item_5_options,
+                    item_6_options,
+                    wins,
+                    matches,
                     low_sample_size,
                     shards,
                 };
