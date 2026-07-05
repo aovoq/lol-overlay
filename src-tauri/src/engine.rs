@@ -7,10 +7,11 @@
 
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, Mutex};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::Arc;
 use std::time::Duration;
 
+use parking_lot::Mutex;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use tauri::{
@@ -43,9 +44,6 @@ pub struct Settings {
     /// Swap the two spells (D/F order) on import.
     #[serde(default)]
     pub spells_flipped: bool,
-    /// Legacy setting kept for persisted-settings compatibility.
-    #[serde(default)]
-    pub pinned: bool,
     #[serde(default)]
     pub data_source: ProviderKind,
     #[serde(default)]
@@ -80,7 +78,6 @@ impl Default for Settings {
             auto_import_runes: true,
             import_spells: true,
             spells_flipped: false,
-            pinned: false,
             data_source: ProviderKind::default(),
             presentation_mode: PresentationMode::default(),
         }
@@ -122,13 +119,6 @@ pub struct PanelPosition {
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct WindowPosition {
-    pub x: f64,
-    pub y: f64,
-}
-
-#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
 pub struct WindowGeometry {
     pub x: f64,
     pub y: f64,
@@ -141,9 +131,6 @@ pub struct WindowGeometry {
 pub struct UiLayout {
     #[serde(default)]
     pub ingame_panel: Option<PanelPosition>,
-    /// Legacy champ-select position. Kept for persisted-settings compatibility.
-    #[serde(default)]
-    pub champselect_window: Option<WindowPosition>,
     #[serde(default)]
     pub control_overlay_window: Option<WindowGeometry>,
     #[serde(default)]
@@ -159,14 +146,7 @@ impl UiLayout {
     pub fn control_geometry(&self, mode: WindowMode) -> Option<WindowGeometry> {
         match mode {
             WindowMode::Overlay => self.control_overlay_window,
-            WindowMode::ChampSelect => self.control_champselect_window.or_else(|| {
-                self.champselect_window.map(|pos| WindowGeometry {
-                    x: pos.x,
-                    y: pos.y,
-                    width: CONTROL_PICK_SIZE.0,
-                    height: CONTROL_PICK_SIZE.1,
-                })
-            }),
+            WindowMode::ChampSelect => self.control_champselect_window,
             WindowMode::InGame => self.control_ingame_window,
         }
     }
@@ -211,6 +191,9 @@ pub struct Engine {
     pub mock: AtomicBool,
     /// Which mock scenario is active; `mock` stays in sync (true iff != Off).
     pub mock_stage: Mutex<MockStage>,
+    /// Incremented on every mock hotkey transition so old mock loops can exit
+    /// without emitting stale cleanup events.
+    pub mock_generation: AtomicU64,
     /// Last `champ-select` event emitted, so duplicate sessions (WS + REST
     /// fallback) don't spam the frontend with identical state.
     pub last_champ_select: Mutex<Option<ChampSelectEvent>>,
@@ -237,14 +220,14 @@ pub struct Engine {
 
 impl Engine {
     pub fn settings(&self) -> Settings {
-        self.settings.lock().unwrap().clone()
+        self.settings.lock().clone()
     }
 
     pub fn ui_layout(&self) -> UiLayout {
-        self.ui_layout.lock().unwrap().clone()
+        self.ui_layout.lock().clone()
     }
 
-    pub fn init_store(&self, path: PathBuf) -> crate::error::Result<()> {
+    pub fn init_store(&self, app: &AppHandle, path: PathBuf) -> crate::error::Result<()> {
         if let Some(parent) = path.parent() {
             fs::create_dir_all(parent)?;
         }
@@ -253,17 +236,23 @@ impl Engine {
             let bytes = fs::read(&path)?;
             let stored = serde_json::from_slice::<StoredState>(&bytes)?;
             let data_source = stored.settings.data_source;
-            *self.settings.lock().unwrap() = stored.settings;
-            *self.ui_layout.lock().unwrap() = stored.ui_layout;
-            let _ = self.provider.set_active(data_source);
+            *self.settings.lock() = stored.settings;
+            *self.ui_layout.lock() = stored.ui_layout;
+            if let Err(e) = self.provider.set_active(data_source) {
+                log(
+                    app,
+                    "warn",
+                    format!("saved data source {data_source:?} could not be restored: {e}"),
+                );
+            }
         }
 
-        *self.store_path.lock().unwrap() = Some(path);
+        *self.store_path.lock() = Some(path);
         self.persist()
     }
 
     pub fn persist(&self) -> crate::error::Result<()> {
-        let path = self.store_path.lock().unwrap().clone();
+        let path = self.store_path.lock().clone();
         let Some(path) = path else {
             return Ok(());
         };
@@ -278,14 +267,19 @@ impl Engine {
     }
 
     pub fn mock_stage(&self) -> MockStage {
-        *self.mock_stage.lock().unwrap()
+        *self.mock_stage.lock()
+    }
+
+    pub fn mock_generation(&self) -> u64 {
+        self.mock_generation.load(Ordering::SeqCst)
     }
 
     /// Advance/clear the mock scenario, keeping the plain `mock` flag in sync
     /// (the poller pause and `import_build` only care about on/off).
-    pub fn set_mock_stage(&self, stage: MockStage) {
-        *self.mock_stage.lock().unwrap() = stage;
+    pub fn set_mock_stage(&self, stage: MockStage) -> u64 {
+        *self.mock_stage.lock() = stage;
         self.mock.store(stage != MockStage::Off, Ordering::SeqCst);
+        self.mock_generation.fetch_add(1, Ordering::SeqCst) + 1
     }
 }
 
@@ -302,7 +296,7 @@ fn write_store(path: &Path, stored: &StoredState) -> crate::error::Result<()> {
 /// Emit `ev` on `champ-select` unless it equals the last emitted state — the
 /// WebSocket and the poller's REST fallback feed the same sessions twice.
 pub fn emit_champ_select(app: &AppHandle, engine: &Engine, ev: ChampSelectEvent) {
-    let mut last = engine.last_champ_select.lock().unwrap();
+    let mut last = engine.last_champ_select.lock();
     if last.as_ref() == Some(&ev) {
         return;
     }
@@ -381,6 +375,15 @@ fn clamp_control_layout(
     let area = monitor.work_area();
     let origin = area.position.to_logical::<f64>(scale);
     let bounds = area.size.to_logical::<f64>(scale);
+    clamp_control_layout_values(origin, bounds, mode, saved)
+}
+
+fn clamp_control_layout_values(
+    origin: LogicalPosition<f64>,
+    bounds: LogicalSize<f64>,
+    mode: WindowMode,
+    saved: Option<WindowGeometry>,
+) -> (LogicalPosition<f64>, LogicalSize<f64>) {
     let (default_w, default_h) = control_default_size(mode);
     let (min_w, min_h) = control_min_size(mode);
     let desired_w = saved
@@ -608,6 +611,7 @@ pub async fn poller(app: AppHandle, engine: Arc<Engine>, tx: UnboundedSender<Val
     let mut recent_games: Option<Vec<lcu::RecentGame>> = None;
     let mut history_poll_age = HISTORY_REFRESH_POLLS; // refresh on first poll
     let mut platform_resolved = false;
+    let mut live_snapshot_error_logged = false;
     loop {
         // In mock mode the UI is driven by synthetic state; don't fight it.
         if engine.mock.load(Ordering::Relaxed) {
@@ -721,24 +725,52 @@ pub async fn poller(app: AppHandle, engine: Arc<Engine>, tx: UnboundedSender<Val
 
         // In-game item recommendations (Live Client Data API — polling only).
         let mut in_game = false;
-        if let Some(snapshot) = engine.live.snapshot().await {
-            in_game = true;
-            let threats = classify_threats(&snapshot);
-            let items = engine.provider.items(&snapshot).await.unwrap_or_default();
-            let skill_order = engine.provider.skill_order(&snapshot).await.ok();
+        match engine.live.snapshot().await {
+            Ok(Some(snapshot)) => {
+                live_snapshot_error_logged = false;
+                in_game = true;
+                let threats = classify_threats(&snapshot);
+                let items = match engine.provider.items(&snapshot).await {
+                    Ok(items) => items,
+                    Err(e) => {
+                        log(
+                            &app,
+                            "warn",
+                            format!("item recommendation fetch failed: {e}"),
+                        );
+                        Vec::new()
+                    }
+                };
+                let skill_order = match engine.provider.skill_order(&snapshot).await {
+                    Ok(skill_order) => Some(skill_order),
+                    Err(e) => {
+                        log(&app, "warn", format!("skill order fetch failed: {e}"));
+                        None
+                    }
+                };
 
-            let _ = app.emit(
-                "recommendations",
-                RecommendationsEvent {
-                    self_champion: snapshot.self_champion.clone(),
-                    self_raw_name: snapshot.self_raw_name.clone(),
-                    self_position: snapshot.self_position.clone(),
-                    enemies: snapshot.enemies.clone(),
-                    threats,
-                    skill_order,
-                    items,
-                },
-            );
+                let _ = app.emit(
+                    "recommendations",
+                    RecommendationsEvent {
+                        self_champion: snapshot.self_champion.clone(),
+                        self_raw_name: snapshot.self_raw_name.clone(),
+                        self_position: snapshot.self_position.clone(),
+                        enemies: snapshot.enemies.clone(),
+                        threats,
+                        skill_order,
+                        items,
+                    },
+                );
+            }
+            Ok(None) => {
+                live_snapshot_error_logged = false;
+            }
+            Err(e) => {
+                if !live_snapshot_error_logged {
+                    log(&app, "warn", format!("live client snapshot failed: {e}"));
+                    live_snapshot_error_logged = true;
+                }
+            }
         }
         engine.phase_in_game.store(in_game, Ordering::SeqCst);
 
@@ -753,5 +785,70 @@ pub async fn poller(app: AppHandle, engine: Arc<Engine>, tx: UnboundedSender<Val
         apply_desired_window_mode(&app, &engine);
 
         tokio::time::sleep(POLL_INTERVAL).await;
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn rank_value_orders_divisions_and_tiers() {
+        assert!(rank_value("GOLD", "I") > rank_value("GOLD", "II"));
+        assert!(rank_value("PLATINUM", "IV") > rank_value("GOLD", "I"));
+        assert!(rank_value("MASTER", "NA") > rank_value("DIAMOND", "I"));
+    }
+
+    #[test]
+    fn desired_window_mode_prefers_champ_select_then_ingame_window() {
+        let window_settings = Settings {
+            presentation_mode: PresentationMode::Window,
+            ..Settings::default()
+        };
+
+        assert_eq!(
+            desired_window_mode(&window_settings, true, true),
+            WindowMode::ChampSelect
+        );
+        assert_eq!(
+            desired_window_mode(&window_settings, false, true),
+            WindowMode::InGame
+        );
+
+        assert_eq!(
+            desired_window_mode(&Settings::default(), false, true),
+            WindowMode::Overlay
+        );
+    }
+
+    #[test]
+    fn clamp_control_layout_values_bounds_saved_geometry() {
+        let (pos, size) = clamp_control_layout_values(
+            LogicalPosition::new(10.0, 20.0),
+            LogicalSize::new(500.0, 400.0),
+            WindowMode::InGame,
+            Some(WindowGeometry {
+                x: -100.0,
+                y: 900.0,
+                width: 999.0,
+                height: 10.0,
+            }),
+        );
+
+        assert_eq!(pos.x, 10.0);
+        assert_eq!(pos.y, 20.0);
+        assert_eq!(size.width, 500.0);
+        assert_eq!(size.height, CONTROL_INGAME_MIN_SIZE.1);
+    }
+
+    #[test]
+    fn settings_serde_defaults_are_compatible() {
+        let settings: Settings = serde_json::from_value(json!({})).expect("settings");
+
+        assert!(settings.auto_import_runes);
+        assert!(settings.import_spells);
+        assert_eq!(settings.data_source, ProviderKind::Deeplol);
+        assert_eq!(settings.presentation_mode, PresentationMode::Overlay);
     }
 }

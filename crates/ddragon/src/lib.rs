@@ -2,12 +2,15 @@
 
 use std::collections::HashMap;
 use std::sync::Arc;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use serde::Deserialize;
 use tokio::sync::RwLock;
 
 const DDRAGON: &str = "https://ddragon.leagueoflegends.com";
+const CACHE_TTL: Duration = Duration::from_hours(6);
+const RETRY_ATTEMPTS: usize = 2;
+const RETRY_DELAY: Duration = Duration::from_millis(250);
 
 #[derive(Debug, thiserror::Error)]
 pub enum DdragonError {
@@ -25,6 +28,7 @@ pub struct ChampionMaps {
 }
 
 struct StaticData {
+    loaded_at: Instant,
     version: String,
     champions: Arc<ChampionMaps>,
     items: Arc<HashMap<i64, String>>,
@@ -43,14 +47,20 @@ impl Default for DdragonClient {
 
 impl DdragonClient {
     pub fn new() -> Self {
+        Self::try_new().unwrap_or_else(|_| Self {
+            http: reqwest::Client::new(),
+            cache: RwLock::new(None),
+        })
+    }
+
+    pub fn try_new() -> Result<Self, DdragonError> {
         let http = reqwest::Client::builder()
             .timeout(Duration::from_secs(8))
-            .build()
-            .expect("failed to build HTTP client");
-        Self {
+            .build()?;
+        Ok(Self {
             http,
             cache: RwLock::new(None),
-        }
+        })
     }
 
     pub async fn version(&self) -> Result<String, DdragonError> {
@@ -89,7 +99,10 @@ impl DdragonClient {
     async fn ensure_loaded(&self) -> Result<(), DdragonError> {
         {
             let guard = self.cache.read().await;
-            if guard.is_some() {
+            if guard
+                .as_ref()
+                .is_some_and(|cached| cached.loaded_at.elapsed() < CACHE_TTL)
+            {
                 return Ok(());
             }
         }
@@ -99,13 +112,12 @@ impl DdragonClient {
         let items = fetch_item_map(&self.http, &version).await?;
 
         let mut guard = self.cache.write().await;
-        if guard.is_none() {
-            *guard = Some(StaticData {
-                version,
-                champions: Arc::new(champions),
-                items: Arc::new(items),
-            });
-        }
+        *guard = Some(StaticData {
+            loaded_at: Instant::now(),
+            version,
+            champions: Arc::new(champions),
+            items: Arc::new(items),
+        });
         Ok(())
     }
 }
@@ -113,7 +125,7 @@ impl DdragonClient {
 async fn fetch_ddragon_version(http: &reqwest::Client) -> Result<String, DdragonError> {
     let v: Vec<String> = http
         .get(format!("{DDRAGON}/api/versions.json"))
-        .send()
+        .send_with_retry()
         .await?
         .error_for_status()?
         .json()
@@ -133,7 +145,7 @@ async fn fetch_champion_map(
 ) -> Result<ChampionMaps, DdragonError> {
     let file: DDChampionFile = http
         .get(format!("{DDRAGON}/cdn/{ddver}/data/en_US/champion.json"))
-        .send()
+        .send_with_retry()
         .await?
         .error_for_status()?
         .json()
@@ -167,7 +179,7 @@ async fn fetch_item_map(
 ) -> Result<HashMap<i64, String>, DdragonError> {
     let file: DDItemFile = http
         .get(format!("{DDRAGON}/cdn/{ddver}/data/en_US/item.json"))
-        .send()
+        .send_with_retry()
         .await?
         .error_for_status()?
         .json()
@@ -179,6 +191,36 @@ async fn fetch_item_map(
         }
     }
     Ok(map)
+}
+
+trait RequestBuilderRetryExt {
+    async fn send_with_retry(self) -> Result<reqwest::Response, reqwest::Error>;
+}
+
+impl RequestBuilderRetryExt for reqwest::RequestBuilder {
+    async fn send_with_retry(self) -> Result<reqwest::Response, reqwest::Error> {
+        let request = self;
+        let mut attempt = 0;
+        loop {
+            let Some(next) = request.try_clone() else {
+                return request.send().await;
+            };
+            match next.send().await {
+                Ok(response) if response.status().is_server_error() && attempt < RETRY_ATTEMPTS => {
+                    attempt += 1;
+                    tokio::time::sleep(RETRY_DELAY * attempt as u32).await;
+                }
+                Err(err)
+                    if (err.is_connect() || err.is_timeout() || err.is_request())
+                        && attempt < RETRY_ATTEMPTS =>
+                {
+                    attempt += 1;
+                    tokio::time::sleep(RETRY_DELAY * attempt as u32).await;
+                }
+                result => return result,
+            }
+        }
+    }
 }
 
 /// Lowercase + strip non-alphanumerics so "Cho'Gath", "Chogath" and "chogath"

@@ -15,7 +15,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use serde::Deserialize;
-use tauri::{AppHandle, Manager, WebviewWindow};
+use tauri::{AppHandle, Manager, PhysicalPosition};
 
 use crate::engine::Engine;
 
@@ -43,6 +43,7 @@ pub fn point_in_regions(regions: &[HitRegion], x: f64, y: f64) -> bool {
 /// Cursor sample rate. At ~60 Hz the worst case race — clicking within one
 /// tick of crossing a region edge — is a single lost click, never a stray one.
 const TICK: Duration = Duration::from_millis(16);
+const GEOMETRY_REFRESH_TICKS: u8 = 60;
 
 /// Polls the cursor and flips window click-through on transitions.
 ///
@@ -52,15 +53,37 @@ const TICK: Duration = Duration::from_millis(16);
 pub async fn cursor_watcher(app: AppHandle, engine: Arc<Engine>) {
     let mut ticker = tokio::time::interval(TICK);
     ticker.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+    let mut cached_origin: Option<PhysicalPosition<i32>> = None;
+    let mut cached_scale = 1.0;
+    let mut geometry_age = GEOMETRY_REFRESH_TICKS;
+
     loop {
         ticker.tick().await;
         let Some(win) = app.get_webview_window("main") else {
             continue;
         };
 
+        if engine.window_ingame.load(Ordering::SeqCst) {
+            if engine.interactive_applied.swap(false, Ordering::SeqCst) {
+                let _ = win.set_ignore_cursor_events(true);
+            }
+            continue;
+        }
+
+        if geometry_age >= GEOMETRY_REFRESH_TICKS || cached_origin.is_none() {
+            if let (Ok(origin), Ok(scale)) = (win.outer_position(), win.scale_factor()) {
+                cached_origin = Some(origin);
+                cached_scale = scale;
+                geometry_age = 0;
+            }
+        } else {
+            geometry_age += 1;
+        }
+
         let interactive = engine.forced_interactive.load(Ordering::SeqCst)
             || engine.drag_active.load(Ordering::SeqCst)
-            || cursor_in_regions(&app, &win, &engine);
+            || cached_origin
+                .is_some_and(|origin| cursor_in_regions(&app, origin, cached_scale, &engine));
 
         if engine
             .interactive_applied
@@ -72,16 +95,17 @@ pub async fn cursor_watcher(app: AppHandle, engine: Arc<Engine>) {
     }
 }
 
-fn cursor_in_regions(app: &AppHandle, win: &WebviewWindow, engine: &Engine) -> bool {
-    let regions = engine.hit_regions.lock().unwrap().clone();
+fn cursor_in_regions(
+    app: &AppHandle,
+    origin: PhysicalPosition<i32>,
+    scale: f64,
+    engine: &Engine,
+) -> bool {
+    let regions = engine.hit_regions.lock().clone();
     if regions.is_empty() {
         return false;
     }
-    let (Ok(cursor), Ok(origin), Ok(scale)) = (
-        app.cursor_position(),
-        win.outer_position(),
-        win.scale_factor(),
-    ) else {
+    let Ok(cursor) = app.cursor_position() else {
         return false;
     };
     // Global physical cursor → window-relative logical (CSS) coordinates.

@@ -239,24 +239,32 @@ impl Display for Region {
     }
 }
 
-#[must_use]
-pub fn get_region(region: &str) -> Region {
-    for enum_region in Region::all() {
-        let region_str = enum_region.to_string().to_lowercase();
-        if region.to_lowercase() == region_str
-            || region_str.contains(&region.to_lowercase()[..region.len().saturating_sub(1)])
-        {
-            return *enum_region;
-        }
-    }
-    Region::World
-}
-
 impl FromStr for Region {
     type Err = String;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        Ok(get_region(s))
+        let region = match s.to_ascii_lowercase().as_str() {
+            "na1" | "na" => Self::NA1,
+            "euw1" | "euw" => Self::EUW1,
+            "kr" => Self::KR,
+            "eun1" | "eune" => Self::EUN1,
+            "br1" | "br" => Self::BR1,
+            "la1" | "lan" => Self::LA1,
+            "la2" | "las" => Self::LA2,
+            "oc1" | "oce" => Self::OC1,
+            "ru" => Self::RU,
+            "tr1" | "tr" => Self::TR1,
+            "jp1" | "jp" => Self::JP1,
+            "ph2" | "ph" => Self::PH2,
+            "sg2" | "sg" => Self::SG2,
+            "th2" | "th" => Self::TH2,
+            "tw2" | "tw" => Self::TW2,
+            "vn2" | "vn" => Self::VN2,
+            "me1" | "me" => Self::ME1,
+            "world" => Self::World,
+            _ => return Err(format!("unknown region: {s}")),
+        };
+        Ok(region)
     }
 }
 

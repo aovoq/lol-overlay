@@ -29,12 +29,12 @@ pub fn setup(app: &App, engine: Arc<Engine>) -> tauri::Result<()> {
                 if event.state != ShortcutState::Pressed {
                     return;
                 }
-                let Some(win) = app.get_webview_window("main") else {
-                    return;
-                };
                 if shortcut == &toggle_h {
                     crate::engine::show_control_window(app);
                 } else if shortcut == &cycle_h {
+                    let Some(win) = app.get_webview_window("main") else {
+                        return;
+                    };
                     if let Ok(monitors) = win.available_monitors() {
                         if monitors.len() > 1 {
                             // Move to the monitor after the one the window is
@@ -69,18 +69,22 @@ pub fn setup(app: &App, engine: Arc<Engine>) -> tauri::Result<()> {
                         MockStage::ChampSelect => MockStage::InGame,
                         MockStage::InGame => MockStage::Off,
                     };
-                    engine_hk.set_mock_stage(next);
-                    eprintln!("mock stage: {next:?}");
+                    let generation = engine_hk.set_mock_stage(next);
                     log(app, "info", format!("mock stage: {next:?}"));
                     match next {
                         MockStage::ChampSelect => {
                             tauri::async_runtime::spawn(mock_champ_select_loop(
                                 app.clone(),
                                 engine_hk.clone(),
+                                generation,
                             ));
                         }
                         MockStage::InGame => {
-                            tauri::async_runtime::spawn(mock_loop(app.clone(), engine_hk.clone()));
+                            tauri::async_runtime::spawn(mock_loop(
+                                app.clone(),
+                                engine_hk.clone(),
+                                generation,
+                            ));
                         }
                         MockStage::Off => {
                             let _ = app.emit("champ-select", ChampSelectEvent::default());
@@ -110,7 +114,11 @@ pub fn setup(app: &App, engine: Arc<Engine>) -> tauri::Result<()> {
         (mock, "Ctrl+Shift+D"),
     ] {
         if let Err(e) = gs.register(sc) {
-            eprintln!("hotkey register failed ({label}): {e}");
+            log(
+                app.handle(),
+                "warn",
+                format!("hotkey register failed ({label}): {e}"),
+            );
         }
     }
     Ok(())

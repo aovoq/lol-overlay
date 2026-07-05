@@ -59,15 +59,20 @@ pub struct ProviderProxy {
 }
 
 impl ProviderProxy {
-    pub fn new(initial: ProviderKind) -> Self {
-        Self {
-            providers: HashMap::new(),
-            active: RwLock::new(initial),
+    pub fn new(
+        initial: ProviderKind,
+        providers: impl IntoIterator<Item = (ProviderKind, Arc<dyn BuildProvider>)>,
+    ) -> Result<Self> {
+        let providers = providers.into_iter().collect::<HashMap<_, _>>();
+        if !providers.contains_key(&initial) {
+            return Err(ProviderError::Other(format!(
+                "provider {initial:?} not registered"
+            )));
         }
-    }
-
-    pub fn register(&mut self, kind: ProviderKind, provider: Arc<dyn BuildProvider>) {
-        self.providers.insert(kind, provider);
+        Ok(Self {
+            providers,
+            active: RwLock::new(initial),
+        })
     }
 
     pub fn set_active(&self, kind: ProviderKind) -> Result<()> {
@@ -140,5 +145,81 @@ impl BuildProvider for ProviderProxy {
 
     async fn champion_names(&self, champion_id: i64) -> Option<(String, String)> {
         self.current().champion_names(champion_id).await
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    struct StubProvider {
+        item_id: i64,
+    }
+
+    #[async_trait]
+    impl BuildProvider for StubProvider {
+        async fn items(&self, _snapshot: &GameSnapshot) -> Result<Vec<ItemRecommendation>> {
+            Ok(vec![ItemRecommendation {
+                item_id: self.item_id,
+                name: format!("Item {}", self.item_id),
+                score: 1.0,
+                reason: "test".into(),
+            }])
+        }
+
+        async fn runes(
+            &self,
+            _champion_id: i64,
+            _role: Option<&str>,
+        ) -> Result<RuneRecommendation> {
+            Err(ProviderError::NotEnoughData)
+        }
+    }
+
+    fn snapshot() -> GameSnapshot {
+        GameSnapshot {
+            game_mode: "CLASSIC".into(),
+            game_time: 0.0,
+            self_champion: "Ahri".into(),
+            self_raw_name: "Ahri".into(),
+            self_position: "middle".into(),
+            enemies: Vec::new(),
+            allies: Vec::new(),
+        }
+    }
+
+    #[test]
+    fn new_rejects_unregistered_initial_provider() {
+        let result = ProviderProxy::new(
+            ProviderKind::Ugg,
+            [(
+                ProviderKind::Deeplol,
+                Arc::new(StubProvider { item_id: 1 }) as Arc<dyn BuildProvider>,
+            )],
+        );
+
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn routes_to_active_provider() {
+        let proxy = ProviderProxy::new(
+            ProviderKind::Deeplol,
+            [
+                (
+                    ProviderKind::Deeplol,
+                    Arc::new(StubProvider { item_id: 1 }) as Arc<dyn BuildProvider>,
+                ),
+                (
+                    ProviderKind::Ugg,
+                    Arc::new(StubProvider { item_id: 2 }) as Arc<dyn BuildProvider>,
+                ),
+            ],
+        )
+        .expect("proxy");
+
+        assert_eq!(proxy.items(&snapshot()).await.expect("items")[0].item_id, 1);
+        proxy.set_active(ProviderKind::Ugg).expect("switch");
+        assert_eq!(proxy.items(&snapshot()).await.expect("items")[0].item_id, 2);
     }
 }

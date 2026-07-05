@@ -1,7 +1,7 @@
 //! HTTP client + process-lifetime cache for u.gg stats2 API.
 
 use std::collections::HashMap;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use overlay_provider::{ProviderError, Result};
 use serde_json::Value;
@@ -15,10 +15,14 @@ use crate::types::overview::{ChampOverview, Overview};
 const API_VERSIONS_URL: &str =
     "https://static.bigbrain.gg/assets/lol/riot_patch_update/prod/ugg/ugg-api-versions.json";
 const STATS_BASE: &str = "https://stats2.u.gg/lol/1.5";
+const CACHE_TTL: Duration = Duration::from_hours(6);
+const RETRY_ATTEMPTS: usize = 2;
+const RETRY_DELAY: Duration = Duration::from_millis(250);
 
 pub type UggApiVersions = HashMap<String, HashMap<String, String>>;
 
 struct UggStatic {
+    loaded_at: Instant,
     patch: String,
     prev_patch: Option<String>,
     api_versions: UggApiVersions,
@@ -53,26 +57,24 @@ impl UggApi {
     /// Data Dragon `"15.12.1"` → u.gg patch key `"15_12"`.
     #[must_use]
     pub fn patch_from_ddragon(version: &str) -> String {
-        let mut parts: Vec<&str> = version.split('.').collect();
-        if parts.len() > 1 {
-            parts.pop();
-        }
-        parts.join("_")
+        version.split('.').take(2).collect::<Vec<_>>().join("_")
     }
 
     pub async fn ensure_static(&self, ddragon_version: &str) -> Result<()> {
+        let patch = Self::patch_from_ddragon(ddragon_version);
         {
             let guard = self.static_data.read().await;
-            if guard.is_some() {
+            if guard.as_ref().is_some_and(|static_data| {
+                static_data.patch == patch && static_data.loaded_at.elapsed() < CACHE_TTL
+            }) {
                 return Ok(());
             }
         }
 
-        let patch = Self::patch_from_ddragon(ddragon_version);
         let api_versions: UggApiVersions = self
             .http
             .get(API_VERSIONS_URL)
-            .send()
+            .send_with_retry()
             .await?
             .error_for_status()?
             .json()
@@ -80,13 +82,16 @@ impl UggApi {
         let prev_patch = previous_patch_key(&patch, &api_versions);
 
         let mut guard = self.static_data.write().await;
-        if guard.is_none() {
-            *guard = Some(UggStatic {
-                patch,
-                prev_patch,
-                api_versions,
-            });
-        }
+        *guard = Some(UggStatic {
+            loaded_at: Instant::now(),
+            patch,
+            prev_patch,
+            api_versions,
+        });
+        drop(guard);
+        self.overview_cache.write().await.clear();
+        self.matchups_cache.write().await.clear();
+        self.champion_ranking_cache.write().await.clear();
         Ok(())
     }
 
@@ -186,7 +191,7 @@ impl UggApi {
         let data: Value = self
             .http
             .get(&url)
-            .send()
+            .send_with_retry()
             .await?
             .error_for_status()?
             .json()
@@ -230,7 +235,7 @@ impl UggApi {
         let data: ChampOverview = self
             .http
             .get(&url)
-            .send()
+            .send_with_retry()
             .await?
             .error_for_status()?
             .json()
@@ -275,7 +280,7 @@ impl UggApi {
         let data: ChampOverview = self
             .http
             .get(&url)
-            .send()
+            .send_with_retry()
             .await?
             .error_for_status()?
             .json()
@@ -318,7 +323,7 @@ impl UggApi {
         let data: Matchups = self
             .http
             .get(&url)
-            .send()
+            .send_with_retry()
             .await?
             .error_for_status()?
             .json()
@@ -329,6 +334,36 @@ impl UggApi {
             .await
             .insert(cache_key, data.clone());
         Ok(data)
+    }
+}
+
+trait RequestBuilderRetryExt {
+    async fn send_with_retry(self) -> std::result::Result<reqwest::Response, reqwest::Error>;
+}
+
+impl RequestBuilderRetryExt for reqwest::RequestBuilder {
+    async fn send_with_retry(self) -> std::result::Result<reqwest::Response, reqwest::Error> {
+        let request = self;
+        let mut attempt = 0;
+        loop {
+            let Some(next) = request.try_clone() else {
+                return request.send().await;
+            };
+            match next.send().await {
+                Ok(response) if response.status().is_server_error() && attempt < RETRY_ATTEMPTS => {
+                    attempt += 1;
+                    tokio::time::sleep(RETRY_DELAY * attempt as u32).await;
+                }
+                Err(err)
+                    if (err.is_connect() || err.is_timeout() || err.is_request())
+                        && attempt < RETRY_ATTEMPTS =>
+                {
+                    attempt += 1;
+                    tokio::time::sleep(RETRY_DELAY * attempt as u32).await;
+                }
+                result => return result,
+            }
+        }
     }
 }
 
@@ -348,18 +383,16 @@ pub fn select_overview(
         };
 
         if let Some((resolved_role, wrapped)) = data_by_role.get_key_value(&role) {
-            if let Overview::Default(d) = &wrapped.data {
-                return Ok((d.clone(), *resolved_role));
-            }
+            let Overview::Default(d) = &wrapped.data;
+            return Ok((d.clone(), *resolved_role));
         }
 
         if let Some((resolved_role, wrapped)) = data_by_role
             .iter()
             .max_by_key(|(_, wrapped)| wrapped.data.matches())
         {
-            if let Overview::Default(d) = &wrapped.data {
-                return Ok((d.clone(), *resolved_role));
-            }
+            let Overview::Default(d) = &wrapped.data;
+            return Ok((d.clone(), *resolved_role));
         }
     }
 
@@ -415,7 +448,7 @@ mod tests {
     #[test]
     fn patch_from_ddragon_strips_patch_segment() {
         assert_eq!(UggApi::patch_from_ddragon("15.12.1"), "15_12");
-        assert_eq!(UggApi::patch_from_ddragon("16.11"), "16");
+        assert_eq!(UggApi::patch_from_ddragon("16.11"), "16_11");
     }
 
     #[test]

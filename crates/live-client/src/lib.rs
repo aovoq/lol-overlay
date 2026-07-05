@@ -8,10 +8,14 @@
 //! Docs: <https://developer.riotgames.com/docs/lol#game-client-api>
 
 use serde::Deserialize;
+use std::time::Duration;
 
 pub use overlay_types::{EnemyChampion, GameSnapshot};
 
 const BASE: &str = "https://127.0.0.1:2999/liveclientdata";
+const TIMEOUT: Duration = Duration::from_secs(8);
+const RETRY_ATTEMPTS: usize = 2;
+const RETRY_DELAY: Duration = Duration::from_millis(250);
 
 #[derive(Debug, thiserror::Error)]
 pub enum LiveClientError {
@@ -100,6 +104,7 @@ impl LiveClient {
         // security on loopback, so we simply skip verification for this client.
         let http = reqwest::Client::builder()
             .danger_accept_invalid_certs(true)
+            .timeout(TIMEOUT)
             .build()?;
         Ok(Self { http })
     }
@@ -108,7 +113,7 @@ impl LiveClient {
         let text = self
             .http
             .get(format!("{BASE}/allgamedata"))
-            .send()
+            .send_with_retry()
             .await?
             .error_for_status()?
             .text()
@@ -117,9 +122,17 @@ impl LiveClient {
         Ok(serde_json::from_str::<AllGameData>(&text)?)
     }
 
-    /// Fetch the current snapshot, or `None` if not in a game.
-    pub async fn snapshot(&self) -> Option<GameSnapshot> {
-        let data = self.raw().await.ok()?;
+    /// Fetch the current snapshot, or `None` if the Live Client API is unavailable.
+    ///
+    /// HTTP/connect failures are treated as "not in a game"; parse failures are
+    /// returned so the app can surface schema drift instead of silently looking
+    /// idle forever.
+    pub async fn snapshot(&self) -> Result<Option<GameSnapshot>> {
+        let data = match self.raw().await {
+            Ok(data) => data,
+            Err(LiveClientError::Http(e)) if live_client_unavailable(&e) => return Ok(None),
+            Err(e) => return Err(e),
+        };
 
         // Locate ourselves to determine which team is hostile.
         let me = data
@@ -154,7 +167,7 @@ impl LiveClient {
             }
         }
 
-        Some(GameSnapshot {
+        Ok(Some(GameSnapshot {
             game_mode: data.game_data.game_mode,
             game_time: data.game_data.game_time,
             self_champion,
@@ -162,6 +175,56 @@ impl LiveClient {
             self_position,
             enemies,
             allies,
-        })
+        }))
+    }
+}
+
+fn live_client_unavailable(error: &reqwest::Error) -> bool {
+    error.is_connect()
+        || error.is_timeout()
+        || error.status().is_some_and(|status| status.as_u16() == 404)
+}
+
+trait RequestBuilderRetryExt {
+    async fn send_with_retry(self) -> std::result::Result<reqwest::Response, reqwest::Error>;
+}
+
+impl RequestBuilderRetryExt for reqwest::RequestBuilder {
+    async fn send_with_retry(self) -> std::result::Result<reqwest::Response, reqwest::Error> {
+        let request = self;
+        let mut attempt = 0;
+        loop {
+            let Some(next) = request.try_clone() else {
+                return request.send().await;
+            };
+            match next.send().await {
+                Ok(response) if response.status().is_server_error() && attempt < RETRY_ATTEMPTS => {
+                    attempt += 1;
+                    tokio::time::sleep(RETRY_DELAY * attempt as u32).await;
+                }
+                Err(err)
+                    if (err.is_connect() || err.is_timeout() || err.is_request())
+                        && attempt < RETRY_ATTEMPTS =>
+                {
+                    attempt += 1;
+                    tokio::time::sleep(RETRY_DELAY * attempt as u32).await;
+                }
+                result => return result,
+            }
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::english_name;
+
+    #[test]
+    fn english_name_extracts_raw_champion_suffix() {
+        assert_eq!(
+            english_name("game_character_displayname_Talon", "タロン"),
+            "Talon"
+        );
+        assert_eq!(english_name("", "Cho'Gath"), "Cho'Gath");
     }
 }

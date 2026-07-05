@@ -7,14 +7,15 @@ mod api;
 mod tier_list;
 mod types;
 
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::sync::Arc;
 
 use async_trait::async_trait;
 use overlay_ddragon::{normalize, DdragonClient};
 use overlay_provider::{
-    BuildProvider, CounterEntry, ItemRecommendation, ProviderError, Result, RuneBuild,
-    RuneRecommendation, SkillOrder,
+    counter_entries_from_subject_losses, item_recommendations, rune_recommendation,
+    split_primary_secondary_runes, BuildProvider, CounterEntry, ItemRecommendation, ProviderError,
+    Result, RuneBuild, RuneRecommendation, SkillOrder,
 };
 use overlay_types::{GameSnapshot, TierEntry};
 use tokio::sync::RwLock;
@@ -24,9 +25,6 @@ use crate::tier_list::{region_slug, tier_entries_from_ranking, TIER_LIST_RANK};
 use crate::types::default_overview::{LateItem, OverviewData};
 use crate::types::mappings::{Mode, Region, Role};
 use crate::types::matchups::Matchup;
-
-/// Minimum games for a counter matchup (aligned with `DeepLoL`).
-const MIN_MATCHUP_GAMES: i64 = 30;
 
 pub struct UggProvider {
     ddragon: Arc<DdragonClient>,
@@ -179,29 +177,17 @@ impl UggProvider {
             }
         }
 
-        let mut recs = Vec::new();
-        let mut seen = HashSet::new();
-        for (i, item_id) in build_ids.into_iter().enumerate() {
-            if item_id == 0 || !seen.insert(item_id) {
-                continue;
-            }
-            let name = item_names
-                .get(&item_id)
-                .cloned()
-                .unwrap_or_else(|| format!("Item {item_id}"));
-            let reason = if i == 0 {
-                format!("Core build · {wr:.0}% WR · {games} games")
-            } else {
-                "Core build".to_string()
-            };
-            recs.push(ItemRecommendation {
-                item_id,
-                name,
-                score: (1.0 - i as f32 * 0.08).max(0.2),
-                reason,
-            });
-        }
-        recs
+        item_recommendations(
+            build_ids,
+            |item_id| {
+                item_names
+                    .get(&item_id)
+                    .cloned()
+                    .unwrap_or_else(|| format!("Item {item_id}"))
+            },
+            wr,
+            games,
+        )
     }
 
     #[allow(clippy::cast_precision_loss)]
@@ -229,7 +215,7 @@ impl UggProvider {
         matchup: bool,
     ) -> Result<RuneBuild> {
         let lane = role_lane_name(resolved_role);
-        let (primary_perks, sub_perks) = split_rune_ids(&data.runes.rune_ids);
+        let (primary_perks, sub_perks) = split_primary_secondary_runes(&data.runes.rune_ids);
         let win_rate = if data.runes.matches > 0 {
             data.runes.wins as f64 / data.runes.matches as f64
         } else if data.matches > 0 {
@@ -299,16 +285,10 @@ impl BuildProvider for UggProvider {
     }
 
     async fn runes(&self, champion_id: i64, role: Option<&str>) -> Result<RuneRecommendation> {
-        let b = self.rune_build(champion_id, role, None).await?;
-        let mut perks = b.primary_perk_ids;
-        perks.extend(b.sub_perk_ids);
-        perks.extend(b.shard_ids);
-        Ok(RuneRecommendation {
-            name: format!("u.gg {} ({:.0}% WR)", b.lane, b.win_rate * 100.0),
-            primary_style_id: b.primary_style_id,
-            sub_style_id: b.sub_style_id,
-            selected_perk_ids: perks,
-        })
+        Ok(rune_recommendation(
+            "u.gg",
+            self.rune_build(champion_id, role, None).await?,
+        ))
     }
 
     async fn counters(&self, champion_id: i64, role: &str) -> Result<Vec<CounterEntry>> {
@@ -326,16 +306,12 @@ impl BuildProvider for UggProvider {
         let Some(prev_patch) = self.api.previous_patch().await? else {
             return Ok(counters);
         };
-        let previous = match self
+        let Ok(previous) = self
             .api
             .get_matchups_for_patch(&champ_key, Mode::Normal, &prev_patch)
             .await
-        {
-            Ok(previous) => previous,
-            Err(e) => {
-                eprintln!("ugg: previous-patch matchups failed (no counter fallback): {e}");
-                return Ok(counters);
-            }
+        else {
+            return Ok(counters);
         };
         let Ok((data, _)) = select_matchups(&previous, region, ugg_role) else {
             return Ok(counters);
@@ -369,13 +345,7 @@ impl BuildProvider for UggProvider {
                 .api
                 .get_champion_ranking_for_patch(region, Mode::Normal, TIER_LIST_RANK, &prev_patch)
                 .await
-                .map_or_else(
-                    |e| {
-                        eprintln!("ugg: previous-patch tier list failed (no wr deltas): {e}");
-                        None
-                    },
-                    Some,
-                ),
+                .ok(),
             None => None,
         };
         let rows = tier_entries_from_ranking(&ranking, previous.as_ref(), role)?;
@@ -529,36 +499,15 @@ fn best_late_item(options: &[LateItem]) -> Option<&LateItem> {
     })
 }
 
-fn split_rune_ids(rune_ids: &[i64]) -> (Vec<i64>, Vec<i64>) {
-    if rune_ids.len() >= 6 {
-        (rune_ids[..4].to_vec(), rune_ids[4..6].to_vec())
-    } else if rune_ids.len() >= 4 {
-        (rune_ids[..4].to_vec(), rune_ids[4..].to_vec())
-    } else {
-        (rune_ids.to_vec(), Vec::new())
-    }
-}
-
 /// Counters from u.gg `worst_matchups`: invert win rate to the opponent's
 /// perspective (same contract as `DeepLoL`'s `counter_entries`).
 #[must_use]
 pub fn counter_entries_from_worst(worst: &[Matchup]) -> Vec<CounterEntry> {
-    let mut entries: Vec<CounterEntry> = worst
-        .iter()
-        .filter(|m| i64::from(m.matches) >= MIN_MATCHUP_GAMES)
-        .map(|m| CounterEntry {
-            champion_id: m.champion_id,
-            win_rate: 1.0 - m.winrate,
-            games: i64::from(m.matches),
-        })
-        .collect();
-    entries.sort_by(|a, b| {
-        b.win_rate
-            .partial_cmp(&a.win_rate)
-            .unwrap_or(std::cmp::Ordering::Equal)
-    });
-    entries.truncate(8);
-    entries
+    counter_entries_from_subject_losses(
+        worst
+            .iter()
+            .map(|m| (m.champion_id, m.winrate, i64::from(m.matches))),
+    )
 }
 
 #[cfg(test)]
@@ -616,7 +565,9 @@ mod tests {
         ];
         let counters = counter_entries_from_worst(&worst);
         assert_eq!(counters.len(), 2);
-        assert!(counters.iter().all(|c| c.games >= MIN_MATCHUP_GAMES));
+        assert!(counters
+            .iter()
+            .all(|c| c.games >= overlay_provider::MIN_MATCHUP_GAMES));
         assert_eq!(counters[0].champion_id, 3);
         assert!((counters[0].win_rate - 0.875).abs() < f64::EPSILON);
         assert_eq!(counters[1].champion_id, 1);

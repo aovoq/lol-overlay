@@ -1,4 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
 import { createSignal } from "solid-js";
 import type { PresentationMode, Settings } from "../types";
 
@@ -20,7 +21,6 @@ function applyTheme(mode: ThemeMode) {
 const [autoImport, setAutoImport] = createSignal(true);
 const [importSpells, setImportSpellsState] = createSignal(true);
 const [spellsFlipped, setSpellsFlippedState] = createSignal(false);
-const [pinned, setPinnedState] = createSignal(false);
 const [dataSource, setDataSourceState] = createSignal("deeplol");
 const [dataSources, setDataSources] = createSignal<string[]>(["deeplol"]);
 const [presentationMode, setPresentationModeState] = createSignal<PresentationMode>("overlay");
@@ -33,7 +33,6 @@ export {
   dataSource,
   dataSources,
   importSpells,
-  pinned,
   presentationMode,
   setAutoImport,
   spellsFlipped,
@@ -48,11 +47,6 @@ export function setImportSpells(on: boolean) {
 export function setSpellsFlipped(flipped: boolean) {
   setSpellsFlippedState(flipped);
   invoke("set_spells_flipped", { flipped }).catch(() => {});
-}
-
-export function setPinned(on: boolean) {
-  setPinnedState(on);
-  invoke("set_pinned", { pinned: on }).catch(() => {});
 }
 
 export function setDataSource(kind: string) {
@@ -75,7 +69,6 @@ export function applySettings(s: Partial<Settings>) {
   if (s.autoImportRunes !== undefined) setAutoImport(s.autoImportRunes);
   if (s.importSpells !== undefined) setImportSpellsState(s.importSpells);
   if (s.spellsFlipped !== undefined) setSpellsFlippedState(s.spellsFlipped);
-  if (s.pinned !== undefined) setPinnedState(s.pinned);
   if (s.dataSource !== undefined) setDataSourceState(s.dataSource);
   if (s.presentationMode !== undefined) setPresentationModeState(s.presentationMode);
 }
@@ -93,3 +86,5 @@ invoke<string[]>("list_data_sources")
 invoke<string>("get_data_source")
   .then((kind) => setDataSourceState(kind))
   .catch(() => {});
+
+listen<string>("data-source", (event) => setDataSourceState(event.payload)).catch(() => {});

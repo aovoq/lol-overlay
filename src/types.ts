@@ -176,7 +176,6 @@ export interface Settings {
   autoImportRunes: boolean;
   importSpells: boolean;
   spellsFlipped: boolean;
-  pinned: boolean;
   /** "deeplol" | "ugg" */
   dataSource?: string;
   presentationMode?: PresentationMode;
@@ -187,19 +186,15 @@ export interface PanelPosition {
   top: number;
 }
 
-export interface WindowPosition {
+export interface WindowGeometry {
   x: number;
   y: number;
-}
-
-export interface WindowGeometry extends WindowPosition {
   width: number;
   height: number;
 }
 
 export interface UiLayout {
   ingamePanel?: PanelPosition | null;
-  champselectWindow?: WindowPosition | null;
   controlOverlayWindow?: WindowGeometry | null;
   controlChampselectWindow?: WindowGeometry | null;
   controlIngameWindow?: WindowGeometry | null;

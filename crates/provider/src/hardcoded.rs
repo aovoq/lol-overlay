@@ -71,7 +71,7 @@ pub fn champion_damage_type(name: &str) -> DamageType {
     ];
     const TANK: &[&str] = &[
         "Malphite", "Ornn", "Sion", "Chogath", "Sejuani", "Zac", "Leona", "Nautilus", "Maokai",
-        "Shen", "Rammus", "DrMundo", "Udyr", "Poppy", "Zac", "Amumu", "Braum",
+        "Shen", "Rammus", "DrMundo", "Udyr", "Poppy", "Amumu", "Braum",
     ];
     if PHYSICAL.contains(&name) {
         DamageType::Physical

@@ -11,15 +11,14 @@ use overlay_provider_ugg::UggProvider;
 #[ignore = "network"]
 async fn ugg_tier_list_from_champion_ranking() {
     let ddragon = Arc::new(DdragonClient::new());
-    let mut proxy = ProviderProxy::new(ProviderKind::Ugg);
-    proxy.register(
-        ProviderKind::Deeplol,
-        Arc::new(DeepLolProvider::new(ddragon.clone()).expect("deeplol provider")),
-    );
-    proxy.register(
+    let deeplol: Arc<dyn BuildProvider> =
+        Arc::new(DeepLolProvider::new(ddragon.clone()).expect("deeplol provider"));
+    let ugg: Arc<dyn BuildProvider> = Arc::new(UggProvider::new(ddragon).expect("ugg provider"));
+    let proxy = ProviderProxy::new(
         ProviderKind::Ugg,
-        Arc::new(UggProvider::new(ddragon).expect("ugg provider")),
-    );
+        [(ProviderKind::Deeplol, deeplol), (ProviderKind::Ugg, ugg)],
+    )
+    .expect("proxy");
     proxy.set_active(ProviderKind::Ugg).unwrap();
 
     let rows = proxy

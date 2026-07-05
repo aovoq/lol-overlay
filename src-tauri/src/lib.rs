@@ -19,16 +19,17 @@ mod hittest;
 mod hotkeys;
 mod mock;
 
-use std::sync::atomic::AtomicBool;
-use std::sync::{Arc, Mutex};
+use std::sync::atomic::{AtomicBool, AtomicU64};
+use std::sync::Arc;
 use std::time::Duration;
 
+use parking_lot::Mutex;
 use serde_json::Value;
 use tauri::{AppHandle, Manager, WindowEvent};
 use tokio::sync::mpsc::UnboundedSender;
 
 use overlay_ddragon::DdragonClient;
-use overlay_provider::{ProviderKind, ProviderProxy};
+use overlay_provider::{BuildProvider, ProviderKind, ProviderProxy};
 use overlay_provider_deeplol::DeepLolProvider;
 use overlay_provider_ugg::UggProvider;
 
@@ -38,15 +39,15 @@ use overlay_live_client::LiveClient;
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let ddragon = Arc::new(DdragonClient::new());
-    let mut proxy = ProviderProxy::new(ProviderKind::Deeplol);
-    proxy.register(
+    let deeplol: Arc<dyn BuildProvider> =
+        Arc::new(DeepLolProvider::new(ddragon.clone()).expect("failed to build DeepLoL provider"));
+    let ugg: Arc<dyn BuildProvider> =
+        Arc::new(UggProvider::new(ddragon.clone()).expect("failed to build u.gg provider"));
+    let proxy = ProviderProxy::new(
         ProviderKind::Deeplol,
-        Arc::new(DeepLolProvider::new(ddragon.clone()).expect("failed to build DeepLoL provider")),
-    );
-    proxy.register(
-        ProviderKind::Ugg,
-        Arc::new(UggProvider::new(ddragon.clone()).expect("failed to build u.gg provider")),
-    );
+        [(ProviderKind::Deeplol, deeplol), (ProviderKind::Ugg, ugg)],
+    )
+    .expect("failed to build provider proxy");
     let provider = Arc::new(proxy);
 
     let engine = Arc::new(Engine {
@@ -57,6 +58,7 @@ pub fn run() {
         store_path: Mutex::new(None),
         mock: AtomicBool::new(false),
         mock_stage: Mutex::new(MockStage::Off),
+        mock_generation: AtomicU64::new(0),
         last_champ_select: Mutex::new(None),
         hit_regions: Mutex::new(Vec::new()),
         drag_active: AtomicBool::new(false),
@@ -72,7 +74,10 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .manage(engine.clone())
         .setup(move |app| {
-            engine.init_store(app.path().app_config_dir()?.join("settings.json"))?;
+            engine.init_store(
+                app.handle(),
+                app.path().app_config_dir()?.join("settings.json"),
+            )?;
 
             if let Some(win) = app.get_webview_window("main") {
                 // Start click-through so the overlay never steals game clicks.
@@ -115,13 +120,11 @@ pub fn run() {
             commands::set_hit_regions,
             commands::set_drag_active,
             commands::set_ingame_collapsed,
-            commands::set_pinned,
             commands::set_import_spells,
             commands::set_spells_flipped,
             commands::set_presentation_mode,
             commands::get_ui_layout,
             commands::set_ingame_panel_position,
-            commands::set_champselect_window_position,
             commands::set_control_window_geometry,
             commands::get_tier_list,
             commands::get_counters,

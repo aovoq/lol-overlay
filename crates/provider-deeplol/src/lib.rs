@@ -17,28 +17,37 @@
 //! seconds and the champ-select UI re-invokes commands on every render, so
 //! hitting the network each time is not an option.
 
-use std::cmp::{Ordering, Reverse};
-use std::collections::{HashMap, HashSet};
+use std::cmp::Ordering;
+use std::collections::HashMap;
 use std::sync::Arc;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use async_trait::async_trait;
 use overlay_ddragon::{normalize, ChampionMaps, DdragonClient};
 use overlay_provider::{
-    BuildProvider, CounterEntry, ItemRecommendation, ProviderError, Result, RuneBuild,
-    RuneRecommendation, SkillOrder, TierEntry,
+    counter_entries_from_subject_losses, item_recommendations, rune_recommendation, BuildProvider,
+    CounterEntry, ItemRecommendation, ProviderError, Result, RuneBuild, RuneRecommendation,
+    SkillOrder, TierEntry, MIN_MATCHUP_GAMES,
 };
 use overlay_types::GameSnapshot;
-use serde::Deserialize;
 use tokio::sync::RwLock;
+
+mod runes;
+mod types;
+
+use runes::{aggregate_otp, normalize_stat_shards};
+use types::{
+    BuildEntry, BuildResponse, LaneBuild, MatchupStatsResponse, OtpEntry, OtpResponse,
+    RankResponse, VersionResponse,
+};
 
 const DEEPLOL: &str = "https://b2c-api-cdn.deeplol.gg";
 
-/// A matchup page needs this many games behind it before we trust it; the same
-/// floor is applied to individual counter matchups.
-const MIN_MATCHUP_GAMES: i64 = 30;
 /// …and at least this many usable rune samples from `/matchup/OTP_match`.
 const MIN_RUNE_SAMPLES: usize = 3;
+const CACHE_TTL: Duration = Duration::from_hours(6);
+const RETRY_ATTEMPTS: usize = 2;
+const RETRY_DELAY: Duration = Duration::from_millis(250);
 
 pub struct DeepLolProvider {
     http: reqwest::Client,
@@ -60,6 +69,7 @@ pub struct DeepLolProvider {
 
 #[derive(Default)]
 struct Cache {
+    loaded_at: Option<Instant>,
     /// DeepLoL build patch, e.g. `"16.11"` — the latest patch that actually has
     /// build data (the newest *released* patch can lag a day or two).
     patch: Option<String>,
@@ -107,7 +117,11 @@ impl DeepLolProvider {
     async fn ensure_static(&self) -> Result<()> {
         {
             let c = self.cache.read().await;
-            if c.patch.is_some() && c.champions.is_some() {
+            if c.patch.is_some()
+                && c.champions.is_some()
+                && c.loaded_at
+                    .is_some_and(|loaded_at| loaded_at.elapsed() < CACHE_TTL)
+            {
                 return Ok(());
             }
         }
@@ -128,28 +142,28 @@ impl DeepLolProvider {
             .map_err(|e| ProviderError::Other(e.to_string()))?;
 
         let mut c = self.cache.write().await;
+        c.loaded_at = Some(Instant::now());
         c.patch = Some(patch);
         c.prev_patch = versions.get(1).cloned();
         c.champions = Some(champions);
         c.items = Some(items);
+        c.builds.clear();
+        c.ranks.clear();
+        c.tier_lists.clear();
+        c.matchup_builds.clear();
         Ok(())
     }
 
     /// Resolve an English champion name (e.g. `"Talon"`) to its numeric id.
-    async fn champion_id(&self, raw_name: &str) -> Option<i64> {
+    async fn champion_id(&self, raw_name: &str) -> Result<Option<i64>> {
         if raw_name.is_empty() {
-            return None;
+            return Ok(None);
         }
-        if let Err(e) = self.ensure_static().await {
-            eprintln!("deeplol: static load failed: {e}");
-            return None;
-        }
+        self.ensure_static().await?;
         let c = self.cache.read().await;
-        c.champions
-            .as_ref()?
-            .name_to_id
-            .get(&normalize(raw_name))
-            .copied()
+        Ok(c.champions
+            .as_ref()
+            .and_then(|champions| champions.name_to_id.get(&normalize(raw_name)).copied()))
     }
 
     /// Display name for a champion id (`"Cho'Gath"`), for rune-page names.
@@ -227,7 +241,7 @@ impl DeepLolProvider {
                 ("platform_id", platform_id.to_string()),
                 ("tier", self.tier.clone()),
             ])
-            .send()
+            .send_with_retry()
             .await?
             .error_for_status()?
             .json()
@@ -253,7 +267,7 @@ impl DeepLolProvider {
                 ("tier", self.tier.as_str()),
                 ("game_version", game_version),
             ])
-            .send()
+            .send_with_retry()
             .await?
             .error_for_status()?
             .json()
@@ -279,15 +293,8 @@ impl DeepLolProvider {
                 .partial_cmp(&b.pick_rate)
                 .unwrap_or(Ordering::Equal)
         })?;
-        let build = match self.get_build(anchor.champion_id).await {
-            Ok(b) => b,
-            Err(e) => {
-                eprintln!(
-                    "deeplol: games calibration failed for champion {}: {e}",
-                    anchor.champion_id
-                );
-                return None;
-            }
+        let Ok(build) = self.get_build(anchor.champion_id).await else {
+            return None;
         };
         let lb = build.build_by_lane.get(lane)?;
         if lb.games <= 0 || lb.pick_rate <= 0.0 {
@@ -396,7 +403,7 @@ impl DeepLolProvider {
                 ("champion_id", champion_id.to_string()),
                 ("enemy_champion_id", enemy_champion_id.to_string()),
             ])
-            .send()
+            .send_with_retry()
             .await?
             .error_for_status()?
             .json()
@@ -422,7 +429,7 @@ impl DeepLolProvider {
                     ("page", page.to_string()),
                     ("player_type", "all".to_string()),
                 ])
-                .send()
+                .send_with_retry()
                 .await?
                 .error_for_status()?
                 .json()
@@ -468,7 +475,7 @@ impl DeepLolProvider {
             .http
             .get(format!("{DEEPLOL}/champion/version"))
             .query(&[("cnt", "3"), ("platform_id", platform_id.as_str())])
-            .send()
+            .send_with_retry()
             .await?
             .error_for_status()?
             .json()
@@ -498,7 +505,7 @@ impl BuildProvider for DeepLolProvider {
     async fn items(&self, snapshot: &GameSnapshot) -> Result<Vec<ItemRecommendation>> {
         let id = self
             .champion_id(&snapshot.self_raw_name)
-            .await
+            .await?
             .ok_or_else(|| {
                 ProviderError::Other(format!("unknown champion: {:?}", snapshot.self_champion))
             })?;
@@ -508,29 +515,18 @@ impl BuildProvider for DeepLolProvider {
 
         let wr = entry.win_rate * 100.0;
         let guard = self.cache.read().await; // no awaits past here
-        let mut recs = Vec::new();
-        let mut seen = HashSet::new();
-        for (i, &item_id) in entry.item.build.iter().enumerate() {
-            if item_id == 0 || !seen.insert(item_id) {
-                continue;
-            }
-            let name = guard
-                .items
-                .as_ref()
-                .and_then(|items| items.get(&item_id).cloned())
-                .unwrap_or_else(|| format!("Item {item_id}"));
-            let reason = if i == 0 {
-                format!("Core build · {wr:.0}% WR · {} games", entry.games)
-            } else {
-                "Core build".to_string()
-            };
-            recs.push(ItemRecommendation {
-                item_id,
-                name,
-                score: (1.0 - i as f32 * 0.08).max(0.2),
-                reason,
-            });
-        }
+        let recs = item_recommendations(
+            entry.item.build.iter().copied(),
+            |item_id| {
+                guard
+                    .items
+                    .as_ref()
+                    .and_then(|items| items.get(&item_id).cloned())
+                    .unwrap_or_else(|| format!("Item {item_id}"))
+            },
+            wr,
+            entry.games,
+        );
         if recs.is_empty() {
             return Err(ProviderError::Other("build had no items".into()));
         }
@@ -540,7 +536,7 @@ impl BuildProvider for DeepLolProvider {
     async fn skill_order(&self, snapshot: &GameSnapshot) -> Result<SkillOrder> {
         let id = self
             .champion_id(&snapshot.self_raw_name)
-            .await
+            .await?
             .ok_or_else(|| {
                 ProviderError::Other(format!("unknown champion: {:?}", snapshot.self_champion))
             })?;
@@ -579,16 +575,10 @@ impl BuildProvider for DeepLolProvider {
     /// so the two never disagree: the LCU page wants one flat list
     /// [keystone, primary perks…, secondary perks…, stat shards].
     async fn runes(&self, champion_id: i64, role: Option<&str>) -> Result<RuneRecommendation> {
-        let b = self.rune_build(champion_id, role, None).await?;
-        let mut perks = b.primary_perk_ids;
-        perks.extend(b.sub_perk_ids);
-        perks.extend(b.shard_ids);
-        Ok(RuneRecommendation {
-            name: format!("DeepLoL {} ({:.0}% WR)", b.lane, b.win_rate * 100.0),
-            primary_style_id: b.primary_style_id,
-            sub_style_id: b.sub_style_id,
-            selected_perk_ids: perks,
-        })
+        Ok(rune_recommendation(
+            "DeepLoL",
+            self.rune_build(champion_id, role, None).await?,
+        ))
     }
 
     async fn tier_list(&self, role: &str) -> Result<Vec<TierEntry>> {
@@ -615,9 +605,8 @@ impl BuildProvider for DeepLolProvider {
         // take down the whole tier list (deltas just read 0.0 = unknown).
         let mut prev = None;
         if let Some(pp) = prev_patch {
-            match self.get_rank(&pp).await {
-                Ok(r) => prev = Some(r),
-                Err(e) => eprintln!("deeplol: previous-patch rank failed (no wr deltas): {e}"),
+            if let Ok(r) = self.get_rank(&pp).await {
+                prev = Some(r);
             }
         }
         let mut rows = tier_rows(&now, prev.as_deref(), lane);
@@ -677,6 +666,36 @@ impl BuildProvider for DeepLolProvider {
             champs.id_to_name.get(&champion_id)?.clone(),
             champs.id_to_image.get(&champion_id)?.clone(),
         ))
+    }
+}
+
+trait RequestBuilderRetryExt {
+    async fn send_with_retry(self) -> std::result::Result<reqwest::Response, reqwest::Error>;
+}
+
+impl RequestBuilderRetryExt for reqwest::RequestBuilder {
+    async fn send_with_retry(self) -> std::result::Result<reqwest::Response, reqwest::Error> {
+        let request = self;
+        let mut attempt = 0;
+        loop {
+            let Some(next) = request.try_clone() else {
+                return request.send().await;
+            };
+            match next.send().await {
+                Ok(response) if response.status().is_server_error() && attempt < RETRY_ATTEMPTS => {
+                    attempt += 1;
+                    tokio::time::sleep(RETRY_DELAY * attempt as u32).await;
+                }
+                Err(err)
+                    if (err.is_connect() || err.is_timeout() || err.is_request())
+                        && attempt < RETRY_ATTEMPTS =>
+                {
+                    attempt += 1;
+                    tokio::time::sleep(RETRY_DELAY * attempt as u32).await;
+                }
+                result => return result,
+            }
+        }
     }
 }
 
@@ -775,977 +794,13 @@ fn tier_rows(now: &RankResponse, prev: Option<&RankResponse>, lane: &str) -> Vec
 /// first), and `win_rate` is from the *subject's* perspective — invert it so
 /// each entry carries the counter champion's own win rate.
 fn counter_entries(lb: &LaneBuild) -> Vec<CounterEntry> {
-    lb.match_up
-        .weak_against
-        .iter()
-        .filter(|m| m.games >= MIN_MATCHUP_GAMES)
-        .take(8)
-        .map(|m| CounterEntry {
-            champion_id: m.enemy_champion_id,
-            win_rate: 1.0 - m.win_rate,
-            games: m.games,
-        })
-        .collect()
-}
-
-const OFFENSE_SHARDS: &[i64] = &[5008, 5005, 5007];
-const FLEX_SHARDS: &[i64] = &[5008, 5010, 5001];
-const DEFENSE_SHARDS: &[i64] = &[5011, 5013, 5001];
-
-/// LCU expects stat shards as [offense, flex, defense]. DeepLoL's aggregate
-/// build endpoint has returned the same three IDs in other orders, which makes
-/// page creation fail even though each individual shard is valid.
-fn normalize_stat_shards(shards: &[i64]) -> Vec<i64> {
-    if valid_stat_shards(shards) {
-        return shards.to_vec();
-    }
-
-    let reversed: Vec<i64> = shards.iter().rev().copied().collect();
-    if valid_stat_shards(&reversed) {
-        return reversed;
-    }
-
-    vec![
-        shard_for_slot(shards, 0, OFFENSE_SHARDS, 5008),
-        shard_for_slot(shards, 1, FLEX_SHARDS, 5008),
-        shard_for_slot(shards, 2, DEFENSE_SHARDS, 5011),
-    ]
-}
-
-fn valid_stat_shards(shards: &[i64]) -> bool {
-    shards.len() == 3
-        && OFFENSE_SHARDS.contains(&shards[0])
-        && FLEX_SHARDS.contains(&shards[1])
-        && DEFENSE_SHARDS.contains(&shards[2])
-}
-
-fn shard_for_slot(shards: &[i64], slot: usize, allowed: &[i64], fallback: i64) -> i64 {
-    if let Some(id) = shards.get(slot).filter(|id| allowed.contains(id)) {
-        return *id;
-    }
-
-    shards
-        .iter()
-        .copied()
-        .find(|id| allowed.contains(id))
-        .unwrap_or(fallback)
-}
-
-/// One consensus rune page distilled from individual OTP matchup games.
-struct AggregatedPage {
-    primary_style: i64,
-    sub_style: i64,
-    /// [keystone, p1, p2, p3]
-    primary_perks: Vec<i64>,
-    /// [s1, s2]
-    sub_perks: Vec<i64>,
-    /// [offense, flex, defense]
-    shards: Vec<i64>,
-    /// [spell1, spell2]; empty when no game had a usable spell pair.
-    spells: Vec<i64>,
-}
-
-/// Build the consensus page: group games by (primary style, keystone) so
-/// different archetypes don't blend into an invalid hybrid, then take the
-/// per-slot mode inside the largest group. OTP slot layout: `perk_0` =
-/// keystone, `perk_1..3` = primary minors, `perk_4..5` = secondary minors.
-fn aggregate_otp(samples: &[&OtpEntry]) -> Option<AggregatedPage> {
-    let mut groups: HashMap<(i64, i64), Vec<&OtpEntry>> = HashMap::new();
-    for s in samples {
-        groups
-            .entry((s.rune.perk_primary_style, s.rune.perk_0))
-            .or_default()
-            .push(s);
-    }
-    // Largest archetype wins; ties break on the smaller key for determinism.
-    let ((primary_style, keystone), group) = groups
-        .into_iter()
-        .max_by_key(|(k, v)| (v.len(), Reverse(*k)))?;
-
-    // Secondary tree: mode the style first, then mode the minors only among
-    // games that used that style — mixing trees per slot could otherwise
-    // produce a page no client would accept (perk_4 from one tree, perk_5
-    // from another).
-    let sub_style = mode(group.iter().map(|s| s.rune.perk_sub_style));
-    let sub_group: Vec<&&OtpEntry> = group
-        .iter()
-        .filter(|s| s.rune.perk_sub_style == sub_style)
-        .collect();
-
-    Some(AggregatedPage {
-        primary_style,
-        sub_style,
-        primary_perks: vec![
-            keystone,
-            mode(group.iter().map(|s| s.rune.perk_1)),
-            mode(group.iter().map(|s| s.rune.perk_2)),
-            mode(group.iter().map(|s| s.rune.perk_3)),
-        ],
-        sub_perks: vec![
-            mode(sub_group.iter().map(|s| s.rune.perk_4)),
-            mode(sub_group.iter().map(|s| s.rune.perk_5)),
-        ],
-        shards: normalize_stat_shards(&[
-            mode(group.iter().map(|s| s.rune.stat_perk_0)),
-            mode(group.iter().map(|s| s.rune.stat_perk_1)),
-            mode(group.iter().map(|s| s.rune.stat_perk_2)),
-        ]),
-        // Spells are independent of the rune archetype, so count them across
-        // all of the lane's games, not just the winning rune group.
-        spells: most_common_spell_pair(samples),
-    })
-}
-
-/// Most common summoner-spell pair across games. Flash sits in either slot
-/// depending on the player's keybind, so `[4,11]` and `[11,4]` count as the
-/// same pair; the output keeps whichever orientation occurred more often.
-fn most_common_spell_pair(samples: &[&OtpEntry]) -> Vec<i64> {
-    // normalized (min,max) pair → (count as-is, count swapped)
-    let mut counts: HashMap<(i64, i64), (usize, usize)> = HashMap::new();
-    for s in samples {
-        let (a, b) = (s.spell.spell_1, s.spell.spell_2);
-        if a <= 0 || b <= 0 {
-            continue;
-        }
-        let key = (a.min(b), a.max(b));
-        let slot = counts.entry(key).or_default();
-        if (a, b) == key {
-            slot.0 += 1;
-        } else {
-            slot.1 += 1;
-        }
-    }
-    let Some((key, (as_is, swapped))) = counts
-        .into_iter()
-        .max_by_key(|&(k, (x, y))| (x + y, Reverse(k)))
-    else {
-        return Vec::new();
-    };
-    if swapped > as_is {
-        vec![key.1, key.0]
-    } else {
-        vec![key.0, key.1]
-    }
-}
-
-/// Most frequent positive value; ties break on the smaller value for
-/// determinism. 0 only when the input has no positive values.
-fn mode<I: Iterator<Item = i64>>(values: I) -> i64 {
-    let mut counts: HashMap<i64, usize> = HashMap::new();
-    for v in values {
-        if v > 0 {
-            *counts.entry(v).or_default() += 1;
-        }
-    }
-    counts
-        .into_iter()
-        .max_by_key(|&(v, c)| (c, Reverse(v)))
-        .map(|(v, _)| v)
-        .unwrap_or(0)
-}
-
-// ---- DeepLoL response shapes (only the fields we use) ----
-//
-// DeepLoL sends explicit `null` for some fields (e.g. an Aram lane's `games`,
-// or the whole `stats_by_position` for an unplayed matchup). `#[serde(default)]`
-// alone does NOT cover that — it only fills *absent* fields, and a present
-// `null` in an `i64`/`f64` aborts the whole parse. `null_default` turns
-// present-null into the type's default, so one ropey lane can't sink the
-// entire response. Applied to every field for robustness against a loose API.
-//
-// A few parsed fields aren't consumed yet — they document the payload shape
-// for the UI to pick up later; `allow(dead_code)` marks those structs.
-
-/// Deserialize, mapping an explicit JSON `null` to `T::default()`.
-fn null_default<'de, D, T>(d: D) -> std::result::Result<T, D::Error>
-where
-    D: serde::Deserializer<'de>,
-    T: Deserialize<'de> + Default,
-{
-    Ok(Option::<T>::deserialize(d)?.unwrap_or_default())
-}
-
-#[derive(Debug, Deserialize)]
-struct VersionResponse {
-    #[serde(default, deserialize_with = "null_default")]
-    game_version_list: Vec<String>,
-}
-
-// -- /champion/build --
-
-#[derive(Debug, Deserialize)]
-struct BuildResponse {
-    #[serde(default, deserialize_with = "null_default")]
-    build_by_lane: HashMap<String, LaneBuild>,
-}
-
-#[derive(Debug, Default, Deserialize)]
-#[allow(dead_code)]
-struct LaneBuild {
-    #[serde(default, deserialize_with = "null_default")]
-    build_lst: Vec<BuildEntry>,
-    /// Real per-lane champion games — also the games-calibration numerator.
-    #[serde(default, deserialize_with = "null_default")]
-    games: i64,
-    #[serde(default, deserialize_with = "null_default")]
-    pick_rate: f64,
-    #[serde(default, deserialize_with = "null_default")]
-    win_rate: f64,
-    #[serde(default, deserialize_with = "null_default")]
-    ban_rate: f64,
-    #[serde(default, deserialize_with = "null_default")]
-    match_up: MatchUp,
-}
-
-#[derive(Debug, Default, Deserialize)]
-#[allow(dead_code)]
-struct MatchUp {
-    #[serde(default, deserialize_with = "null_default")]
-    strong_against: Vec<MatchUpEntry>,
-    /// Champions the subject loses to, sorted ascending by the subject's
-    /// `win_rate` (worst matchup first).
-    #[serde(default, deserialize_with = "null_default")]
-    weak_against: Vec<MatchUpEntry>,
-}
-
-#[derive(Debug, Default, Deserialize)]
-#[allow(dead_code)]
-struct MatchUpEntry {
-    #[serde(default, deserialize_with = "null_default")]
-    games: i64,
-    /// The subject champion's win rate vs this enemy (fraction 0..1).
-    #[serde(default, deserialize_with = "null_default")]
-    win_rate: f64,
-    #[serde(default, deserialize_with = "null_default")]
-    match_rate: f64,
-    #[serde(default, deserialize_with = "null_default")]
-    enemy_champion_id: i64,
-}
-
-#[derive(Debug, Default, Deserialize)]
-struct BuildEntry {
-    #[serde(default, deserialize_with = "null_default")]
-    rune: RuneBlock,
-    #[serde(default, deserialize_with = "null_default")]
-    item: ItemBlock,
-    #[serde(default, deserialize_with = "null_default")]
-    spell: SpellBlock,
-    #[serde(default, deserialize_with = "null_default")]
-    skill: SkillBlock,
-    #[serde(default, deserialize_with = "null_default")]
-    win_rate: f64,
-    #[serde(default, deserialize_with = "null_default")]
-    games: i64,
-}
-
-#[derive(Debug, Default, Deserialize)]
-struct RuneBlock {
-    #[serde(default, deserialize_with = "null_default")]
-    main_build: Vec<i64>,
-    #[serde(default, deserialize_with = "null_default")]
-    sub_build: Vec<i64>,
-    #[serde(default, deserialize_with = "null_default")]
-    stat_build: Vec<i64>,
-}
-
-#[derive(Debug, Default, Deserialize)]
-struct ItemBlock {
-    #[serde(default, deserialize_with = "null_default")]
-    build: Vec<i64>,
-}
-
-#[derive(Debug, Default, Deserialize)]
-struct SpellBlock {
-    /// Summoner spell ids, e.g. `[14, 4]` (Ignite + Flash).
-    #[serde(default, deserialize_with = "null_default")]
-    build: Vec<i64>,
-}
-
-#[derive(Debug, Default, Deserialize)]
-struct SkillBlock {
-    /// Basic-skill max order, e.g. `[3, 1, 2]` = E > Q > W.
-    #[serde(default, deserialize_with = "null_default")]
-    build: Vec<i64>,
-    /// Level-by-level skill order. Riot skill ids: 1 = Q, 2 = W, 3 = E, 4 = R.
-    #[serde(default, deserialize_with = "null_default")]
-    detail: Vec<i64>,
-    #[serde(default, deserialize_with = "null_default")]
-    win_rate: f64,
-    #[serde(default, deserialize_with = "null_default")]
-    games: i64,
-}
-
-// -- /champion/rank --
-
-#[derive(Debug, Deserialize)]
-struct RankResponse {
-    #[serde(default, deserialize_with = "null_default")]
-    champion_data_list: Vec<RankChampion>,
-}
-
-#[derive(Debug, Default, Deserialize)]
-struct RankChampion {
-    #[serde(default, deserialize_with = "null_default")]
-    champion_id: i64,
-    /// Keys: `Top|Jungle|Middle|Bot|Supporter|Aram|Total`.
-    #[serde(default, deserialize_with = "null_default")]
-    performance_dict: HashMap<String, RankPerformance>,
-}
-
-#[derive(Debug, Default, Deserialize, Clone)]
-#[allow(dead_code)]
-struct RankPerformance {
-    /// Fraction 0..1; 0 = the champion isn't played in this lane.
-    #[serde(default, deserialize_with = "null_default")]
-    win_rate: f64,
-    #[serde(default, deserialize_with = "null_default")]
-    pick_rate: f64,
-    #[serde(default, deserialize_with = "null_default")]
-    ban_rate: f64,
-    /// 1–5, 0 = not played.
-    #[serde(default, deserialize_with = "null_default")]
-    tier: i64,
-    #[serde(default, deserialize_with = "null_default")]
-    rank: i64,
-    /// Rank-position movement, NOT a win-rate delta.
-    #[serde(default, deserialize_with = "null_default")]
-    rank_delta: i64,
-    /// Always 0 in practice — unusable; see games calibration.
-    #[serde(default, deserialize_with = "null_default")]
-    games: i64,
-}
-
-// -- /matchup/matchup_stats --
-
-#[derive(Debug, Deserialize)]
-struct MatchupStatsResponse {
-    /// Whole node is JSON `null` for an invalid/unplayed pair.
-    #[serde(default, deserialize_with = "null_default")]
-    stats_by_position: HashMap<String, PositionStats>,
-}
-
-#[derive(Debug, Default, Deserialize, Clone)]
-#[allow(dead_code)]
-struct PositionStats {
-    #[serde(default, deserialize_with = "null_default")]
-    games: i64,
-    /// PERCENT 0–100 — the one DeepLoL payload that isn't a fraction.
-    #[serde(default, deserialize_with = "null_default")]
-    my_win_rate: f64,
-    #[serde(default, deserialize_with = "null_default")]
-    enemy_win_rate: f64,
-}
-
-// -- /matchup/OTP_match --
-
-#[derive(Debug, Deserialize)]
-struct OtpResponse {
-    #[serde(default, deserialize_with = "null_default")]
-    match_up_list: Vec<OtpEntry>,
-}
-
-#[derive(Debug, Default, Deserialize)]
-#[allow(dead_code)]
-struct OtpEntry {
-    #[serde(default, deserialize_with = "null_default")]
-    position: String,
-    /// 0 | 1.
-    #[serde(default, deserialize_with = "null_default")]
-    win: i64,
-    #[serde(default, deserialize_with = "null_default")]
-    rune: OtpRune,
-    #[serde(default, deserialize_with = "null_default")]
-    spell: OtpSpell,
-}
-
-/// One game's full rune page. Slot layout: `perk_0` = keystone, `perk_1..3` =
-/// primary minors, `perk_4..5` = secondary minors.
-#[derive(Debug, Default, Deserialize)]
-struct OtpRune {
-    #[serde(default, deserialize_with = "null_default")]
-    perk_0: i64,
-    #[serde(default, deserialize_with = "null_default")]
-    perk_1: i64,
-    #[serde(default, deserialize_with = "null_default")]
-    perk_2: i64,
-    #[serde(default, deserialize_with = "null_default")]
-    perk_3: i64,
-    #[serde(default, deserialize_with = "null_default")]
-    perk_4: i64,
-    #[serde(default, deserialize_with = "null_default")]
-    perk_5: i64,
-    #[serde(default, deserialize_with = "null_default")]
-    perk_primary_style: i64,
-    #[serde(default, deserialize_with = "null_default")]
-    perk_sub_style: i64,
-    #[serde(default, deserialize_with = "null_default")]
-    stat_perk_0: i64,
-    #[serde(default, deserialize_with = "null_default")]
-    stat_perk_1: i64,
-    #[serde(default, deserialize_with = "null_default")]
-    stat_perk_2: i64,
-}
-
-impl OtpRune {
-    /// True when every slot is filled — a partial block (missing perks in old
-    /// games, API holes mapped to 0 by `null_default`) would poison the
-    /// per-slot mode, so such games are excluded from aggregation.
-    fn is_complete(&self) -> bool {
-        self.perk_primary_style > 0
-            && self.perk_sub_style > 0
-            && [
-                self.perk_0,
-                self.perk_1,
-                self.perk_2,
-                self.perk_3,
-                self.perk_4,
-                self.perk_5,
-                self.stat_perk_0,
-                self.stat_perk_1,
-                self.stat_perk_2,
-            ]
+    counter_entries_from_subject_losses(
+        lb.match_up
+            .weak_against
             .iter()
-            .all(|&p| p > 0)
-    }
-}
-
-#[derive(Debug, Default, Deserialize)]
-struct OtpSpell {
-    #[serde(default, deserialize_with = "null_default")]
-    spell_1: i64,
-    #[serde(default, deserialize_with = "null_default")]
-    spell_2: i64,
+            .map(|m| (m.enemy_champion_id, m.win_rate, m.games)),
+    )
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn null_games_lane_survives_parse() {
-        // Regression: an Aram lane with `"games": null` used to abort the whole
-        // `/champion/build` parse, leaving the UI with no items at all.
-        let json = r#"{
-          "build_by_lane": {
-            "Middle": {"games": 100, "build_lst": [
-              {"win_rate": 0.53, "games": 80,
-               "rune": {"main_build": [8000,8010,9111,9105,8299],
-                        "sub_build": [8400,8473,8453],
-                        "stat_build": [5001,5008,5008]},
-               "item": {"build": [6692,3047,0,3814]}}
-            ]},
-            "Aram": {"games": null, "build_lst": []}
-          }
-        }"#;
-        let b: BuildResponse = serde_json::from_str(json).expect("null games must not abort parse");
-        let (lane, e) = pick(&b, Some("MIDDLE")).expect("Middle build should be picked");
-        assert_eq!(lane, "Middle");
-        assert_eq!(e.item.build, vec![6692, 3047, 0, 3814]);
-        // Rune flatten is keystone+3 / +2 / +3 shards = 9 perks (LCU page size).
-        let perks =
-            (e.rune.main_build.len() - 1) + (e.rune.sub_build.len() - 1) + e.rune.stat_build.len();
-        assert_eq!(perks, 9);
-    }
-
-    #[test]
-    fn normalize_collapses_punctuation_and_case() {
-        assert_eq!(normalize("Cho'Gath"), "chogath");
-        assert_eq!(normalize("Chogath"), "chogath");
-        assert_eq!(normalize("Kai'Sa"), "kaisa");
-    }
-
-    #[test]
-    fn stat_shards_normalize_to_lcu_slot_order() {
-        assert_eq!(
-            normalize_stat_shards(&[5005, 5008, 5001]),
-            vec![5005, 5008, 5001]
-        );
-        assert_eq!(
-            normalize_stat_shards(&[5001, 5008, 5005]),
-            vec![5005, 5008, 5001]
-        );
-        assert_eq!(
-            normalize_stat_shards(&[5001, 5008, 5008]),
-            vec![5008, 5008, 5001]
-        );
-    }
-
-    #[test]
-    fn rank_response_parses_and_shapes_tier_rows() {
-        // `rank_delta: null` exercises the null_default path on /champion/rank.
-        let now_json = r#"{
-          "champion_data_list": [
-            {"champion_id": 64, "performance_dict": {
-              "Jungle": {"win_rate": 0.52, "pick_rate": 0.12, "ban_rate": 0.08,
-                         "tier": 1, "rank": 3, "rank_delta": null, "games": 0},
-              "Total": {}
-            }},
-            {"champion_id": 35, "performance_dict": {
-              "Jungle": {"win_rate": 0.545, "pick_rate": 0.04, "ban_rate": 0.10,
-                         "tier": 1, "rank": 1, "rank_delta": 2, "games": 0}
-            }},
-            {"champion_id": 1, "performance_dict": {
-              "Jungle": {"win_rate": 0.61, "pick_rate": 0.001, "ban_rate": 0,
-                         "tier": 0, "rank": 99, "rank_delta": 0, "games": 0},
-              "Middle": {"win_rate": 0.51, "pick_rate": 0.06, "ban_rate": 0.02,
-                         "tier": 2, "rank": 10, "rank_delta": 0, "games": 0}
-            }},
-            {"champion_id": 99, "performance_dict": {
-              "Jungle": {"win_rate": 0, "pick_rate": 0.02, "ban_rate": 0,
-                         "tier": 0, "rank": 0, "rank_delta": 0, "games": 0}
-            }}
-          ]
-        }"#;
-        let prev_json = r#"{"champion_data_list": [
-          {"champion_id": 64, "performance_dict": {
-            "Jungle": {"win_rate": 0.50, "pick_rate": 0.11, "ban_rate": 0.07,
-                       "tier": 2, "rank": 4, "rank_delta": 0, "games": 0}
-          }}
-        ]}"#;
-        let now: RankResponse = serde_json::from_str(now_json).expect("rank must parse");
-        let prev: RankResponse = serde_json::from_str(prev_json).expect("prev rank must parse");
-
-        let rows = tier_rows(&now, Some(&prev), "Jungle");
-        // 1 is dropped (0.1% pick rate), 99 is dropped (win_rate 0 = not a
-        // jungler); the rest sort by win rate desc.
-        assert_eq!(
-            rows.iter().map(|r| r.champion_id).collect::<Vec<_>>(),
-            vec![35, 64]
-        );
-        // 35 is missing from the previous patch → delta unknown (0.0).
-        assert_eq!(rows[0].win_rate_delta, 0.0);
-        // 64: 0.52 vs 0.50 → +2.0 percentage points.
-        assert!((rows[1].win_rate_delta - 2.0).abs() < 1e-9);
-        assert!((rows[1].pick_rate - 0.12).abs() < 1e-9);
-        assert!((rows[1].ban_rate - 0.08).abs() < 1e-9);
-        // Games are calibrated separately; the pure shaping leaves them 0.
-        assert!(rows.iter().all(|r| r.games == 0));
-    }
-
-    #[test]
-    fn build_spell_and_matchup_parse_and_counters_invert() {
-        let json = r#"{
-          "build_by_lane": {
-            "Jungle": {
-              "games": 5000, "pick_rate": 0.05, "win_rate": 0.51, "ban_rate": null,
-              "build_lst": [
-                {"win_rate": 0.53, "games": 800,
-                 "rune": {"main_build": [8000,8010,9111,9105,8299],
-                          "sub_build": [8400,8473,8453],
-                          "stat_build": [5005,5008,5001]},
-                 "item": {"build": [6692]},
-                 "spell": {"build": [11, 4]},
-                 "skill": {"build": [3, 1, 2],
-                           "detail": [3, 1, 2, 3, 3, 4],
-                           "win_rate": 0.54,
-                           "games": 777}}
-              ],
-              "match_up": {
-                "strong_against": [
-                  {"games": 120, "win_rate": 0.6, "match_rate": 0.01, "enemy_champion_id": 5}
-                ],
-                "weak_against": [
-                  {"games": 200, "win_rate": 0.42, "match_rate": 0.02, "enemy_champion_id": 64},
-                  {"games": 10, "win_rate": 0.43, "match_rate": 0.001, "enemy_champion_id": 76},
-                  {"games": 150, "win_rate": 0.46, "match_rate": 0.015, "enemy_champion_id": 121}
-                ]
-              }
-            }
-          }
-        }"#;
-        let b: BuildResponse = serde_json::from_str(json).expect("build must parse");
-        let (lane, lb) = pick_lane(&b, Some("jungle")).expect("Jungle lane should be picked");
-        assert_eq!(lane, "Jungle");
-        assert_eq!(lb.build_lst[0].spell.build, vec![11, 4]);
-        assert_eq!(lb.build_lst[0].skill.build, vec![3, 1, 2]);
-        assert_eq!(lb.build_lst[0].skill.detail, vec![3, 1, 2, 3, 3, 4]);
-        assert_eq!(lb.build_lst[0].skill.games, 777);
-
-        let counters = counter_entries(lb);
-        // 76 is dropped (< 30 games); order (worst-for-subject first) kept.
-        assert_eq!(counters.len(), 2);
-        assert_eq!(counters[0].champion_id, 64);
-        // win_rate is inverted to the counter champion's perspective.
-        assert!((counters[0].win_rate - 0.58).abs() < 1e-9);
-        assert_eq!(counters[0].games, 200);
-        assert_eq!(counters[1].champion_id, 121);
-        assert!((counters[1].win_rate - 0.54).abs() < 1e-9);
-    }
-
-    #[test]
-    fn matchup_stats_null_positions_survive_parse() {
-        // Invalid pairs come back as 200 + `"stats_by_position": null`.
-        let r: MatchupStatsResponse =
-            serde_json::from_str(r#"{"stats_by_position": null}"#).expect("null must parse");
-        assert!(r.stats_by_position.is_empty());
-
-        let r: MatchupStatsResponse = serde_json::from_str(
-            r#"{"stats_by_position": {"Middle": {"games": 1468, "my_win_rate": 51.57,
-                "enemy_win_rate": 48.43}}}"#,
-        )
-        .expect("stats must parse");
-        let mid = &r.stats_by_position["Middle"];
-        assert_eq!(mid.games, 1468);
-        // Percent 0–100 here, not a fraction.
-        assert!((mid.my_win_rate - 51.57).abs() < 1e-9);
-    }
-
-    #[test]
-    fn otp_match_parses_and_flags_incomplete_runes() {
-        let json = r#"{"match_up_list": [
-          {"position": "Jungle", "win": 1, "tier": "MASTER",
-           "rune": {"perk_0": 8010, "perk_1": 9111, "perk_2": 9104, "perk_3": 8299,
-                    "perk_4": 8473, "perk_5": 8451, "perk_primary_style": 8000,
-                    "perk_sub_style": 8400, "stat_perk_0": 5005, "stat_perk_1": 5008,
-                    "stat_perk_2": 5001},
-           "spell": {"spell_1": 11, "spell_2": 4}},
-          {"position": "Jungle", "win": 0, "rune": null, "spell": null}
-        ]}"#;
-        let r: OtpResponse = serde_json::from_str(json).expect("OTP must parse");
-        assert_eq!(r.match_up_list.len(), 2);
-        assert!(r.match_up_list[0].rune.is_complete());
-        assert_eq!(r.match_up_list[0].spell.spell_1, 11);
-        // A null rune block zeroes out → incomplete → excluded from aggregation.
-        assert!(!r.match_up_list[1].rune.is_complete());
-    }
-
-    /// Convenience builder for aggregation tests.
-    fn otp(
-        primary: i64,
-        keystone: i64,
-        p1: i64,
-        sub_style: i64,
-        p4: i64,
-        p5: i64,
-        spells: (i64, i64),
-    ) -> OtpEntry {
-        OtpEntry {
-            position: "Jungle".into(),
-            win: 1,
-            rune: OtpRune {
-                perk_0: keystone,
-                perk_1: p1,
-                perk_2: 9104,
-                perk_3: 8299,
-                perk_4: p4,
-                perk_5: p5,
-                perk_primary_style: primary,
-                perk_sub_style: sub_style,
-                stat_perk_0: 5005,
-                stat_perk_1: 5008,
-                stat_perk_2: 5001,
-            },
-            spell: OtpSpell {
-                spell_1: spells.0,
-                spell_2: spells.1,
-            },
-        }
-    }
-
-    #[test]
-    fn matchup_aggregation_groups_modes_and_spell_pairs() {
-        let entries = vec![
-            // Group A: Precision + keystone 8010 (3 games — wins).
-            otp(8000, 8010, 9111, 8400, 8473, 8451, (11, 4)),
-            otp(8000, 8010, 9111, 8400, 8473, 8451, (4, 11)),
-            // Same group, but secondary tree differs — its minors must not
-            // leak into the secondary-slot modes.
-            otp(8000, 8010, 9104, 8100, 8139, 8135, (11, 4)),
-            // Group B: Domination + keystone 8112 (2 games — loses).
-            otp(8100, 8112, 9111, 8000, 9111, 8009, (11, 12)),
-            otp(8100, 8112, 9111, 8000, 9111, 8009, (11, 12)),
-        ];
-        let refs: Vec<&OtpEntry> = entries.iter().collect();
-        let page = aggregate_otp(&refs).expect("aggregation must produce a page");
-
-        assert_eq!(page.primary_style, 8000); // 3-game group beats 2-game group
-        assert_eq!(page.primary_perks[0], 8010); // the group's keystone
-        assert_eq!(page.primary_perks[1], 9111); // per-slot mode (2 vs 1)
-        assert_eq!(page.sub_style, 8400); // modal secondary tree
-        assert_eq!(page.sub_perks, vec![8473, 8451]); // 8100-tree game excluded
-        assert_eq!(page.shards, vec![5005, 5008, 5001]);
-        // Spells: Smite/Flash appears 3× ([11,4] twice + [4,11] once) vs
-        // [11,12] twice — the pair counting must merge orientations and the
-        // output must keep the more common one.
-        assert_eq!(page.spells, vec![11, 4]);
-    }
-
-    #[test]
-    fn counter_inversion_caps_at_eight() {
-        let weak: Vec<MatchUpEntry> = (0..12)
-            .map(|i| MatchUpEntry {
-                games: 100,
-                win_rate: 0.40 + i as f64 * 0.01,
-                match_rate: 0.01,
-                enemy_champion_id: 1000 + i,
-            })
-            .collect();
-        let lb = LaneBuild {
-            match_up: MatchUp {
-                strong_against: vec![],
-                weak_against: weak,
-            },
-            ..Default::default()
-        };
-        let counters = counter_entries(&lb);
-        assert_eq!(counters.len(), 8);
-        // Best counter (subject's worst matchup) stays first.
-        assert_eq!(counters[0].champion_id, 1000);
-        assert!((counters[0].win_rate - 0.60).abs() < 1e-9);
-    }
-
-    // ---- live tests (network) ----
-    //
-    // Decisive end-to-end checks against the real DeepLoL + Data Dragon APIs.
-    // Ignored by default; run with:
-    //   cargo test -p overlay-provider-deeplol --lib -- --ignored --nocapture
-
-    /// Shared harness for the live tests: one provider, one runtime.
-    fn live<F, Fut>(f: F)
-    where
-        F: FnOnce(DeepLolProvider) -> Fut,
-        Fut: std::future::Future<Output = ()>,
-    {
-        let rt = tokio::runtime::Builder::new_current_thread()
-            .enable_all()
-            .build()
-            .unwrap();
-        let ddragon = Arc::new(DdragonClient::new());
-        rt.block_on(f(DeepLolProvider::new(ddragon).unwrap()));
-    }
-
-    #[test]
-    #[ignore]
-    fn live_champion_names() {
-        // The mock scenarios lean on both name directions; Wukong is the case
-        // where display name and Data Dragon image id actually differ.
-        live(|p| async move {
-            let (name, image) = p.champion_names(62).await.expect("Wukong names");
-            assert_eq!(name, "Wukong");
-            assert_eq!(image, "MonkeyKing");
-            let (name, image) = p.champion_names(31).await.expect("Cho'Gath names");
-            assert_eq!(name, "Cho'Gath");
-            assert_eq!(image, "Chogath");
-            assert!(p.champion_names(-1).await.is_none());
-            println!("CHAMPION NAMES OK");
-        });
-    }
-
-    #[test]
-    #[ignore]
-    fn live_zed_items() {
-        live(|p| async move {
-            let snap = GameSnapshot {
-                game_mode: "CLASSIC".into(),
-                game_time: 600.0,
-                self_champion: "Zed".into(),
-                self_raw_name: "Zed".into(),
-                self_position: "MIDDLE".into(),
-                enemies: vec![],
-                allies: vec![],
-            };
-            match p.items(&snap).await {
-                Ok(items) => {
-                    println!("ITEMS OK ({}):", items.len());
-                    for it in &items {
-                        println!("  {} [{}] {}", it.item_id, it.name, it.reason);
-                    }
-                    assert!(!items.is_empty());
-                }
-                Err(e) => panic!("items() failed: {e}"),
-            }
-            match p.runes(238, Some("middle")).await {
-                Ok(r) => println!(
-                    "RUNES OK: {} primary={} sub={} perks={:?}",
-                    r.name, r.primary_style_id, r.sub_style_id, r.selected_perk_ids
-                ),
-                Err(e) => panic!("runes() failed: {e}"),
-            }
-        });
-    }
-
-    #[test]
-    #[ignore]
-    fn live_openlol_tier_list() {
-        live(|p| async move {
-            let rows = p.tier_list("jungle").await.expect("tier_list failed");
-            println!("TIER LIST OK ({} rows):", rows.len());
-            for r in rows.iter().take(8) {
-                println!(
-                    "  {:>4} wr={:.3} d={:+.1} pr={:.3} br={:.3} games={}",
-                    r.champion_id, r.win_rate, r.win_rate_delta, r.pick_rate, r.ban_rate, r.games
-                );
-            }
-            assert!(!rows.is_empty());
-            for r in &rows {
-                assert!(r.champion_id > 0);
-                assert!(r.win_rate > 0.0 && r.win_rate < 1.0, "wr {}", r.win_rate);
-                assert!(r.pick_rate >= 0.005 && r.pick_rate <= 1.0);
-                assert!(r.ban_rate >= 0.0 && r.ban_rate <= 1.0);
-                assert!(r.games >= 0);
-            }
-            assert!(
-                rows.windows(2).all(|w| w[0].win_rate >= w[1].win_rate),
-                "tier list must be sorted by win rate desc"
-            );
-            assert!(
-                rows.iter().any(|r| r.games > 0),
-                "games calibration produced no estimates"
-            );
-            // Second invoke must come from the cache (and stay identical).
-            let again = p
-                .tier_list("jungle")
-                .await
-                .expect("cached tier_list failed");
-            assert_eq!(again.len(), rows.len());
-        });
-    }
-
-    #[test]
-    #[ignore]
-    fn live_openlol_counters() {
-        live(|p| async move {
-            // Who counters Shaco (35) in the jungle?
-            let counters = p.counters(35, "jungle").await.expect("counters failed");
-            println!("COUNTERS OK ({}):", counters.len());
-            for c in &counters {
-                println!(
-                    "  {:>4} wr={:.3} games={}",
-                    c.champion_id, c.win_rate, c.games
-                );
-            }
-            assert!(!counters.is_empty());
-            assert!(counters.len() <= 8);
-            for c in &counters {
-                assert!(c.champion_id > 0);
-                assert!(c.win_rate > 0.0 && c.win_rate < 1.0);
-                assert!(c.games >= MIN_MATCHUP_GAMES);
-            }
-        });
-    }
-
-    #[test]
-    #[ignore]
-    fn live_openlol_rune_build() {
-        live(|p| async move {
-            // Viego (234) jungle, no enemy → the plain best-build page.
-            let b = p
-                .rune_build(234, Some("jungle"), None)
-                .await
-                .expect("rune_build failed");
-            println!("RUNE BUILD OK: {b:?}");
-            assert!(b.page_name.starts_with("OPENLOL Viego"), "{}", b.page_name);
-            assert_eq!(b.lane, "Jungle");
-            assert!(b.primary_style_id > 0 && b.sub_style_id > 0);
-            assert_eq!(b.primary_perk_ids.len(), 4);
-            assert_eq!(b.sub_perk_ids.len(), 2);
-            assert_eq!(b.shard_ids.len(), 3);
-            assert_eq!(b.spell_ids.len(), 2, "expected a spell pair");
-            assert!(b.win_rate > 0.0 && b.win_rate < 1.0);
-            assert!(b.games > 0);
-            assert!(!b.matchup);
-            // runes() is a shim over rune_build(): same data, flat LCU shape.
-            let r = p.runes(234, Some("jungle")).await.expect("runes failed");
-            assert_eq!(r.primary_style_id, b.primary_style_id);
-            assert_eq!(r.selected_perk_ids.len(), 9);
-        });
-    }
-
-    #[test]
-    #[ignore]
-    fn live_current_mock_pick_rune_build() {
-        live(|p| async move {
-            let rows = p.tier_list("jungle").await.expect("tier_list failed");
-            let champion_id = rows.first().expect("jungle tier list empty").champion_id;
-            let b = p
-                .rune_build(champion_id, Some("jungle"), None)
-                .await
-                .expect("current mock pick rune_build failed");
-            println!("MOCK PICK RUNE BUILD OK: champion={champion_id} {b:?}");
-            assert!(b.primary_style_id > 0 && b.sub_style_id > 0);
-            assert_eq!(b.primary_perk_ids.len(), 4);
-            assert_eq!(b.sub_perk_ids.len(), 2);
-            assert_eq!(b.shard_ids.len(), 3);
-            assert!(b.win_rate > 0.0 && b.win_rate < 1.0);
-            assert!(b.games > 0);
-        });
-    }
-
-    #[test]
-    #[ignore]
-    fn live_current_jungle_tier_rune_builds() {
-        live(|p| async move {
-            let rows = p.tier_list("jungle").await.expect("tier_list failed");
-            for row in rows.iter().take(12) {
-                let b = p
-                    .rune_build(row.champion_id, Some("jungle"), None)
-                    .await
-                    .unwrap_or_else(|e| {
-                        panic!(
-                            "rune_build failed for current jungle tier champion {}: {e}",
-                            row.champion_id
-                        )
-                    });
-                println!(
-                    "JUNGLE RUNE OK: champion={} lane={} games={}",
-                    row.champion_id, b.lane, b.games
-                );
-                assert_eq!(b.primary_perk_ids.len(), 4);
-                assert_eq!(b.sub_perk_ids.len(), 2);
-                assert_eq!(b.shard_ids.len(), 3);
-            }
-        });
-    }
-
-    #[test]
-    #[ignore]
-    fn live_jp1_region_falls_back_to_kr_builds() {
-        live(|p| async move {
-            p.set_platform_id("JP1");
-
-            let zyra = p
-                .rune_build(143, Some("jungle"), None)
-                .await
-                .expect("JP1 Zyra should fall back to KR build data");
-            println!("JP1 FALLBACK RUNE OK: {zyra:?}");
-            assert_eq!(zyra.lane, "Jungle");
-            assert_eq!(zyra.primary_perk_ids.len(), 4);
-            assert_eq!(zyra.sub_perk_ids.len(), 2);
-            assert_eq!(zyra.shard_ids.len(), 3);
-
-            let counters = p
-                .counters(200, "jungle")
-                .await
-                .expect("JP1 Aurora counters should fall back to KR build data");
-            println!("JP1 FALLBACK COUNTERS OK: {}", counters.len());
-            assert!(!counters.is_empty());
-        });
-    }
-
-    #[test]
-    #[ignore]
-    fn live_openlol_matchup_build() {
-        live(|p| async move {
-            // Viego (234) vs Shaco (35) in the jungle. The matchup may
-            // legitimately be too thin at the current patch, so the only
-            // acceptable failure is exactly NotEnoughData.
-            match p.rune_build(234, Some("jungle"), Some(35)).await {
-                Ok(b) => {
-                    println!("MATCHUP BUILD OK: {b:?}");
-                    assert!(b.matchup);
-                    assert!(b.page_name.contains(" vs "), "{}", b.page_name);
-                    assert!(b.primary_style_id > 0 && b.sub_style_id > 0);
-                    assert_eq!(b.primary_perk_ids.len(), 4);
-                    assert_eq!(b.sub_perk_ids.len(), 2);
-                    assert_eq!(b.shard_ids.len(), 3);
-                    assert!(b.win_rate > 0.0 && b.win_rate < 1.0);
-                    assert!(b.games >= MIN_MATCHUP_GAMES);
-                }
-                Err(ProviderError::NotEnoughData) => {
-                    println!("MATCHUP: not enough data (acceptable outcome)");
-                }
-                Err(e) => panic!("matchup rune_build failed unexpectedly: {e}"),
-            }
-        });
-    }
-}
+mod tests;

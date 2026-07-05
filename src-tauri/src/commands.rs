@@ -12,7 +12,6 @@ use tauri::{AppHandle, Emitter, State};
 
 use crate::engine::{
     self, Engine, PanelPosition, PresentationMode, Settings, UiLayout, WindowGeometry,
-    WindowPosition,
 };
 use crate::error;
 use crate::events::{log, RuneImportedEvent};
@@ -40,15 +39,7 @@ pub fn get_settings(engine: State<'_, Arc<Engine>>) -> Settings {
 #[tauri::command]
 pub fn set_auto_import(engine: State<'_, Arc<Engine>>, enabled: bool) -> error::Result<()> {
     {
-        engine.settings.lock().unwrap().auto_import_runes = enabled;
-    }
-    engine.persist()
-}
-
-#[tauri::command]
-pub fn set_pinned(engine: State<'_, Arc<Engine>>, pinned: bool) -> error::Result<()> {
-    {
-        engine.settings.lock().unwrap().pinned = pinned;
+        engine.settings.lock().auto_import_runes = enabled;
     }
     engine.persist()
 }
@@ -56,7 +47,7 @@ pub fn set_pinned(engine: State<'_, Arc<Engine>>, pinned: bool) -> error::Result
 #[tauri::command]
 pub fn set_import_spells(engine: State<'_, Arc<Engine>>, enabled: bool) -> error::Result<()> {
     {
-        engine.settings.lock().unwrap().import_spells = enabled;
+        engine.settings.lock().import_spells = enabled;
     }
     engine.persist()
 }
@@ -64,7 +55,7 @@ pub fn set_import_spells(engine: State<'_, Arc<Engine>>, enabled: bool) -> error
 #[tauri::command]
 pub fn set_spells_flipped(engine: State<'_, Arc<Engine>>, flipped: bool) -> error::Result<()> {
     {
-        engine.settings.lock().unwrap().spells_flipped = flipped;
+        engine.settings.lock().spells_flipped = flipped;
     }
     engine.persist()
 }
@@ -78,7 +69,7 @@ pub fn set_presentation_mode(
     let parsed = PresentationMode::parse(&mode)
         .ok_or_else(|| error::Error::Other(format!("unknown presentation mode: {mode}")))?;
     {
-        engine.settings.lock().unwrap().presentation_mode = parsed;
+        engine.settings.lock().presentation_mode = parsed;
     }
     engine.persist()?;
     engine::apply_desired_window_mode(&app, &engine);
@@ -100,22 +91,7 @@ pub fn set_ingame_panel_position(
         return Err(error::Error::Other("invalid panel position".into()));
     }
     {
-        engine.ui_layout.lock().unwrap().ingame_panel = Some(PanelPosition { left, top });
-    }
-    engine.persist()
-}
-
-#[tauri::command]
-pub fn set_champselect_window_position(
-    engine: State<'_, Arc<Engine>>,
-    x: f64,
-    y: f64,
-) -> error::Result<()> {
-    if !x.is_finite() || !y.is_finite() {
-        return Err(error::Error::Other("invalid window position".into()));
-    }
-    {
-        engine.ui_layout.lock().unwrap().champselect_window = Some(WindowPosition { x, y });
+        engine.ui_layout.lock().ingame_panel = Some(PanelPosition { left, top });
     }
     engine.persist()
 }
@@ -141,7 +117,7 @@ pub fn set_control_window_geometry(
     let mode = engine::WindowMode::parse(&mode)
         .ok_or_else(|| error::Error::Other(format!("unknown window mode: {mode}")))?;
     {
-        engine.ui_layout.lock().unwrap().set_control_geometry(
+        engine.ui_layout.lock().set_control_geometry(
             mode,
             WindowGeometry {
                 x,
@@ -174,7 +150,7 @@ pub fn set_interactive(
 /// elements, in window-relative CSS px). Called whenever their layout changes.
 #[tauri::command]
 pub fn set_hit_regions(engine: State<'_, Arc<Engine>>, regions: Vec<HitRegion>) {
-    *engine.hit_regions.lock().unwrap() = regions;
+    *engine.hit_regions.lock() = regions;
 }
 
 /// Hold the window interactive for the duration of a panel drag, where the
@@ -187,7 +163,7 @@ pub fn set_drag_active(engine: State<'_, Arc<Engine>>, active: bool) {
 #[tauri::command]
 pub fn set_ingame_collapsed(engine: State<'_, Arc<Engine>>, collapsed: bool) -> error::Result<()> {
     {
-        engine.ui_layout.lock().unwrap().ingame_collapsed = collapsed;
+        engine.ui_layout.lock().ingame_collapsed = collapsed;
     }
     engine.persist()
 }
@@ -195,11 +171,16 @@ pub fn set_ingame_collapsed(engine: State<'_, Arc<Engine>>, collapsed: bool) -> 
 /// Tier list for a role (strong picks / ban targets).
 #[tauri::command]
 pub async fn get_tier_list(
+    app: AppHandle,
     engine: State<'_, Arc<Engine>>,
     role: String,
 ) -> error::Result<Vec<TierEntry>> {
     engine.provider.tier_list(&role).await.map_err(|e| {
-        eprintln!("get_tier_list failed role={role:?}: {e}");
+        log(
+            &app,
+            "warn",
+            format!("get_tier_list failed role={role:?}: {e}"),
+        );
         e.into()
     })
 }
@@ -207,6 +188,7 @@ pub async fn get_tier_list(
 /// Champions that counter `champion_id` in `role`, best counters first.
 #[tauri::command]
 pub async fn get_counters(
+    app: AppHandle,
     engine: State<'_, Arc<Engine>>,
     champion_id: i64,
     role: String,
@@ -216,7 +198,11 @@ pub async fn get_counters(
         .counters(champion_id, &role)
         .await
         .map_err(|e| {
-            eprintln!("get_counters failed champion_id={champion_id} role={role:?}: {e}");
+            log(
+                &app,
+                "warn",
+                format!("get_counters failed champion_id={champion_id} role={role:?}: {e}"),
+            );
             e.into()
         })
 }
@@ -225,6 +211,7 @@ pub async fn get_counters(
 /// matchup-specific page; thin matchups can still return "not-enough-data".
 #[tauri::command]
 pub async fn get_rune_build(
+    app: AppHandle,
     engine: State<'_, Arc<Engine>>,
     champion_id: i64,
     role: String,
@@ -235,8 +222,12 @@ pub async fn get_rune_build(
         .rune_build(champion_id, role_opt(&role), enemy_champion_id)
         .await
         .map_err(|e| {
-            eprintln!(
-                "get_rune_build failed champion_id={champion_id} role={role:?} enemy_champion_id={enemy_champion_id:?}: {e}"
+            log(
+                &app,
+                "warn",
+                format!(
+                    "get_rune_build failed champion_id={champion_id} role={role:?} enemy_champion_id={enemy_champion_id:?}: {e}"
+                ),
             );
             e.into()
         })
@@ -321,7 +312,7 @@ pub fn set_data_source(
         .ok_or_else(|| error::Error::Other(format!("unknown data source: {kind}")))?;
     engine.provider.set_active(parsed)?;
     {
-        engine.settings.lock().unwrap().data_source = parsed;
+        engine.settings.lock().data_source = parsed;
     }
     engine.persist()?;
     let _ = app.emit("data-source", kind);

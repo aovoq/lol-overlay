@@ -1,8 +1,7 @@
 // Credit to https://github.com/pradishb/ugg-parser for figuring out the
 // structure of the champ overview stats data.
 
-use super::arena_overview::ArenaOverviewData;
-use super::default_overview::{Abilities, OverviewData};
+use super::default_overview::OverviewData;
 use super::mappings;
 use serde::de::{Deserialize, Deserializer, IgnoredAny, SeqAccess, Visitor};
 use serde::{Deserialize as DeserializeDerive, Serialize};
@@ -22,32 +21,13 @@ pub fn handle_unknown<T: Default, E>(result: Result<Option<T>, E>) -> T {
 #[serde(untagged)]
 pub enum Overview {
     Default(OverviewData),
-    Arena(ArenaOverviewData),
 }
 
-#[allow(dead_code)]
 impl Overview {
     #[must_use]
     pub fn matches(&self) -> i64 {
         match self {
-            Overview::Arena(a) => a.matches,
             Overview::Default(d) => d.matches,
-        }
-    }
-
-    #[must_use]
-    pub fn abilities(&self) -> Abilities {
-        match self {
-            Overview::Arena(a) => a.abilities.clone(),
-            Overview::Default(d) => d.abilities.clone(),
-        }
-    }
-
-    #[must_use]
-    pub fn low_sample_size(&self) -> bool {
-        match self {
-            Overview::Arena(a) => a.low_sample_size,
-            Overview::Default(d) => d.low_sample_size,
         }
     }
 }

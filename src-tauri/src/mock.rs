@@ -23,14 +23,14 @@ use overlay_types::{EnemyChampion, GameSnapshot};
 /// the enemy jungler, real ban targets in the ban slots. The frontend then
 /// drives tier list / counters / runes through the live provider, so the
 /// whole panel is testable end to end.
-pub async fn mock_champ_select_loop(app: AppHandle, engine: Arc<Engine>) {
+pub async fn mock_champ_select_loop(app: AppHandle, engine: Arc<Engine>, generation: u64) {
     engine::apply_window_mode(&app, WindowMode::ChampSelect);
 
     let ev = champ_select_scenario(&engine).await;
 
     // Re-emit on a timer (like the in-game mock) so a stray event can't
     // strand the panel; stop as soon as the hotkey advances the cycle.
-    while engine.mock_stage() == MockStage::ChampSelect {
+    while engine.mock_stage() == MockStage::ChampSelect && engine.mock_generation() == generation {
         let _ = app.emit(
             "phase",
             PhaseEvent {
@@ -41,6 +41,10 @@ pub async fn mock_champ_select_loop(app: AppHandle, engine: Arc<Engine>) {
         );
         let _ = app.emit("champ-select", ev.clone());
         tokio::time::sleep(Duration::from_millis(1500)).await;
+    }
+
+    if engine.mock_generation() != generation {
+        return;
     }
 
     // Close the champ-select control. Only return to compact mode when the
@@ -101,7 +105,7 @@ async fn champ_select_scenario(engine: &Engine) -> ChampSelectEvent {
 /// In-game mock: re-emits synthetic state on a timer while its stage is active
 /// (so a stray poller `phase` event can't hide the panel); clears the UI when
 /// the cycle moves on.
-pub async fn mock_loop(app: AppHandle, engine: Arc<Engine>) {
+pub async fn mock_loop(app: AppHandle, engine: Arc<Engine>, generation: u64) {
     engine
         .phase_champselect
         .store(false, std::sync::atomic::Ordering::SeqCst);
@@ -146,7 +150,7 @@ pub async fn mock_loop(app: AppHandle, engine: Arc<Engine>) {
         },
     );
 
-    while engine.mock_stage() == MockStage::InGame {
+    while engine.mock_stage() == MockStage::InGame && engine.mock_generation() == generation {
         let _ = app.emit(
             "phase",
             PhaseEvent {
@@ -168,6 +172,10 @@ pub async fn mock_loop(app: AppHandle, engine: Arc<Engine>) {
             },
         );
         tokio::time::sleep(Duration::from_millis(1500)).await;
+    }
+
+    if engine.mock_generation() != generation {
+        return;
     }
 
     // Reset the UI on the way out of mock mode.
