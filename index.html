@@ -10,6 +10,16 @@
     />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>lol-overlay</title>
+    <script>
+      // Plain-browser preview (`pnpm dev` without the Tauri shell): stub the
+      // window metadata that @tauri-apps/api reads at import time, so the app
+      // renders instead of crashing. `?window=control` previews the control
+      // window; anything else previews the overlay. No-op inside Tauri.
+      if (!window.__TAURI_INTERNALS__) {
+        const label = new URLSearchParams(location.search).get("window") ?? "overlay";
+        window.__TAURI_INTERNALS__ = { metadata: { currentWindow: { label }, currentWebview: { label } } };
+      }
+    </script>
     <script type="module" src="/src/index.tsx" defer></script>
   </head>
   <body>

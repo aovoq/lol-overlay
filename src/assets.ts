@@ -18,6 +18,8 @@ export interface ChampionInfo {
   imageId: string;
   /** Display name, e.g. "Wukong". */
   name: string;
+  /** Japanese display name, e.g. "ウーコン" ("" if the ja_JP load failed). */
+  nameJa: string;
 }
 const championByKey = new Map<number, ChampionInfo>();
 const championImageByLower = new Map<string, string>();
@@ -105,6 +107,14 @@ export const champIconByName = (imageId: string) => {
 export const champIconByKey = (key: number) => {
   assetsReady();
   return champIconByName(championByKey.get(key)?.imageId ?? "");
+};
+
+/** All champions sorted by display name ([] while assets are loading). */
+export const allChampions = (): ({ key: number } & ChampionInfo)[] => {
+  assetsReady();
+  return [...championByKey.entries()]
+    .map(([key, info]) => ({ key, ...info }))
+    .sort((a, b) => a.name.localeCompare(b.name));
 };
 
 /** Display name for a numeric champion id ("" while assets are loading). */
@@ -202,14 +212,27 @@ async function load(): Promise<void> {
     const versions: string[] = await fetch(`${DD}/api/versions.json`).then((r) => r.json());
     ddVersion = versions[0];
 
-    const [champ, runes, spells] = await Promise.all([
+    const [champ, runes, spells, champJa] = await Promise.all([
       fetch(`${DD}/cdn/${ddVersion}/data/en_US/champion.json`).then((r) => r.json()),
       fetch(`${DD}/cdn/${ddVersion}/data/en_US/runesReforged.json`).then((r) => r.json()),
       fetch(`${DD}/cdn/${ddVersion}/data/en_US/summoner.json`).then((r) => r.json()),
+      // Japanese names for search; non-fatal if unavailable.
+      fetch(`${DD}/cdn/${ddVersion}/data/ja_JP/champion.json`)
+        .then((r) => r.json())
+        .catch(() => null),
     ]);
 
+    const jaNameById = new Map<string, string>();
+    for (const c of Object.values<any>(champJa?.data ?? {})) {
+      jaNameById.set(c.id, c.name);
+    }
+
     for (const c of Object.values<any>(champ.data)) {
-      championByKey.set(Number(c.key), { imageId: c.id, name: c.name });
+      championByKey.set(Number(c.key), {
+        imageId: c.id,
+        name: c.name,
+        nameJa: jaNameById.get(c.id) ?? "",
+      });
       championImageByLower.set(c.id.toLowerCase(), c.id);
     }
 
