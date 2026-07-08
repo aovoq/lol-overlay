@@ -25,6 +25,7 @@ cargo test --workspace --lib
 # Network-dependent end-to-end checks:
 cargo test -p overlay-provider-deeplol --lib -- --ignored --nocapture
 cargo test -p overlay-provider-ugg --lib -- --ignored --nocapture
+cargo test -p overlay-provider-lolalytics --lib -- --ignored --nocapture
 ```
 
 **Target platform is Windows.** UI/frontend work runs fine on Mac, but anything touching the LCU or Live Client Data API requires a running LoL client (Windows).
@@ -65,7 +66,8 @@ lol-overlay (src-tauri)     engine, commands, events, hittest, hotkeys, mock
  ├── overlay-ddragon        Data Dragon client + champion/item maps (shared)
  ├── overlay-provider       BuildProvider trait, ProviderProxy, hardcoded fallback
  ├── overlay-provider-deeplol
- └── overlay-provider-ugg
+ ├── overlay-provider-ugg
+ └── overlay-provider-lolalytics
 ```
 
 The frontend (`src/`, SolidJS) listens for Tauri events and renders panels into `index.html`.
@@ -91,10 +93,11 @@ Frontend → backend commands (`commands.rs`): settings/layout setters, data-sou
 
 ### Data provider abstraction (`overlay-provider`)
 
-Everything the overlay needs "from the internet" flows through the `BuildProvider` trait. Runtime routing goes through **`ProviderProxy`**, which forwards to the active backend (`ProviderKind`: `deeplol` | `ugg`). Both backends share one `Arc<DdragonClient>` for static maps.
+Everything the overlay needs "from the internet" flows through the `BuildProvider` trait. Runtime routing goes through **`ProviderProxy`**, which forwards to the active backend (`ProviderKind`: `deeplol` | `ugg` | `lolalytics`). Every backend shares one `Arc<DdragonClient>` for static maps.
 
 - **`overlay-provider-deeplol`** (`DeepLolProvider`) — DeepLoL CDN + Data Dragon. Full OPENLOL support (tier list, counters, matchup runes).
 - **`overlay-provider-ugg`** (`UggProvider`) — u.gg stats2 API. In-game items/skills/runes + counters; tier list returns `NotEnoughData` (no site-wide tier JSON on stats2).
+- **`overlay-provider-lolalytics`** (`LolalyticsProvider`) — LoLalytics' internal `mega` JSON API (`a1.lolalytics.com/mega/?ep=…`; needs a `Referer: https://lolalytics.com/` header). Supports items (`ep=build-itemset`/`build-earlyset`), counters (`ep=counter`), and tier list (`ep=tier`). **Runes/skills/spells return `NotEnoughData`** — LoLalytics serves the primary build object only inside server-rendered HTML, with no clean JSON endpoint. Uses `patch=30` (last-30-days aggregate, no version lookup), `tier=platinum_plus`, `region=all`. Champion slug = the Data Dragon alias lowercased (`MonkeyKing` → `monkeyking`).
 - **`HardcodedProvider`** (`overlay-provider`) — offline fallback with a tiny champion-damage table. Also home to `champion_damage_type`, used by `classify_threats`.
 
 The active source is persisted in `settings.json` as `dataSource` and switchable from the settings panel.

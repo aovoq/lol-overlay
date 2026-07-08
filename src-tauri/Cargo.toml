@@ -42,6 +42,7 @@ overlay-types = { workspace = true }
 overlay-provider = { workspace = true }
 overlay-provider-deeplol = { workspace = true }
 overlay-provider-ugg = { workspace = true }
+overlay-provider-lolalytics = { workspace = true }
 overlay-ddragon = { workspace = true }
 
 

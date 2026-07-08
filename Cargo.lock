@@ -2150,6 +2150,7 @@ dependencies = [
  "overlay-live-client",
  "overlay-provider",
  "overlay-provider-deeplol",
+ "overlay-provider-lolalytics",
  "overlay-provider-ugg",
  "overlay-types",
  "parking_lot",
@@ -2688,6 +2689,20 @@ dependencies = [
 
 [[package]]
 name = "overlay-provider-deeplol"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "overlay-ddragon",
+ "overlay-provider",
+ "overlay-types",
+ "reqwest 0.12.28",
+ "serde",
+ "serde_json",
+ "tokio",
+]
+
+[[package]]
+name = "overlay-provider-lolalytics"
 version = "0.1.0"
 dependencies = [
  "async-trait",

@@ -18,6 +18,13 @@ import {
 } from "../state/settings";
 import type { PresentationMode } from "../types";
 
+/** Display names for the backend `ProviderKind` ids (fallback: the raw id). */
+const DATA_SOURCE_LABELS: Record<string, string> = {
+  deeplol: "DeepLoL",
+  ugg: "u.gg",
+  lolalytics: "LoLalytics",
+};
+
 function ToggleRow(props: {
   label: string;
   hint?: string;
@@ -137,7 +144,7 @@ export function SettingsForm() {
               onChange={(e) => setDataSource(e.currentTarget.value)}
             >
               {dataSources().map((src) => (
-                <option value={src}>{src}</option>
+                <option value={src}>{DATA_SOURCE_LABELS[src] ?? src}</option>
               ))}
             </select>
           </label>
