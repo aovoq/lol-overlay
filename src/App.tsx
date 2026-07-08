@@ -8,11 +8,14 @@ import { RuneBanner } from "./components/RuneBanner";
 import { ScrollArea } from "./components/ScrollArea";
 import { SettingsForm } from "./components/SettingsPanel";
 import { StatusChip } from "./components/StatusChip";
-import { champSelect, interactive, windowMode } from "./state/backend";
+import { champSelect, interactive, phase, windowMode } from "./state/backend";
 import { playgroundOpen, setPlaygroundOpen } from "./state/debug";
-import { developerMode } from "./state/settings";
+import { developerMode, presentationMode } from "./state/settings";
 
 export function OverlayApp() {
+  const showOverlayInGame = () =>
+    presentationMode() === "overlay" && windowMode() === "overlay" && (phase()?.inGame ?? false);
+
   createEffect(() => {
     document.body.classList.toggle("interactive", interactive());
   });
@@ -21,7 +24,7 @@ export function OverlayApp() {
     <>
       <LpBanner />
       <RuneBanner />
-      <Show when={windowMode() !== "ingame"}>
+      <Show when={showOverlayInGame()}>
         <InGamePanel />
       </Show>
     </>

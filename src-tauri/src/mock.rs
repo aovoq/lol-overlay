@@ -9,12 +9,13 @@
 //! fill the ban slots, so debugging always looks at the same numbers a real
 //! champ select would. Hardcoded champions remain only as an offline fallback.
 
+use std::sync::atomic::Ordering;
 use std::sync::Arc;
 use std::time::Duration;
 
 use tauri::{AppHandle, Emitter};
 
-use crate::engine::{self, Engine, MockStage, WindowMode};
+use crate::engine::{self, Engine, MockStage};
 use crate::events::{log, ChampSelectEvent, PhaseEvent, RecommendationsEvent, RuneImportedEvent};
 use overlay_provider::{classify_threats, BuildProvider};
 use overlay_types::{EnemyChampion, GameSnapshot};
@@ -38,6 +39,8 @@ pub fn apply_stage(app: &AppHandle, engine: &Arc<Engine>, next: MockStage) {
             tauri::async_runtime::spawn(mock_loop(app.clone(), engine.clone(), generation));
         }
         MockStage::Off => {
+            engine.phase_champselect.store(false, Ordering::SeqCst);
+            engine.phase_in_game.store(false, Ordering::SeqCst);
             let _ = app.emit("champ-select", ChampSelectEvent::default());
             let _ = app.emit(
                 "phase",
@@ -47,7 +50,7 @@ pub fn apply_stage(app: &AppHandle, engine: &Arc<Engine>, next: MockStage) {
                     in_game: false,
                 },
             );
-            engine::apply_window_mode(app, WindowMode::Overlay);
+            engine::apply_desired_window_mode(app, engine);
         }
     }
 }
@@ -57,7 +60,9 @@ pub fn apply_stage(app: &AppHandle, engine: &Arc<Engine>, next: MockStage) {
 /// drives tier list / counters / runes through the live provider, so the
 /// whole panel is testable end to end.
 pub async fn mock_champ_select_loop(app: AppHandle, engine: Arc<Engine>, generation: u64) {
-    engine::apply_window_mode(&app, WindowMode::ChampSelect);
+    engine.phase_champselect.store(true, Ordering::SeqCst);
+    engine.phase_in_game.store(false, Ordering::SeqCst);
+    engine::apply_desired_window_mode(&app, &engine);
 
     let ev = champ_select_scenario(&engine).await;
 
@@ -85,7 +90,8 @@ pub async fn mock_champ_select_loop(app: AppHandle, engine: Arc<Engine>, generat
     // switches to the in-game overlay panel.
     let _ = app.emit("champ-select", ChampSelectEvent::default());
     if engine.mock_stage() == MockStage::Off {
-        engine::apply_window_mode(&app, WindowMode::Overlay);
+        engine.phase_champselect.store(false, Ordering::SeqCst);
+        engine::apply_desired_window_mode(&app, &engine);
     }
 }
 
@@ -139,12 +145,8 @@ async fn champ_select_scenario(engine: &Engine) -> ChampSelectEvent {
 /// (so a stray poller `phase` event can't hide the panel); clears the UI when
 /// the cycle moves on.
 pub async fn mock_loop(app: AppHandle, engine: Arc<Engine>, generation: u64) {
-    engine
-        .phase_champselect
-        .store(false, std::sync::atomic::Ordering::SeqCst);
-    engine
-        .phase_in_game
-        .store(true, std::sync::atomic::Ordering::SeqCst);
+    engine.phase_champselect.store(false, Ordering::SeqCst);
+    engine.phase_in_game.store(true, Ordering::SeqCst);
     engine::apply_desired_window_mode(&app, &engine);
 
     let (snapshot, my_champion_id) = ingame_scenario(&engine).await;
@@ -220,10 +222,8 @@ pub async fn mock_loop(app: AppHandle, engine: Arc<Engine>, generation: u64) {
             in_game: false,
         },
     );
-    engine
-        .phase_in_game
-        .store(false, std::sync::atomic::Ordering::SeqCst);
-    engine::apply_window_mode(&app, WindowMode::Overlay);
+    engine.phase_in_game.store(false, Ordering::SeqCst);
+    engine::apply_desired_window_mode(&app, &engine);
 }
 
 /// Build the in-game scene from live tier lists: the top meta pick of every

@@ -1,7 +1,16 @@
-import { createMemo, onCleanup, onMount, Show } from "solid-js";
+import { createEffect, createMemo, onCleanup, onMount, Show } from "solid-js";
 import { initWindowDrag } from "../../lib/drag";
 import { APP_NAME, phaseChipLabel } from "../../lib/openlol";
-import { champSelect, phase } from "../../state/backend";
+import {
+  champSelect,
+  phase,
+  selectedRole,
+  setUserPickedVsEnemy,
+  setVsEnemyId,
+  userPickedVsEnemy,
+  vsEnemyId,
+} from "../../state/backend";
+import { tierCache } from "../../state/caches";
 import { BuildArea } from "./BuildArea";
 import { Counters } from "./Counters";
 import { EnemyRow } from "./EnemyRow";
@@ -12,8 +21,31 @@ import { StatsRow } from "./StatsRow";
 import { Tabs } from "./Tabs";
 import { TierLists } from "./TierLists";
 
+function effectiveRole() {
+  const cs = champSelect();
+  return cs?.myRole || selectedRole();
+}
+
 export function OpenLolPanel() {
   const show = createMemo(() => champSelect()?.active ?? false);
+  const revealedEnemies = createMemo(() => {
+    const cs = champSelect();
+    return (cs?.enemyChampionIds ?? []).filter((id) => id > 0);
+  });
+  const likelyLaneEnemy = createMemo(() => {
+    const revealed = revealedEnemies();
+    if (!revealed.length) return 0;
+
+    const entry = tierCache.get(effectiveRole());
+    if (entry.state !== "ok") return revealed[0];
+
+    const pickRates = new Map(entry.value.map((t) => [t.championId, t.pickRate]));
+    return (
+      revealed
+        .map((id) => ({ id, pickRate: pickRates.get(id) ?? -1 }))
+        .sort((a, b) => b.pickRate - a.pickRate)[0]?.id ?? revealed[0]
+    );
+  });
 
   const phaseLabel = createMemo(() => {
     const p = phase();
@@ -24,6 +56,20 @@ export function OpenLolPanel() {
     const header = document.querySelector<HTMLElement>(".openlol-header");
     const cleanup = initWindowDrag(header ?? undefined);
     onCleanup(cleanup);
+  });
+
+  createEffect(() => {
+    const revealed = revealedEnemies();
+    if (!revealed.length) {
+      setVsEnemyId(0);
+      setUserPickedVsEnemy(false);
+      return;
+    }
+
+    if (!revealed.includes(vsEnemyId()) || !userPickedVsEnemy()) {
+      setVsEnemyId(likelyLaneEnemy());
+      setUserPickedVsEnemy(false);
+    }
   });
 
   return (

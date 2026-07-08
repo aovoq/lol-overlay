@@ -81,8 +81,6 @@ listen<ChampSelectEvent>("champ-select", (e) => {
   if (!revealed.includes(vsEnemyId())) {
     setVsEnemyId(revealed[0] ?? 0);
     setUserPickedVsEnemy(false);
-  } else if (!userPickedVsEnemy() && revealed.length > 0) {
-    setVsEnemyId(revealed[0]);
   }
 
   if (!vsEnemyId() && activeTab() === "vs") setActiveTab("best");

@@ -1,6 +1,6 @@
 import { createMemo, For, Show } from "solid-js";
 import { assetsReady, champIconByKey, champName, fmtPct } from "../../assets";
-import { champSelect, selectedRole, setHoverChampId } from "../../state/backend";
+import { champSelect, selectedRole, setHoverChampId, vsEnemyId } from "../../state/backend";
 import { counterCache } from "../../state/caches";
 import type { CounterEntry } from "../../types";
 import { Icon } from "../Icon";
@@ -11,13 +11,8 @@ function effectiveRole() {
   return cs?.myRole || selectedRole();
 }
 
-function firstEnemy() {
-  const cs = champSelect();
-  return cs?.enemyChampionIds.find((id) => id > 0) ?? 0;
-}
-
 export function Counters() {
-  const enemy = createMemo(() => firstEnemy());
+  const enemy = createMemo(() => vsEnemyId());
   const role = createMemo(() => effectiveRole());
   const entry = createMemo(() => {
     const e = enemy();
