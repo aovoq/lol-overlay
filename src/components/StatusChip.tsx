@@ -37,7 +37,7 @@ export function StatusChip() {
     const ph = p();
     if (!ph) return "bg-hx-red";
     if (ph.inGame) return "bg-hx-up";
-    if (ph.clientUp) return "bg-hx-gold";
+    if (ph.clientUp) return "bg-hx-accent";
     return "bg-hx-red";
   };
 

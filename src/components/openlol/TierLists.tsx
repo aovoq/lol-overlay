@@ -127,7 +127,7 @@ export function TierLists() {
 
   return (
     <>
-      <div class="flex flex-col gap-0.5 font-hx-display font-semibold text-[11px] tracking-[0.16em] text-hx-gold-dim px-0.5 pt-1 pb-0.5">
+      <div class="flex flex-col gap-0.5 font-hx-display font-semibold text-[11px] tracking-[0.16em] text-hx-accent-dim px-0.5 pt-1 pb-0.5">
         <span>{roleLabel(role())}</span>
         <span>STRONG PICKS</span>
       </div>
@@ -149,7 +149,7 @@ export function TierLists() {
         </Show>
       </ScrollArea>
 
-      <div class="flex flex-col gap-0.5 font-hx-display font-semibold text-[11px] tracking-[0.16em] text-hx-gold-dim px-0.5 pt-1 pb-0.5">
+      <div class="flex flex-col gap-0.5 font-hx-display font-semibold text-[11px] tracking-[0.16em] text-hx-accent-dim px-0.5 pt-1 pb-0.5">
         <span>BAN TARGETS</span>
       </div>
       <ScrollArea class="min-h-0 flex-1" contentClass="flex flex-col gap-0.5 pr-1">

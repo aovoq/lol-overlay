@@ -33,7 +33,7 @@ export function OpenLolPanel() {
         data-hit
       >
         <header class="openlol-header flex-none h-12 flex items-center px-3.5 border-b border-hx-border relative cursor-grab active:cursor-grabbing">
-          <div class="flex items-center gap-2 text-hx-gold font-hx-display font-bold text-[15px] tracking-[0.24em]">
+          <div class="flex items-center gap-2 text-hx-accent font-hx-display font-bold text-[15px] tracking-[0.24em]">
             <svg
               viewBox="0 0 24 24"
               aria-hidden="true"

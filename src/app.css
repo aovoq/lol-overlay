@@ -35,9 +35,9 @@
   --color-hx-bg-raised: var(--hx-bg-raised);
   --color-hx-panel: var(--hx-panel);
   --color-hx-border: var(--hx-border);
-  --color-hx-gold: var(--hx-gold);
-  --color-hx-gold-dim: var(--hx-gold-dim);
-  --color-hx-gold-wash: var(--hx-gold-wash);
+  --color-hx-accent: var(--hx-accent);
+  --color-hx-accent-dim: var(--hx-accent-dim);
+  --color-hx-accent-wash: var(--hx-accent-wash);
   --color-hx-text: var(--hx-text);
   --color-hx-text-strong: var(--hx-text-strong);
   --color-hx-muted: var(--hx-muted);
@@ -55,69 +55,71 @@
 }
 
 @layer base {
+  /* HUD dark: black surfaces, red lines. */
   :root[data-theme="dark"] {
     color-scheme: dark;
-    --hx-bg: #0b0a08;
-    --hx-bg-raised: #15120d;
-    --hx-panel: #15120d;
+    --hx-bg: #060608;
+    --hx-bg-raised: #101014;
+    --hx-panel: #0b0b0e;
     --hx-panel-bg:
-      linear-gradient(180deg, rgba(200, 170, 110, 0.06), rgba(200, 170, 110, 0) 18%),
-      rgba(11, 10, 8, 0.94);
-    --hx-border: #3a3022;
-    --hx-keystone-border: #463f2e;
-    --hx-gold: #c8aa6e;
-    --hx-gold-dim: #7a6a4d;
-    --hx-gold-wash: rgba(200, 170, 110, 0.12);
-    --hx-text: #f0e6d2;
-    --hx-text-strong: #e8e0cc;
-    --hx-muted: #847b6a;
-    --hx-muted-soft: rgba(230, 217, 181, 0.62);
+      linear-gradient(180deg, rgba(255, 61, 84, 0.07), rgba(255, 61, 84, 0) 22%),
+      rgba(6, 6, 8, 0.92);
+    --hx-border: rgba(255, 61, 84, 0.3);
+    --hx-keystone-border: rgba(255, 61, 84, 0.55);
+    --hx-accent: #ff3d54;
+    --hx-accent-dim: #c25563;
+    --hx-accent-wash: rgba(255, 61, 84, 0.12);
+    --hx-text: #e9e9ec;
+    --hx-text-strong: #ffffff;
+    --hx-muted: #8f8f99;
+    --hx-muted-soft: rgba(233, 233, 236, 0.6);
     --hx-up: #3fc380;
-    --hx-red: #e84057;
-    --hx-red-soft: rgba(232, 64, 87, 0.42);
+    --hx-red: #ff6478;
+    --hx-red-soft: rgba(255, 100, 120, 0.42);
     --hx-physical: #e8923f;
     --hx-magic: #9faafc;
     --hx-durable: #a1d586;
-    --hx-skel-mid: #1f1a12;
-    --hx-skill-key-bg: rgba(11, 10, 8, 0.9);
-    --hx-skill-key-border: rgba(200, 170, 110, 0.42);
-    --hx-skill-label-bg: rgba(21, 18, 13, 0.86);
-    --hx-overlay-ring: rgba(200, 170, 110, 0.45);
-    --hx-button-bg: #131009;
-    --hx-button-hover: #e3cb95;
+    --hx-skel-mid: #17171c;
+    --hx-skill-key-bg: rgba(6, 6, 8, 0.9);
+    --hx-skill-key-border: rgba(255, 61, 84, 0.42);
+    --hx-skill-label-bg: rgba(16, 16, 20, 0.86);
+    --hx-overlay-ring: rgba(255, 61, 84, 0.45);
+    --hx-button-bg: rgba(255, 61, 84, 0.08);
+    --hx-button-hover: #ff6478;
   }
 
+  /* HUD light: white surfaces, blue lines. */
   :root,
   :root[data-theme="light"] {
     color-scheme: light;
-    --hx-bg: #f6f0e2;
-    --hx-bg-raised: #fffaf0;
-    --hx-panel: #fff8ea;
+    --hx-bg: #ffffff;
+    --hx-bg-raised: #f3f6fc;
+    --hx-panel: #ffffff;
     --hx-panel-bg:
-      linear-gradient(180deg, rgba(126, 92, 36, 0.08), rgba(126, 92, 36, 0) 22%),
-      rgba(255, 248, 234, 0.94);
-    --hx-border: #cdbb96;
-    --hx-keystone-border: #ad8f55;
-    --hx-gold: #8d6828;
-    --hx-gold-dim: #9b8252;
-    --hx-gold-wash: rgba(166, 121, 45, 0.13);
-    --hx-text: #2b2419;
-    --hx-text-strong: #1f1a12;
-    --hx-muted: #6f6656;
-    --hx-muted-soft: rgba(82, 72, 55, 0.64);
-    --hx-up: #24784d;
-    --hx-red: #ba2f44;
-    --hx-red-soft: rgba(186, 47, 68, 0.34);
+      linear-gradient(180deg, rgba(29, 91, 227, 0.06), rgba(29, 91, 227, 0) 22%),
+      rgba(255, 255, 255, 0.94);
+    --hx-border: rgba(29, 91, 227, 0.3);
+    --hx-keystone-border: rgba(29, 91, 227, 0.55);
+    --hx-accent: #1d5be3;
+    --hx-accent-dim: #5a7bc8;
+    --hx-accent-wash: rgba(29, 91, 227, 0.08);
+    --hx-text: #1a1d24;
+    --hx-text-strong: #090b10;
+    --hx-muted: #5d6575;
+    --hx-muted-soft: rgba(38, 45, 60, 0.62);
+    --hx-up: #1e8e57;
+    --hx-red: #d43a4f;
+    --hx-red-soft: rgba(212, 58, 79, 0.36);
     --hx-physical: #a75c20;
     --hx-magic: #5d66b5;
     --hx-durable: #4d7b3b;
-    --hx-skel-mid: #e9dcc5;
-    --hx-skill-key-bg: rgba(255, 248, 234, 0.92);
-    --hx-skill-key-border: rgba(141, 104, 40, 0.36);
-    --hx-skill-label-bg: rgba(255, 250, 240, 0.88);
-    --hx-overlay-ring: rgba(141, 104, 40, 0.42);
-    --hx-button-bg: #fff3d8;
-    --hx-button-hover: #6f4f1e;
+    --hx-skel-mid: #e6ecf7;
+    --hx-skill-key-bg: rgba(255, 255, 255, 0.92);
+    --hx-skill-key-border: rgba(29, 91, 227, 0.4);
+    --hx-skill-label-bg: rgba(255, 255, 255, 0.88);
+    --hx-overlay-ring: rgba(29, 91, 227, 0.42);
+    --hx-button-bg: rgba(29, 91, 227, 0.06);
+    --hx-button-hover: #1443ad;
   }
 
   html,
@@ -188,8 +190,8 @@
     top: 15px;
     width: 8px;
     height: 8px;
-    border-top: 1px solid var(--color-hx-gold-dim);
-    border-right: 1px solid var(--color-hx-gold-dim);
+    border-top: 1px solid var(--color-hx-accent-dim);
+    border-right: 1px solid var(--color-hx-accent-dim);
     transform: rotate(45deg);
     box-sizing: border-box;
   }
@@ -200,11 +202,11 @@
     right: 3px;
     top: 19px;
     height: 1px;
-    background: var(--color-hx-gold-dim);
+    background: var(--color-hx-accent-dim);
   }
 
   .skill-order-row {
-    background: linear-gradient(90deg, var(--color-hx-gold-wash), transparent);
+    background: linear-gradient(90deg, var(--color-hx-accent-wash), transparent);
   }
 
   .skill-label {
@@ -295,11 +297,11 @@
   .hx-scrollbar-thumb {
     width: 100%;
     border-radius: 3px;
-    background: var(--color-hx-gold-dim);
+    background: var(--color-hx-accent-dim);
   }
 
   .hx-scrollbar-thumb:hover {
-    background: var(--color-hx-gold);
+    background: var(--color-hx-accent);
   }
 
   .openlol img {

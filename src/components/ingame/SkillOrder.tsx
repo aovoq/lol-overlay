@@ -56,7 +56,7 @@ function SkillCard(props: { skillId: number; championImageId: string }) {
   return (
     <span
       class={`skill-card relative w-[38px] h-[38px] flex items-center justify-center overflow-hidden border rounded-[5px] bg-hx-bg-raised ${
-        hasIcon() ? "border-hx-gold-dim" : "border-hx-border"
+        hasIcon() ? "border-hx-accent-dim" : "border-hx-border"
       }`}
       title={title()}
     >
@@ -66,7 +66,7 @@ function SkillCard(props: { skillId: number; championImageId: string }) {
         alt=""
       />
       <span
-        class={`skill-card-key absolute flex items-center justify-center text-hx-gold font-hx-display font-bold leading-none ${
+        class={`skill-card-key absolute flex items-center justify-center text-hx-accent font-hx-display font-bold leading-none ${
           hasIcon()
             ? "skill-card-key--icon inset-auto right-0 bottom-0 w-[17px] h-[15px] border-t border-l rounded-tl text-[10px] text-hx-text"
             : "inset-0 text-[17px]"
@@ -94,7 +94,7 @@ export function SkillOrder(props: {
         class="skill-order-row flex items-center gap-3 px-3 py-2 pb-2.5 border-b border-hx-border"
         title={title()}
       >
-        <div class="skill-label flex-none w-28 h-[38px] flex items-center box-border px-2.5 border border-hx-border rounded text-hx-gold-dim font-hx-display text-[10px] font-semibold leading-tight tracking-[0.14em] uppercase whitespace-nowrap">
+        <div class="skill-label flex-none w-28 h-[38px] flex items-center box-border px-2.5 border border-hx-border rounded text-hx-accent-dim font-hx-display text-[10px] font-semibold leading-tight tracking-[0.14em] uppercase whitespace-nowrap">
           Skill Order
         </div>
         <div class="flex items-center gap-2">

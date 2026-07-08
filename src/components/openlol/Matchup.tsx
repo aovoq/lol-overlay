@@ -25,7 +25,7 @@ export function Matchup() {
             class="w-5 h-5 rounded border border-hx-border object-cover"
           />
         </Show>
-        <span class="text-hx-gold font-semibold">{champName(my()) || `#${my()}`}</span>
+        <span class="text-hx-accent font-semibold">{champName(my()) || `#${my()}`}</span>
         <Show when={enemy()}>
           <span class="text-hx-muted italic">vs</span>
           <Show when={assetsReady()}>

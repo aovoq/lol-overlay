@@ -96,11 +96,11 @@ function PanelBody(props: { embedded?: boolean }) {
         } ${ingameCollapsed() ? "border-b-transparent cursor-default" : "border-b-hx-border"}`}
         data-hit={!props.embedded ? true : undefined}
       >
-        <span class="inline-flex items-center gap-[7px] text-hx-gold font-hx-display text-xs font-bold tracking-[0.32em] whitespace-nowrap">
+        <span class="inline-flex items-center gap-[7px] text-hx-accent font-hx-display text-xs font-bold tracking-[0.32em] whitespace-nowrap">
           <svg
             viewBox="0 0 24 24"
             aria-hidden="true"
-            class="w-[13px] h-[13px] fill-none stroke-hx-gold stroke-[1.6]"
+            class="w-[13px] h-[13px] fill-none stroke-hx-accent stroke-[1.6]"
           >
             <polygon points="12 2.5 20.2 7.25 20.2 16.75 12 21.5 3.8 16.75 3.8 7.25" />
           </svg>
@@ -112,7 +112,7 @@ function PanelBody(props: { embedded?: boolean }) {
           </span>
           <button
             type="button"
-            class="w-[22px] h-[22px] flex items-center justify-center p-0 bg-transparent border border-hx-border rounded text-hx-muted hover:text-hx-gold hover:border-hx-gold cursor-pointer"
+            class="w-[22px] h-[22px] flex items-center justify-center p-0 bg-transparent border border-hx-border rounded text-hx-muted hover:text-hx-accent hover:border-hx-accent cursor-pointer"
             title="折りたたみ切替"
             onClick={toggleCollapse}
           >
@@ -142,14 +142,14 @@ function PanelBody(props: { embedded?: boolean }) {
                   <Show when={assetsReady()}>
                     <Icon
                       url={champIconByName(e().selfRawName)}
-                      class="w-[38px] h-[38px] rounded-[5px] border border-hx-gold-dim object-cover"
+                      class="w-[38px] h-[38px] rounded-[5px] border border-hx-accent-dim object-cover"
                     />
                   </Show>
                   <div class="flex flex-col gap-px min-w-0">
                     <span class="text-hx-text font-bold text-sm truncate">
                       {e().selfChampion || "—"}
                     </span>
-                    <span class="text-hx-gold-dim font-hx-display text-[9px] font-semibold tracking-[0.26em]">
+                    <span class="text-hx-accent-dim font-hx-display text-[9px] font-semibold tracking-[0.26em]">
                       {e().selfPosition || ""}
                     </span>
                   </div>
@@ -191,7 +191,7 @@ function PanelBody(props: { embedded?: boolean }) {
 
                 <SkillOrder order={e().skillOrder} championImageId={e().selfRawName} />
 
-                <div class="px-3 py-2 pb-1.5 font-hx-display text-[10px] font-semibold tracking-[0.24em] text-hx-gold-dim">
+                <div class="px-3 py-2 pb-1.5 font-hx-display text-[10px] font-semibold tracking-[0.24em] text-hx-accent-dim">
                   RECOMMENDED BUILD
                 </div>
 
@@ -218,7 +218,7 @@ function PanelBody(props: { embedded?: boolean }) {
                             <span class="font-semibold text-hx-text truncate">{it.name}</span>
                             <span class="text-[10.5px] text-hx-muted">{it.reason}</span>
                             <div
-                              class="h-0.5 mt-1 rounded-sm bg-gradient-to-r from-hx-gold to-hx-gold-dim opacity-85"
+                              class="h-0.5 mt-1 rounded-sm bg-gradient-to-r from-hx-accent to-hx-accent-dim opacity-85"
                               style={{ width: `${Math.round(it.score * 100)}%` }}
                             />
                           </div>

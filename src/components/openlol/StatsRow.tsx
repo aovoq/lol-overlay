@@ -66,7 +66,7 @@ export function StatsRow() {
           <Show when={b().spellIds.length >= 2}>
             <button
               type="button"
-              class="bg-none border border-hx-border rounded px-2 py-1 font-hx-display font-semibold text-[10px] tracking-widest text-hx-gold-dim hover:text-hx-gold hover:border-hx-gold-dim cursor-pointer"
+              class="bg-none border border-hx-border rounded px-2 py-1 font-hx-display font-semibold text-[10px] tracking-widest text-hx-accent-dim hover:text-hx-accent hover:border-hx-accent-dim cursor-pointer"
               onClick={() => persistSpellsFlipped(!spellsFlippedSetting())}
             >
               FLIP
@@ -77,7 +77,7 @@ export function StatsRow() {
               type="checkbox"
               checked={importSpells()}
               onChange={(e) => setImportSpells(e.currentTarget.checked)}
-              class="accent-hx-gold"
+              class="accent-hx-accent"
             />
             <span>Spells</span>
           </label>

@@ -43,7 +43,7 @@ export function LpBanner() {
   return (
     <Show when={visible()}>
       <div
-        class={`panel fixed top-[18px] left-1/2 -translate-x-1/2 flex gap-2.5 items-center border-hx-gold-dim border-l-[3px] ${
+        class={`panel fixed top-[18px] left-1/2 -translate-x-1/2 flex gap-2.5 items-center border-hx-accent-dim border-l-[3px] ${
           variant() === "win" ? "border-l-hx-up" : "border-l-hx-red"
         }`}
       >

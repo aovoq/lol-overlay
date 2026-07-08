@@ -6,7 +6,7 @@ export function SectionError(props: { message: string; onRetry: () => void }) {
       Couldn't load data{" "}
       <button
         type="button"
-        class="bg-none border-none p-0 text-xs text-hx-gold underline cursor-pointer"
+        class="bg-none border-none p-0 text-xs text-hx-accent underline cursor-pointer"
         onClick={() => props.onRetry()}
       >
         Retry

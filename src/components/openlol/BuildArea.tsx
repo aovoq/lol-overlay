@@ -27,7 +27,7 @@ function TreeHead(props: { styleId: number; primary: boolean }) {
   const s = () => getStyle(props.styleId);
   return (
     <div
-      class="flex items-center gap-2 my-2 mx-0 font-hx-display font-semibold text-xs tracking-[0.16em] text-hx-gold"
+      class="flex items-center gap-2 my-2 mx-0 font-hx-display font-semibold text-xs tracking-[0.16em] text-hx-accent"
       style={!props.primary && s() ? { color: s()?.color ?? "" } : undefined}
     >
       <Show when={s()?.icon}>
@@ -107,10 +107,10 @@ function BigEmpty(props: { role: string }) {
   return (
     <div class="flex flex-col items-center gap-2.5 mt-14 mx-auto max-w-[340px] text-center text-hx-muted">
       <div
-        class="text-hx-gold-dim w-11 h-11 [&_svg]:w-full [&_svg]:h-full"
+        class="text-hx-accent-dim w-11 h-11 [&_svg]:w-full [&_svg]:h-full"
         innerHTML={OPENLOL_MARK_SVG}
       />
-      <div class="font-hx-display font-bold text-sm tracking-[0.2em] text-hx-gold">
+      <div class="font-hx-display font-bold text-sm tracking-[0.2em] text-hx-accent">
         {roleLabel(props.role)}
       </div>
       <div class="text-xs leading-normal">Hover a champion to see runes</div>
@@ -122,7 +122,7 @@ function NotEnoughData(props: { championId: number; matchup: boolean }) {
   return (
     <div class="flex flex-col items-center gap-2.5 mt-14 mx-auto max-w-[340px] text-center text-hx-muted">
       <div
-        class="text-hx-gold-dim w-11 h-11 [&_svg]:w-full [&_svg]:h-full"
+        class="text-hx-accent-dim w-11 h-11 [&_svg]:w-full [&_svg]:h-full"
         innerHTML={OPENLOL_MARK_SVG}
       />
       <div class="text-base text-hx-text">Not enough data</div>

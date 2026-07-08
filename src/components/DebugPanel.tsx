@@ -19,7 +19,7 @@ export function DebugPanel() {
 
   return (
     <div class="flex flex-col gap-2 min-h-0">
-      <div class="font-hx-display text-[11px] font-bold tracking-[0.28em] text-hx-gold">DEBUG</div>
+      <div class="font-hx-display text-[11px] font-bold tracking-[0.28em] text-hx-accent">DEBUG</div>
       <div class="flex flex-col gap-1">
         <span class="text-[11px] text-hx-muted">モックシナリオ</span>
         <div class="grid grid-cols-3 gap-1 rounded border border-hx-border bg-hx-bg-raised p-1">
@@ -29,8 +29,8 @@ export function DebugPanel() {
                 type="button"
                 class={`rounded px-2 py-1 font-hx-display text-[10px] font-semibold tracking-[0.16em] cursor-pointer ${
                   mockStage() === option.value
-                    ? "bg-hx-gold-wash text-hx-gold"
-                    : "bg-transparent text-hx-muted hover:text-hx-gold"
+                    ? "bg-hx-accent-wash text-hx-accent"
+                    : "bg-transparent text-hx-muted hover:text-hx-accent"
                 }`}
                 onClick={() => selectMockStage(option.value)}
               >
@@ -42,7 +42,7 @@ export function DebugPanel() {
       </div>
       <button
         type="button"
-        class="rounded border border-hx-border bg-hx-bg-raised px-2 py-1 font-hx-display text-[10px] font-semibold tracking-[0.16em] text-hx-muted hover:text-hx-gold cursor-pointer"
+        class="rounded border border-hx-border bg-hx-bg-raised px-2 py-1 font-hx-display text-[10px] font-semibold tracking-[0.16em] text-hx-muted hover:text-hx-accent cursor-pointer"
         onClick={() => setPlaygroundOpen(true)}
       >
         UI Playground
@@ -51,7 +51,7 @@ export function DebugPanel() {
         <span class="text-[11px] text-hx-muted">イベントログ ({eventLog().length})</span>
         <button
           type="button"
-          class="text-[10px] text-hx-muted hover:text-hx-gold cursor-pointer"
+          class="text-[10px] text-hx-muted hover:text-hx-accent cursor-pointer"
           onClick={clearEventLog}
         >
           クリア
@@ -63,7 +63,7 @@ export function DebugPanel() {
             <details class="text-hx-text">
               <summary class="cursor-pointer whitespace-nowrap overflow-hidden text-ellipsis">
                 <span class="text-hx-muted">{entry.time}</span>{" "}
-                <span class="text-hx-gold">{entry.event}</span>
+                <span class="text-hx-accent">{entry.event}</span>
               </summary>
               <pre class="whitespace-pre-wrap break-all text-hx-muted pl-2">
                 {JSON.stringify(entry.payload, null, 2)}

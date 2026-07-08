@@ -15,7 +15,7 @@ export function RoleChips() {
               type="button"
               class={`flex-1 font-hx-display font-semibold text-[11px] tracking-[0.1em] py-[5px] rounded border cursor-pointer ${
                 selectedRole() === r.lcu
-                  ? "text-hx-gold border-hx-gold"
+                  ? "text-hx-accent border-hx-accent"
                   : "text-hx-muted border-hx-border bg-transparent"
               }`}
               onClick={() => {

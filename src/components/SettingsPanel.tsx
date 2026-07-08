@@ -30,7 +30,7 @@ export function SettingsForm() {
 
   return (
     <div class="settings-form flex flex-col gap-2">
-      <div class="font-hx-display text-[11px] font-bold tracking-[0.28em] text-hx-gold">SETTINGS</div>
+      <div class="font-hx-display text-[11px] font-bold tracking-[0.28em] text-hx-accent">SETTINGS</div>
       <label class="flex items-center gap-2 cursor-pointer text-hx-text">
         <input
           type="checkbox"
@@ -41,7 +41,7 @@ export function SettingsForm() {
               enabled: e.currentTarget.checked,
             }).catch(() => {});
           }}
-          class="accent-hx-gold"
+          class="accent-hx-accent"
         />
         <span>ルーン自動インポート</span>
       </label>
@@ -50,7 +50,7 @@ export function SettingsForm() {
           type="checkbox"
           checked={importSpells()}
           onChange={(e) => setImportSpells(e.currentTarget.checked)}
-          class="accent-hx-gold"
+          class="accent-hx-accent"
         />
         <span>スペルも書き込む</span>
       </label>
@@ -62,8 +62,8 @@ export function SettingsForm() {
               type="button"
               class={`rounded px-2 py-1 font-hx-display text-[10px] font-semibold tracking-[0.16em] cursor-pointer ${
                 presentationMode() === option.value
-                  ? "bg-hx-gold-wash text-hx-gold"
-                  : "bg-transparent text-hx-muted hover:text-hx-gold"
+                  ? "bg-hx-accent-wash text-hx-accent"
+                  : "bg-transparent text-hx-muted hover:text-hx-accent"
               }`}
               onClick={() => setPresentationMode(option.value)}
             >
@@ -80,8 +80,8 @@ export function SettingsForm() {
               type="button"
               class={`rounded px-2 py-1 font-hx-display text-[10px] font-semibold tracking-[0.16em] cursor-pointer ${
                 themeMode() === option.value
-                  ? "bg-hx-gold-wash text-hx-gold"
-                  : "bg-transparent text-hx-muted hover:text-hx-gold"
+                  ? "bg-hx-accent-wash text-hx-accent"
+                  : "bg-transparent text-hx-muted hover:text-hx-accent"
               }`}
               onClick={() => setThemeMode(option.value)}
             >
@@ -109,7 +109,7 @@ export function SettingsForm() {
           type="checkbox"
           checked={developerMode()}
           onChange={(e) => setDeveloperMode(e.currentTarget.checked)}
-          class="accent-hx-gold"
+          class="accent-hx-accent"
         />
         <span>開発者モード</span>
       </label>

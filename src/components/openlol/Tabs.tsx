@@ -43,7 +43,7 @@ export function Tabs() {
         type="button"
         class={`inline-flex items-center gap-1.5 bg-none border-b-2 -mb-px py-2.5 px-0.5 font-hx-display font-semibold text-xs tracking-[0.12em] cursor-pointer ${
           activeTab() === "best"
-            ? "text-hx-gold border-b-hx-gold"
+            ? "text-hx-accent border-b-hx-accent"
             : "text-hx-muted border-b-transparent"
         }`}
         onClick={() => setActiveTab("best")}
@@ -56,7 +56,7 @@ export function Tabs() {
           type="button"
           class={`hx-tab-vs inline-flex items-center gap-1.5 bg-none border-b-2 -mb-px py-2.5 px-0.5 font-hx-display font-semibold text-xs tracking-[0.12em] ${
             activeTab() === "vs"
-              ? "text-hx-gold border-b-hx-gold"
+              ? "text-hx-accent border-b-hx-accent"
               : "text-hx-muted border-b-transparent"
           } ${!enemy() ? "opacity-45 cursor-default" : "cursor-pointer"}`}
           disabled={!enemy()}
@@ -87,7 +87,7 @@ export function Tabs() {
               {(id) => (
                 <button
                   type="button"
-                  class="flex items-center gap-2 w-full text-left bg-none border-none rounded px-2.5 py-1.5 text-hx-text text-[13px] cursor-pointer hover:bg-hx-bg hover:text-hx-gold"
+                  class="flex items-center gap-2 w-full text-left bg-none border-none rounded px-2.5 py-1.5 text-hx-text text-[13px] cursor-pointer hover:bg-hx-bg hover:text-hx-accent"
                   onClick={() => {
                     setVsEnemyId(id);
                     setUserPickedVsEnemy(true);

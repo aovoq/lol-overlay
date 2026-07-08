@@ -25,15 +25,15 @@ export function RuneBanner() {
 
   return (
     <Show when={visible()}>
-      <div class="panel fixed top-[18px] left-1/2 -translate-x-1/2 flex gap-2.5 items-center border-hx-gold-dim">
+      <div class="panel fixed top-[18px] left-1/2 -translate-x-1/2 flex gap-2.5 items-center border-hx-accent-dim">
         <Show when={assetsReady()}>
           <Icon
             url={champIconByKey(champId())}
-            class="w-[34px] h-[34px] rounded-md border border-hx-gold-dim object-cover"
+            class="w-[34px] h-[34px] rounded-md border border-hx-accent-dim object-cover"
           />
         </Show>
         <div class="flex flex-col leading-snug">
-          <strong class="text-hx-gold font-hx-display text-[11px] font-bold tracking-[0.18em] uppercase">
+          <strong class="text-hx-accent font-hx-display text-[11px] font-bold tracking-[0.18em] uppercase">
             Runes imported
           </strong>
           <span class="text-hx-muted text-xs">{pageName()}</span>

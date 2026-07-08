@@ -46,12 +46,12 @@ export function DevPlayground(props: { onClose: () => void }) {
   return (
     <div class="flex flex-col gap-3 min-h-0">
       <div class="flex items-center justify-between">
-        <div class="font-hx-display text-[11px] font-bold tracking-[0.28em] text-hx-gold">
+        <div class="font-hx-display text-[11px] font-bold tracking-[0.28em] text-hx-accent">
           UI PLAYGROUND
         </div>
         <button
           type="button"
-          class="text-[10px] text-hx-muted hover:text-hx-gold cursor-pointer"
+          class="text-[10px] text-hx-muted hover:text-hx-accent cursor-pointer"
           onClick={() => props.onClose()}
         >
           ← 戻る
@@ -112,7 +112,7 @@ function ChampionSearchDemo() {
         <Input
           value={query()}
           placeholder="Search champion…"
-          class="w-full rounded border border-hx-border bg-hx-bg-raised px-2 py-1 text-[12px] text-hx-text outline-none focus:border-hx-gold placeholder:text-hx-muted"
+          class="w-full rounded border border-hx-border bg-hx-bg-raised px-2 py-1 text-[12px] text-hx-text outline-none focus:border-hx-accent placeholder:text-hx-muted"
           // Not onValueChange: the Solid port wires it to the DOM `change`
           // event (blur-time), so per-keystroke filtering needs onInput.
           onInput={(e: InputEvent & { currentTarget: HTMLInputElement }) => {
@@ -140,8 +140,8 @@ function ChampionSearchDemo() {
                   aria-selected={index() === highlighted()}
                   class={`flex cursor-pointer items-center gap-2 rounded px-2 py-1 text-[12px] ${
                     index() === highlighted()
-                      ? "bg-hx-gold-wash text-hx-gold"
-                      : "text-hx-text hover:bg-hx-gold-wash"
+                      ? "bg-hx-accent-wash text-hx-accent"
+                      : "text-hx-text hover:bg-hx-accent-wash"
                   }`}
                   onMouseEnter={() => setHighlighted(index())}
                   onMouseDown={(e) => {
@@ -167,7 +167,7 @@ function ChampionSearchDemo() {
           <div class="flex items-center gap-2 rounded border border-hx-border bg-hx-bg-raised p-2">
             <img class="h-8 w-8 rounded" src={champIconByName(champ().imageId)} alt="" />
             <div class="flex flex-col">
-              <span class="text-[12px] text-hx-gold">{champ().name}</span>
+              <span class="text-[12px] text-hx-accent">{champ().name}</span>
               <span class="text-[10px] text-hx-muted">
                 id: {champ().key} / {champ().imageId}
               </span>
