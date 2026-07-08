@@ -28,6 +28,7 @@ overlay-provider = { path = "crates/provider" }
 overlay-provider-deeplol = { path = "crates/provider-deeplol" }
 overlay-provider-ugg = { path = "crates/provider-ugg" }
 overlay-provider-lolalytics = { path = "crates/provider-lolalytics" }
+overlay-provider-opgg = { path = "crates/provider-opgg" }
 
 [workspace.lints.clippy]
 pedantic = { level = "warn", priority = -1 }

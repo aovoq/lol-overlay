@@ -23,6 +23,7 @@ const DATA_SOURCE_LABELS: Record<string, string> = {
   deeplol: "DeepLoL",
   ugg: "u.gg",
   lolalytics: "LoLalytics",
+  opgg: "OP.GG",
 };
 
 function ToggleRow(props: {

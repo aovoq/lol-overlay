@@ -21,6 +21,7 @@ pub enum ProviderKind {
     Deeplol,
     Ugg,
     Lolalytics,
+    Opgg,
 }
 
 impl<'de> Deserialize<'de> for ProviderKind {
@@ -39,6 +40,7 @@ impl ProviderKind {
             "deeplol" => Some(Self::Deeplol),
             "ugg" => Some(Self::Ugg),
             "lolalytics" => Some(Self::Lolalytics),
+            "opgg" => Some(Self::Opgg),
             _ => None,
         }
     }
@@ -48,6 +50,7 @@ impl ProviderKind {
             Self::Deeplol => "deeplol",
             Self::Ugg => "ugg",
             Self::Lolalytics => "lolalytics",
+            Self::Opgg => "opgg",
         }
     }
 }

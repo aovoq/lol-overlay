@@ -26,6 +26,7 @@ cargo test --workspace --lib
 cargo test -p overlay-provider-deeplol --lib -- --ignored --nocapture
 cargo test -p overlay-provider-ugg --lib -- --ignored --nocapture
 cargo test -p overlay-provider-lolalytics --lib -- --ignored --nocapture
+cargo test -p overlay-provider-opgg --lib -- --ignored --nocapture
 ```
 
 **Target platform is Windows.** UI/frontend work runs fine on Mac, but anything touching the LCU or Live Client Data API requires a running LoL client (Windows).
@@ -67,7 +68,8 @@ lol-overlay (src-tauri)     engine, commands, events, hittest, hotkeys, mock
  ├── overlay-provider       BuildProvider trait, ProviderProxy, hardcoded fallback
  ├── overlay-provider-deeplol
  ├── overlay-provider-ugg
- └── overlay-provider-lolalytics
+ ├── overlay-provider-lolalytics
+ └── overlay-provider-opgg
 ```
 
 The frontend (`src/`, SolidJS) listens for Tauri events and renders panels into `index.html`.
@@ -93,11 +95,12 @@ Frontend → backend commands (`commands.rs`): settings/layout setters, data-sou
 
 ### Data provider abstraction (`overlay-provider`)
 
-Everything the overlay needs "from the internet" flows through the `BuildProvider` trait. Runtime routing goes through **`ProviderProxy`**, which forwards to the active backend (`ProviderKind`: `deeplol` | `ugg` | `lolalytics`). Every backend shares one `Arc<DdragonClient>` for static maps.
+Everything the overlay needs "from the internet" flows through the `BuildProvider` trait. Runtime routing goes through **`ProviderProxy`**, which forwards to the active backend (`ProviderKind`: `deeplol` | `ugg` | `lolalytics` | `opgg`). Every backend shares one `Arc<DdragonClient>` for static maps.
 
 - **`overlay-provider-deeplol`** (`DeepLolProvider`) — DeepLoL CDN + Data Dragon. Full OPENLOL support (tier list, counters, matchup runes).
 - **`overlay-provider-ugg`** (`UggProvider`) — u.gg stats2 API. In-game items/skills/runes + counters; tier list returns `NotEnoughData` (no site-wide tier JSON on stats2).
 - **`overlay-provider-lolalytics`** (`LolalyticsProvider`) — LoLalytics' internal `mega` JSON API (`a1.lolalytics.com/mega/?ep=…`; needs a `Referer: https://lolalytics.com/` header). Supports items (`ep=build-itemset`/`build-earlyset`), counters (`ep=counter`), and tier list (`ep=tier`). **Runes/skills/spells return `NotEnoughData`** — LoLalytics serves the primary build object only inside server-rendered HTML, with no clean JSON endpoint. Uses `patch=30` (last-30-days aggregate, no version lookup), `tier=platinum_plus`, `region=all`. Champion slug = the Data Dragon alias lowercased (`MonkeyKing` → `monkeyking`).
+- **`overlay-provider-opgg`** (`OpggProvider`) — op.gg has no public JSON API at all; every value is recovered from the Next.js "flight" (React Server Component) payload embedded in the server-rendered HTML of `op.gg/lol/champions/{slug}/build[/lane]`, `.../counters[/lane]`, and `op.gg/lol/champions?position=<lane>` for the tier list (see `crates/provider-opgg/src/flight.rs` for the parser). Runes come from a clean `rune_pages` data prop — the most complete rune support of any provider here (full primary/secondary/shards + summoner spells). Counters and tier list come from a clean `data` prop each (tier list needs the `position` query param — the page's default response ships an unrelated small "trending" preview instead of the full per-lane table). Items and skill max order are scraped out of the rendered element tree (no clean data prop for them). **Matchup-specific rune pages return `NotEnoughData`** — not reachable through what the page ships client-side. The site's CDN (CloudFront + bot detection) 403s requests that look like headless Chrome but accepts a plain HTTP client with a browser `User-Agent`. Champion slug = the Data Dragon alias lowercased, same convention as LoLalytics.
 - **`HardcodedProvider`** (`overlay-provider`) — offline fallback with a tiny champion-damage table. Also home to `champion_damage_type`, used by `classify_threats`.
 
 The active source is persisted in `settings.json` as `dataSource` and switchable from the settings panel.

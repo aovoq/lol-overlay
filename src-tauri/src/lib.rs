@@ -32,6 +32,7 @@ use overlay_ddragon::DdragonClient;
 use overlay_provider::{BuildProvider, ProviderKind, ProviderProxy};
 use overlay_provider_deeplol::DeepLolProvider;
 use overlay_provider_lolalytics::LolalyticsProvider;
+use overlay_provider_opgg::OpggProvider;
 use overlay_provider_ugg::UggProvider;
 
 use crate::engine::{Engine, MockStage, Settings, UiLayout, WindowMode};
@@ -47,12 +48,15 @@ pub fn run() {
     let lolalytics: Arc<dyn BuildProvider> = Arc::new(
         LolalyticsProvider::new(ddragon.clone()).expect("failed to build LoLalytics provider"),
     );
+    let opgg: Arc<dyn BuildProvider> =
+        Arc::new(OpggProvider::new(ddragon.clone()).expect("failed to build op.gg provider"));
     let proxy = ProviderProxy::new(
         ProviderKind::Deeplol,
         [
             (ProviderKind::Deeplol, deeplol),
             (ProviderKind::Ugg, ugg),
             (ProviderKind::Lolalytics, lolalytics),
+            (ProviderKind::Opgg, opgg),
         ],
     )
     .expect("failed to build provider proxy");
