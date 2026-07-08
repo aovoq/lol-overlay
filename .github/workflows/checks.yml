@@ -30,13 +30,12 @@ jobs:
 
   rust:
     name: rust
-    runs-on: ubuntu-latest
+    # irelia only compiles for windows/macos targets (LCU process names are
+    # gated behind target_os), so lint/test on macOS — matching the release
+    # target — rather than Linux.
+    runs-on: macos-14
     steps:
       - uses: actions/checkout@v4
-      - name: install Tauri Linux dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
       - name: install Rust
         uses: dtolnay/rust-toolchain@stable
         with:
