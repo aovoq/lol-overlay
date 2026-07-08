@@ -29,6 +29,19 @@ cargo test -p overlay-provider-ugg --lib -- --ignored --nocapture
 
 **Target platform is Windows.** UI/frontend work runs fine on Mac, but anything touching the LCU or Live Client Data API requires a running LoL client (Windows).
 
+## Releasing
+
+Releases are built by GitHub Actions (`.github/workflows/release.yml`) for macOS (Apple Silicon) and Windows, published to GitHub Releases, and picked up by the in-app auto-updater (`tauri-plugin-updater`, checked from the control window at startup).
+
+```bash
+git tag v0.2.0 && git push --tags   # that's the whole release
+```
+
+- **The git tag is the single source of truth for the version.** The workflow strips the `v` and injects it via `tauri build --config`; do NOT bump `version` in `tauri.conf.json` / `package.json` / `Cargo.toml` (those stay as dev placeholders).
+- The workflow signs updater artifacts with the `TAURI_SIGNING_PRIVATE_KEY` repo secret (key has no password; the matching pubkey lives in `tauri.conf.json` under `plugins.updater`). If that key is ever lost, existing installs can no longer update.
+- `latest.json` on the latest release is the updater manifest; clients poll `releases/latest/download/latest.json`.
+- Auto-update can only be verified end-to-end across two releases: install version N, then tag N+1 and confirm the update dialog appears.
+
 ## Formatting and linting
 
 - Frontend formatting/linting uses **Biome** (`biome.json`) for TS/TSX/CSS/JSON/HTML.
