@@ -158,10 +158,39 @@
     position: fixed;
     background: var(--hx-panel-bg);
     border: 1px solid var(--color-hx-border);
-    border-radius: 8px;
-    padding: 10px 14px;
-    backdrop-filter: blur(6px);
+    border-radius: 4px;
+    padding: 14px 16px;
+    backdrop-filter: blur(8px);
     font-size: 13px;
+  }
+
+  /* HUD corner brackets: accent L-marks on opposing corners. Applied to
+   * every framed surface (.panel and the champ-select shell). Both are
+   * already positioned (fixed/relative), so the pseudos anchor to them. */
+  .panel::before,
+  .openlol-shell::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 14px;
+    height: 14px;
+    border-top: 2px solid var(--hx-accent);
+    border-left: 2px solid var(--hx-accent);
+    pointer-events: none;
+  }
+
+  .panel::after,
+  .openlol-shell::after {
+    content: "";
+    position: absolute;
+    bottom: 0;
+    right: 0;
+    width: 14px;
+    height: 14px;
+    border-bottom: 2px solid var(--hx-accent);
+    border-right: 2px solid var(--hx-accent);
+    pointer-events: none;
   }
 
   .hx-primary-button {
@@ -174,6 +203,78 @@
   .hx-primary-button:hover:not(:disabled) {
     border-color: var(--hx-button-hover);
     color: var(--hx-button-hover);
+  }
+
+  /* Section label with an accent tick mark. */
+  .hx-section-title {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-family: "LINE Seed JP", sans-serif;
+    font-weight: 800;
+    font-size: 11px;
+    letter-spacing: 0.28em;
+    color: var(--hx-accent);
+  }
+
+  .hx-section-title::before {
+    content: "";
+    flex: none;
+    width: 3px;
+    height: 11px;
+    background: var(--hx-accent);
+  }
+
+  /* HUD toggle switch: pair with a visually-hidden checkbox
+   * (<input class="sr-only"> followed by <span class="hx-switch">). */
+  .hx-switch {
+    position: relative;
+    flex: none;
+    width: 34px;
+    height: 18px;
+    border-radius: 9999px;
+    border: 1px solid var(--hx-border);
+    background: var(--hx-bg-raised);
+    transition:
+      background 150ms ease,
+      border-color 150ms ease;
+  }
+
+  .hx-switch::after {
+    content: "";
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background: var(--hx-muted);
+    transition:
+      left 150ms ease,
+      background 150ms ease;
+  }
+
+  input:checked + .hx-switch {
+    border-color: var(--hx-accent);
+    background: var(--hx-accent-wash);
+  }
+
+  input:checked + .hx-switch::after {
+    left: 18px;
+    background: var(--hx-accent);
+  }
+
+  /* Keyboard-shortcut chip. */
+  .hx-kbd {
+    border: 1px solid var(--hx-border);
+    border-bottom-width: 2px;
+    border-radius: 4px;
+    padding: 1px 6px;
+    font-size: 10px;
+    font-weight: 700;
+    color: var(--hx-muted);
+    background: var(--hx-bg-raised);
+    white-space: nowrap;
   }
 
   .skill-arrow {
@@ -227,7 +328,7 @@
     );
     background-size: 400% 100%;
     animation: hx-shimmer 1.4s ease infinite;
-    border-radius: 6px;
+    border-radius: 4px;
   }
 
   .control-root {
@@ -243,8 +344,8 @@
     height: 100%;
     min-height: 0;
     flex-direction: column;
-    gap: 10px;
-    padding: 12px;
+    gap: 14px;
+    padding: 16px;
     box-sizing: border-box;
   }
 
@@ -256,7 +357,7 @@
   }
 
   .control-status-panel {
-    padding: 12px;
+    padding: 14px;
   }
 
   .control-settings-panel {
@@ -267,7 +368,7 @@
   .control-ingame {
     height: 100vh;
     min-height: 0;
-    padding: 12px;
+    padding: 16px;
     box-sizing: border-box;
   }
 

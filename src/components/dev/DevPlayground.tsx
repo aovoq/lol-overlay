@@ -46,7 +46,7 @@ export function DevPlayground(props: { onClose: () => void }) {
   return (
     <div class="flex flex-col gap-3 min-h-0">
       <div class="flex items-center justify-between">
-        <div class="font-hx-display text-[11px] font-bold tracking-[0.28em] text-hx-accent">
+        <div class="font-hx-display text-[11px] font-extrabold tracking-[0.28em] text-hx-accent">
           UI PLAYGROUND
         </div>
         <button

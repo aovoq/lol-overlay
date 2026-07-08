@@ -29,11 +29,11 @@ export function OpenLolPanel() {
   return (
     <Show when={show()}>
       <section
-        class="openlol openlol-shell fixed inset-0 flex flex-col box-border pointer-events-auto bg-hx-bg border border-hx-border rounded-lg text-hx-text text-[13px] tabular-nums overflow-hidden"
+        class="openlol openlol-shell fixed inset-0 flex flex-col box-border pointer-events-auto bg-hx-bg border border-hx-border rounded text-hx-text text-[13px] tabular-nums overflow-hidden"
         data-hit
       >
         <header class="openlol-header flex-none h-12 flex items-center px-3.5 border-b border-hx-border relative cursor-grab active:cursor-grabbing">
-          <div class="flex items-center gap-2 text-hx-accent font-hx-display font-bold text-[15px] tracking-[0.24em]">
+          <div class="flex items-center gap-2 text-hx-accent font-hx-display font-extrabold text-[15px] tracking-[0.24em]">
             <svg
               viewBox="0 0 24 24"
               aria-hidden="true"
@@ -49,12 +49,12 @@ export function OpenLolPanel() {
         </header>
 
         <div class="flex-1 min-h-0 grid grid-cols-[360px_1fr]">
-          <aside class="border-r border-hx-border p-3.5 flex flex-col gap-2 min-h-0">
+          <aside class="border-r border-hx-border p-4 flex flex-col gap-2.5 min-h-0">
             <RoleChips />
             <TierLists />
           </aside>
 
-          <main class="p-4 px-[18px] pb-3.5 flex flex-col min-h-0">
+          <main class="p-5 pb-4 flex flex-col min-h-0">
             <EnemyRow />
             <Counters />
             <div class="border-t border-hx-border my-2.5" />

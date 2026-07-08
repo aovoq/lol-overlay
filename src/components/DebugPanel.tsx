@@ -19,7 +19,9 @@ export function DebugPanel() {
 
   return (
     <div class="flex flex-col gap-2 min-h-0">
-      <div class="font-hx-display text-[11px] font-bold tracking-[0.28em] text-hx-accent">DEBUG</div>
+      <div class="font-hx-display text-[11px] font-extrabold tracking-[0.28em] text-hx-accent">
+        DEBUG
+      </div>
       <div class="flex flex-col gap-1">
         <span class="text-[11px] text-hx-muted">モックシナリオ</span>
         <div class="grid grid-cols-3 gap-1 rounded border border-hx-border bg-hx-bg-raised p-1">
