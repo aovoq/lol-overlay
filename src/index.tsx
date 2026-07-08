@@ -9,6 +9,7 @@ import {
   saveIngamePanelPosition,
 } from "./lib/drag";
 import { startHitRegionInterval } from "./lib/hitRegions";
+import { checkForUpdates } from "./lib/updater";
 import { windowMode } from "./state/backend";
 import "./state/settings";
 
@@ -25,6 +26,7 @@ render(() => (isControl ? <ControlApp /> : <OverlayApp />), root);
 
 if (isControl) {
   initControlWindowGeometrySave(() => windowMode());
+  checkForUpdates().catch(() => {});
 } else {
   startHitRegionInterval();
 }

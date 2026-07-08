@@ -22,6 +22,9 @@ tauri = { version = "2", features = ["macos-private-api"] }
 tauri-plugin-opener = "2"
 # Global hotkeys: toggle overlay interactivity / cycle monitor.
 tauri-plugin-global-shortcut = "2"
+# Auto-update from GitHub Releases (latest.json) + relaunch after install.
+tauri-plugin-updater = "2"
+tauri-plugin-process = "2"
 serde = { workspace = true }
 serde_json = { workspace = true }
 overlay-lcu = { workspace = true }
