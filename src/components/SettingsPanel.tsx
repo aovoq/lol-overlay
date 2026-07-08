@@ -30,7 +30,7 @@ export function SettingsForm() {
 
   return (
     <div class="settings-form flex flex-col gap-2">
-      <div class="font-hx-serif text-[11px] font-bold tracking-[0.28em] text-hx-gold">SETTINGS</div>
+      <div class="font-hx-display text-[11px] font-bold tracking-[0.28em] text-hx-gold">SETTINGS</div>
       <label class="flex items-center gap-2 cursor-pointer text-hx-text">
         <input
           type="checkbox"
@@ -60,7 +60,7 @@ export function SettingsForm() {
           {presentationOptions.map((option) => (
             <button
               type="button"
-              class={`rounded px-2 py-1 font-hx-serif text-[10px] font-semibold tracking-[0.16em] cursor-pointer ${
+              class={`rounded px-2 py-1 font-hx-display text-[10px] font-semibold tracking-[0.16em] cursor-pointer ${
                 presentationMode() === option.value
                   ? "bg-hx-gold-wash text-hx-gold"
                   : "bg-transparent text-hx-muted hover:text-hx-gold"
@@ -78,7 +78,7 @@ export function SettingsForm() {
           {themeOptions.map((option) => (
             <button
               type="button"
-              class={`rounded px-2 py-1 font-hx-serif text-[10px] font-semibold tracking-[0.16em] cursor-pointer ${
+              class={`rounded px-2 py-1 font-hx-display text-[10px] font-semibold tracking-[0.16em] cursor-pointer ${
                 themeMode() === option.value
                   ? "bg-hx-gold-wash text-hx-gold"
                   : "bg-transparent text-hx-muted hover:text-hx-gold"

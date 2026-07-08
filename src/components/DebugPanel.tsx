@@ -19,7 +19,7 @@ export function DebugPanel() {
 
   return (
     <div class="flex flex-col gap-2 min-h-0">
-      <div class="font-hx-serif text-[11px] font-bold tracking-[0.28em] text-hx-gold">DEBUG</div>
+      <div class="font-hx-display text-[11px] font-bold tracking-[0.28em] text-hx-gold">DEBUG</div>
       <div class="flex flex-col gap-1">
         <span class="text-[11px] text-hx-muted">モックシナリオ</span>
         <div class="grid grid-cols-3 gap-1 rounded border border-hx-border bg-hx-bg-raised p-1">
@@ -27,7 +27,7 @@ export function DebugPanel() {
             {(option) => (
               <button
                 type="button"
-                class={`rounded px-2 py-1 font-hx-serif text-[10px] font-semibold tracking-[0.16em] cursor-pointer ${
+                class={`rounded px-2 py-1 font-hx-display text-[10px] font-semibold tracking-[0.16em] cursor-pointer ${
                   mockStage() === option.value
                     ? "bg-hx-gold-wash text-hx-gold"
                     : "bg-transparent text-hx-muted hover:text-hx-gold"
@@ -42,7 +42,7 @@ export function DebugPanel() {
       </div>
       <button
         type="button"
-        class="rounded border border-hx-border bg-hx-bg-raised px-2 py-1 font-hx-serif text-[10px] font-semibold tracking-[0.16em] text-hx-muted hover:text-hx-gold cursor-pointer"
+        class="rounded border border-hx-border bg-hx-bg-raised px-2 py-1 font-hx-display text-[10px] font-semibold tracking-[0.16em] text-hx-muted hover:text-hx-gold cursor-pointer"
         onClick={() => setPlaygroundOpen(true)}
       >
         UI Playground

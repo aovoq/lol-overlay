@@ -66,7 +66,7 @@ export function StatsRow() {
           <Show when={b().spellIds.length >= 2}>
             <button
               type="button"
-              class="bg-none border border-hx-border rounded px-2 py-1 font-hx-serif font-semibold text-[10px] tracking-widest text-hx-gold-dim hover:text-hx-gold hover:border-hx-gold-dim cursor-pointer"
+              class="bg-none border border-hx-border rounded px-2 py-1 font-hx-display font-semibold text-[10px] tracking-widest text-hx-gold-dim hover:text-hx-gold hover:border-hx-gold-dim cursor-pointer"
               onClick={() => persistSpellsFlipped(!spellsFlippedSetting())}
             >
               FLIP

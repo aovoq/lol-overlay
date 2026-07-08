@@ -1,5 +1,35 @@
 @import "tailwindcss";
 
+/* LINE Seed JP — the only typeface in the app (SIL OFL, see /fonts/OFL.txt). */
+@font-face {
+  font-family: "LINE Seed JP";
+  src: url("/fonts/LINESeedJP-Thin.ttf") format("truetype");
+  font-weight: 100;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "LINE Seed JP";
+  src: url("/fonts/LINESeedJP-Regular.ttf") format("truetype");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "LINE Seed JP";
+  src: url("/fonts/LINESeedJP-Bold.ttf") format("truetype");
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "LINE Seed JP";
+  src: url("/fonts/LINESeedJP-ExtraBold.ttf") format("truetype");
+  font-weight: 800;
+  font-style: normal;
+  font-display: swap;
+}
+
 @theme {
   --color-hx-bg: var(--hx-bg);
   --color-hx-bg-raised: var(--hx-bg-raised);
@@ -19,7 +49,9 @@
   --color-hx-magic: var(--hx-magic);
   --color-hx-durable: var(--hx-durable);
   --color-hx-keystone-border: var(--hx-keystone-border);
-  --font-hx-serif: "Beaufort for LOL", "Cinzel", Georgia, serif;
+  --font-hx-display: "LINE Seed JP", sans-serif;
+  --font-sans: "LINE Seed JP", sans-serif;
+  --font-mono: "LINE Seed JP", monospace;
 }
 
 @layer base {
@@ -97,7 +129,7 @@
     pointer-events: none;
     color: var(--color-hx-text);
     user-select: none;
-    font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+    font-family: "LINE Seed JP", sans-serif;
   }
 
   #root {

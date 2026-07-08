@@ -33,7 +33,7 @@ export function OpenLolPanel() {
         data-hit
       >
         <header class="openlol-header flex-none h-12 flex items-center px-3.5 border-b border-hx-border relative cursor-grab active:cursor-grabbing">
-          <div class="flex items-center gap-2 text-hx-gold font-hx-serif font-bold text-[15px] tracking-[0.24em]">
+          <div class="flex items-center gap-2 text-hx-gold font-hx-display font-bold text-[15px] tracking-[0.24em]">
             <svg
               viewBox="0 0 24 24"
               aria-hidden="true"
@@ -43,7 +43,7 @@ export function OpenLolPanel() {
             </svg>
             <span>{APP_NAME}</span>
           </div>
-          <div class="absolute left-1/2 -translate-x-1/2 border border-hx-border rounded px-3.5 py-1 font-hx-serif font-semibold text-[10px] tracking-[0.18em] text-hx-text">
+          <div class="absolute left-1/2 -translate-x-1/2 border border-hx-border rounded px-3.5 py-1 font-hx-display font-semibold text-[10px] tracking-[0.18em] text-hx-text">
             {phaseLabel()}
           </div>
         </header>

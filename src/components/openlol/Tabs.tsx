@@ -41,7 +41,7 @@ export function Tabs() {
     <nav class="relative flex gap-[26px] border-b border-hx-border mt-1.5">
       <button
         type="button"
-        class={`inline-flex items-center gap-1.5 bg-none border-b-2 -mb-px py-2.5 px-0.5 font-hx-serif font-semibold text-xs tracking-[0.12em] cursor-pointer ${
+        class={`inline-flex items-center gap-1.5 bg-none border-b-2 -mb-px py-2.5 px-0.5 font-hx-display font-semibold text-xs tracking-[0.12em] cursor-pointer ${
           activeTab() === "best"
             ? "text-hx-gold border-b-hx-gold"
             : "text-hx-muted border-b-transparent"
@@ -54,7 +54,7 @@ export function Tabs() {
       <div class="relative inline-flex">
         <button
           type="button"
-          class={`hx-tab-vs inline-flex items-center gap-1.5 bg-none border-b-2 -mb-px py-2.5 px-0.5 font-hx-serif font-semibold text-xs tracking-[0.12em] ${
+          class={`hx-tab-vs inline-flex items-center gap-1.5 bg-none border-b-2 -mb-px py-2.5 px-0.5 font-hx-display font-semibold text-xs tracking-[0.12em] ${
             activeTab() === "vs"
               ? "text-hx-gold border-b-hx-gold"
               : "text-hx-muted border-b-transparent"

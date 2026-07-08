@@ -14,7 +14,7 @@ export function EnemyRow() {
       <Index each={ids()}>
         {(id) => (
           <div
-            class={`w-10 h-10 flex items-center justify-center bg-hx-bg-raised border rounded-md overflow-hidden font-hx-serif text-[15px] ${
+            class={`w-10 h-10 flex items-center justify-center bg-hx-bg-raised border rounded-md overflow-hidden font-hx-display text-[15px] ${
               id() > 0 ? "border-hx-red text-hx-muted" : "border-hx-border text-hx-muted"
             }`}
             title={id() > 0 ? champName(id()) : undefined}

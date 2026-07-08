@@ -16,7 +16,7 @@ export function Matchup() {
   return (
     <Show when={my()}>
       <div class="flex items-center gap-1.5 text-[13px]">
-        <span class="font-hx-serif font-semibold text-[11px] tracking-[0.16em] text-hx-muted">
+        <span class="font-hx-display font-semibold text-[11px] tracking-[0.16em] text-hx-muted">
           {roleLabel(effectiveRole())} ·{" "}
         </span>
         <Show when={assetsReady()}>

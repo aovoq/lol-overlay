@@ -49,7 +49,7 @@ export function LpBanner() {
       >
         <div class="flex flex-col leading-snug">
           <strong
-            class={`font-hx-serif text-[15px] tracking-wide ${
+            class={`font-hx-display text-[15px] tracking-wide ${
               variant() === "win" ? "text-hx-up" : "text-hx-red"
             }`}
           >

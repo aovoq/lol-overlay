@@ -33,7 +33,7 @@ export function RuneBanner() {
           />
         </Show>
         <div class="flex flex-col leading-snug">
-          <strong class="text-hx-gold font-hx-serif text-[11px] font-bold tracking-[0.18em] uppercase">
+          <strong class="text-hx-gold font-hx-display text-[11px] font-bold tracking-[0.18em] uppercase">
             Runes imported
           </strong>
           <span class="text-hx-muted text-xs">{pageName()}</span>

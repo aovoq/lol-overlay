@@ -96,7 +96,7 @@ function PanelBody(props: { embedded?: boolean }) {
         } ${ingameCollapsed() ? "border-b-transparent cursor-default" : "border-b-hx-border"}`}
         data-hit={!props.embedded ? true : undefined}
       >
-        <span class="inline-flex items-center gap-[7px] text-hx-gold font-hx-serif text-xs font-bold tracking-[0.32em] whitespace-nowrap">
+        <span class="inline-flex items-center gap-[7px] text-hx-gold font-hx-display text-xs font-bold tracking-[0.32em] whitespace-nowrap">
           <svg
             viewBox="0 0 24 24"
             aria-hidden="true"
@@ -107,7 +107,7 @@ function PanelBody(props: { embedded?: boolean }) {
           {APP_NAME}
         </span>
         <span class="inline-flex items-center gap-2">
-          <span class="px-[9px] py-[3px] border border-hx-border rounded-[3px] font-hx-serif text-[9px] font-semibold tracking-[0.22em] text-hx-text whitespace-nowrap">
+          <span class="px-[9px] py-[3px] border border-hx-border rounded-[3px] font-hx-display text-[9px] font-semibold tracking-[0.22em] text-hx-text whitespace-nowrap">
             IN GAME
           </span>
           <button
@@ -149,7 +149,7 @@ function PanelBody(props: { embedded?: boolean }) {
                     <span class="text-hx-text font-bold text-sm truncate">
                       {e().selfChampion || "—"}
                     </span>
-                    <span class="text-hx-gold-dim font-hx-serif text-[9px] font-semibold tracking-[0.26em]">
+                    <span class="text-hx-gold-dim font-hx-display text-[9px] font-semibold tracking-[0.26em]">
                       {e().selfPosition || ""}
                     </span>
                   </div>
@@ -191,7 +191,7 @@ function PanelBody(props: { embedded?: boolean }) {
 
                 <SkillOrder order={e().skillOrder} championImageId={e().selfRawName} />
 
-                <div class="px-3 py-2 pb-1.5 font-hx-serif text-[10px] font-semibold tracking-[0.24em] text-hx-gold-dim">
+                <div class="px-3 py-2 pb-1.5 font-hx-display text-[10px] font-semibold tracking-[0.24em] text-hx-gold-dim">
                   RECOMMENDED BUILD
                 </div>
 

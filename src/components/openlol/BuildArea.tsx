@@ -27,7 +27,7 @@ function TreeHead(props: { styleId: number; primary: boolean }) {
   const s = () => getStyle(props.styleId);
   return (
     <div
-      class="flex items-center gap-2 my-2 mx-0 font-hx-serif font-semibold text-xs tracking-[0.16em] text-hx-gold"
+      class="flex items-center gap-2 my-2 mx-0 font-hx-display font-semibold text-xs tracking-[0.16em] text-hx-gold"
       style={!props.primary && s() ? { color: s()?.color ?? "" } : undefined}
     >
       <Show when={s()?.icon}>
@@ -84,7 +84,7 @@ function RunePage(props: { build: RuneBuild }) {
       <TreeHead styleId={b().subStyleId} primary={false} />
       <For each={b().subPerkIds}>{(id) => <RuneRow perkId={id} />}</For>
 
-      <span class="block mt-2 text-hx-muted font-hx-serif font-semibold text-[11px] tracking-[0.16em]">
+      <span class="block mt-2 text-hx-muted font-hx-display font-semibold text-[11px] tracking-[0.16em]">
         SHARDS
       </span>
       <div class="flex flex-wrap gap-2">
@@ -110,7 +110,7 @@ function BigEmpty(props: { role: string }) {
         class="text-hx-gold-dim w-11 h-11 [&_svg]:w-full [&_svg]:h-full"
         innerHTML={OPENLOL_MARK_SVG}
       />
-      <div class="font-hx-serif font-bold text-sm tracking-[0.2em] text-hx-gold">
+      <div class="font-hx-display font-bold text-sm tracking-[0.2em] text-hx-gold">
         {roleLabel(props.role)}
       </div>
       <div class="text-xs leading-normal">Hover a champion to see runes</div>

@@ -58,7 +58,7 @@ export function ImportButton() {
     <Show when={my()}>
       <button
         type="button"
-        class={`hx-primary-button w-full h-11 border rounded-md font-hx-serif font-bold text-[13px] tracking-[0.18em] cursor-pointer disabled:opacity-65 disabled:cursor-default ${
+        class={`hx-primary-button w-full h-11 border rounded-md font-hx-display font-bold text-[13px] tracking-[0.18em] cursor-pointer disabled:opacity-65 disabled:cursor-default ${
           importState() === "failed" ? "border-hx-red text-hx-red" : "border-hx-gold text-hx-gold"
         }`}
         disabled={importState() === "importing"}
@@ -67,7 +67,7 @@ export function ImportButton() {
         {label()}
       </button>
       <div class="flex justify-center py-2 pb-0.5">
-        <span class="border border-hx-gold-dim rounded-[3px] px-3 py-0.5 font-hx-serif font-semibold text-[10px] tracking-[0.22em] text-hx-gold-dim">
+        <span class="border border-hx-gold-dim rounded-[3px] px-3 py-0.5 font-hx-display font-semibold text-[10px] tracking-[0.22em] text-hx-gold-dim">
           PRO
         </span>
       </div>
