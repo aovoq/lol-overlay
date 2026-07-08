@@ -96,7 +96,7 @@ function PanelBody(props: { embedded?: boolean }) {
         } ${ingameCollapsed() ? "border-b-transparent cursor-default" : "border-b-hx-border"}`}
         data-hit={!props.embedded ? true : undefined}
       >
-        <span class="inline-flex items-center gap-[7px] text-hx-accent font-hx-display text-xs font-bold tracking-[0.32em] whitespace-nowrap">
+        <span class="inline-flex items-center gap-[7px] text-hx-accent font-hx-display text-xs font-extrabold tracking-[0.32em] whitespace-nowrap">
           <svg
             viewBox="0 0 24 24"
             aria-hidden="true"
@@ -191,9 +191,7 @@ function PanelBody(props: { embedded?: boolean }) {
 
                 <SkillOrder order={e().skillOrder} championImageId={e().selfRawName} />
 
-                <div class="px-3 py-2 pb-1.5 font-hx-display text-[10px] font-semibold tracking-[0.24em] text-hx-accent-dim">
-                  RECOMMENDED BUILD
-                </div>
+                <div class="hx-section-title px-3 py-2 pb-1.5">RECOMMENDED BUILD</div>
 
                 <ScrollArea
                   class="rec-list max-h-[52vh]"
@@ -208,6 +206,9 @@ function PanelBody(props: { embedded?: boolean }) {
                             i() === 0 ? "border-hx-keystone-border" : "border-transparent"
                           }`}
                         >
+                          <span class="w-3.5 flex-none text-right text-[10px] font-extrabold text-hx-accent-dim tabular-nums">
+                            {i() + 1}
+                          </span>
                           <Show when={assetsReady()}>
                             <Icon
                               url={itemIconUrl(it.itemId)}
