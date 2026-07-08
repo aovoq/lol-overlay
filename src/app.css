@@ -84,8 +84,6 @@
     --hx-skill-key-border: rgba(255, 61, 84, 0.42);
     --hx-skill-label-bg: rgba(16, 16, 20, 0.86);
     --hx-overlay-ring: rgba(255, 61, 84, 0.45);
-    --hx-button-bg: rgba(255, 61, 84, 0.08);
-    --hx-button-hover: #ff6478;
   }
 
   /* HUD light: white surfaces, blue lines. */
@@ -118,8 +116,6 @@
     --hx-skill-key-border: rgba(29, 91, 227, 0.4);
     --hx-skill-label-bg: rgba(255, 255, 255, 0.88);
     --hx-overlay-ring: rgba(29, 91, 227, 0.42);
-    --hx-button-bg: rgba(29, 91, 227, 0.06);
-    --hx-button-hover: #1443ad;
   }
 
   html,
@@ -193,16 +189,20 @@
     pointer-events: none;
   }
 
+  /* Primary CTA: solid accent fill — the one action that must not be
+   * missed under champ-select time pressure. */
   .hx-primary-button {
-    background: var(--hx-button-bg);
+    background: var(--hx-accent);
+    color: var(--hx-bg);
+    border: none;
     transition:
-      border-color 120ms ease,
-      color 120ms ease;
+      filter 120ms ease,
+      box-shadow 120ms ease;
   }
 
   .hx-primary-button:hover:not(:disabled) {
-    border-color: var(--hx-button-hover);
-    color: var(--hx-button-hover);
+    filter: brightness(1.08);
+    box-shadow: 0 4px 18px var(--hx-accent-wash);
   }
 
   /* Section label with an accent tick mark. */

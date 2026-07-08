@@ -58,8 +58,8 @@ export function ImportButton() {
     <Show when={my()}>
       <button
         type="button"
-        class={`hx-primary-button w-full h-11 border rounded-md font-hx-display font-bold text-[13px] tracking-[0.18em] cursor-pointer disabled:opacity-65 disabled:cursor-default ${
-          importState() === "failed" ? "border-hx-red text-hx-red" : "border-hx-accent text-hx-accent"
+        class={`hx-primary-button w-full h-11 rounded-md font-hx-display font-extrabold text-[13px] tracking-[0.18em] cursor-pointer disabled:opacity-65 disabled:cursor-default ${
+          importState() === "failed" ? "bg-hx-red" : ""
         }`}
         disabled={importState() === "importing"}
         onClick={onClick}

@@ -13,13 +13,18 @@ function effectiveRole() {
   return cs?.myRole || selectedRole();
 }
 
-function ChampRow(props: { championId: number; children?: JSX.Element }) {
+function ChampRow(props: { championId: number; rank?: number; children?: JSX.Element }) {
   return (
     <div
       class="flex-none flex items-center gap-2 px-2 py-1 rounded-md hover:bg-hx-bg-raised"
       onMouseEnter={() => setHoverChampId(props.championId)}
       onMouseLeave={() => setHoverChampId(0)}
     >
+      <Show when={props.rank !== undefined}>
+        <span class="w-4 flex-none text-right text-[10px] font-bold text-hx-muted tabular-nums">
+          {props.rank}
+        </span>
+      </Show>
       <Show when={assetsReady()}>
         <Icon
           url={champIconByKey(props.championId)}
@@ -34,7 +39,20 @@ function ChampRow(props: { championId: number; children?: JSX.Element }) {
   );
 }
 
-function StrongRow(props: { entry: TierEntry }) {
+/** Column labels aligned with the row layout so a list reads as a table. */
+function ColHeader(props: { rank?: boolean; cols: { label: string; class: string }[] }) {
+  return (
+    <div class="flex items-center gap-2 px-2 text-[9px] font-bold tracking-[0.12em] text-hx-muted tabular-nums">
+      <Show when={props.rank}>
+        <span class="w-4 flex-none" />
+      </Show>
+      <span class="flex-1" />
+      <For each={props.cols}>{(c) => <span class={`${c.class} text-right`}>{c.label}</span>}</For>
+    </div>
+  );
+}
+
+function StrongRow(props: { entry: TierEntry; rank: number }) {
   const t = () => props.entry;
   const delta = () => {
     const d = t().winRateDelta;
@@ -44,7 +62,7 @@ function StrongRow(props: { entry: TierEntry }) {
   };
 
   return (
-    <ChampRow championId={t().championId}>
+    <ChampRow championId={t().championId} rank={props.rank}>
       <span class="w-12 text-right font-bold text-hx-text">{fmtPct(t().winRate)}</span>
       <span
         class={`w-[38px] text-right text-[11px] ${
@@ -60,10 +78,10 @@ function StrongRow(props: { entry: TierEntry }) {
   );
 }
 
-function BanRow(props: { entry: TierEntry }) {
+function BanRow(props: { entry: TierEntry; rank: number }) {
   const t = () => props.entry;
   return (
-    <ChampRow championId={t().championId}>
+    <ChampRow championId={t().championId} rank={props.rank}>
       <span class="w-12 text-right font-bold text-hx-red">{fmtPct(t().winRate)}</span>
       <span class="w-11 text-right text-xs text-hx-muted">{fmtPct(t().pickRate)}</span>
     </ChampRow>
@@ -127,10 +145,20 @@ export function TierLists() {
 
   return (
     <>
-      <div class="flex flex-col gap-0.5 font-hx-display font-semibold text-[11px] tracking-[0.16em] text-hx-accent-dim px-0.5 pt-1 pb-0.5">
-        <span>{roleLabel(role())}</span>
-        <span>STRONG PICKS</span>
+      <div class="flex items-baseline justify-between px-0.5 pt-1 pb-0.5">
+        <span class="hx-section-title">STRONG PICKS</span>
+        <span class="text-[10px] font-bold tracking-[0.12em] text-hx-muted">
+          {roleLabel(role())}
+        </span>
       </div>
+      <ColHeader
+        rank
+        cols={[
+          { label: "WR", class: "w-12" },
+          { label: "Δ", class: "w-[38px]" },
+          { label: "GAMES", class: "w-11" },
+        ]}
+      />
       <ScrollArea class="min-h-0 flex-[1.3_1_0]" contentClass="flex flex-col gap-0.5 pr-1">
         <Show
           when={isLoading()}
@@ -141,7 +169,7 @@ export function TierLists() {
                 <SectionError message={errMsg()} onRetry={() => tierCache.refetch(role())} />
               }
             >
-              <For each={strong()}>{(t) => <StrongRow entry={t} />}</For>
+              <For each={strong()}>{(t, i) => <StrongRow entry={t} rank={i() + 1} />}</For>
             </Show>
           }
         >
@@ -149,9 +177,14 @@ export function TierLists() {
         </Show>
       </ScrollArea>
 
-      <div class="flex flex-col gap-0.5 font-hx-display font-semibold text-[11px] tracking-[0.16em] text-hx-accent-dim px-0.5 pt-1 pb-0.5">
-        <span>BAN TARGETS</span>
-      </div>
+      <div class="hx-section-title px-0.5 pt-2 pb-0.5">BAN TARGETS</div>
+      <ColHeader
+        rank
+        cols={[
+          { label: "WR", class: "w-12" },
+          { label: "PICK", class: "w-11" },
+        ]}
+      />
       <ScrollArea class="min-h-0 flex-1" contentClass="flex flex-col gap-0.5 pr-1">
         <Show
           when={isLoading()}
@@ -162,7 +195,7 @@ export function TierLists() {
                 <SectionError message={errMsg()} onRetry={() => tierCache.refetch(role())} />
               }
             >
-              <For each={bans()}>{(t) => <BanRow entry={t} />}</For>
+              <For each={bans()}>{(t, i) => <BanRow entry={t} rank={i() + 1} />}</For>
             </Show>
           }
         >
