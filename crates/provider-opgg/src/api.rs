@@ -93,8 +93,22 @@ impl OpggApi {
             .map_err(Into::into)
     }
 
-    pub async fn get_build_page(&self, slug: &str, lane: Option<&str>) -> Result<Arc<BuildPage>> {
-        let key = format!("{slug}:{}", lane.unwrap_or("_"));
+    /// `target_champion` (a slug, same convention as `slug`) scopes every
+    /// number on the page to that specific matchup — same page, same shape,
+    /// just a smaller sample. Confirmed by comparing `rune_pages[0].play`
+    /// with and without it (e.g. Aatrox top overall vs Aatrox top vs Yone
+    /// specifically report different sample sizes and win rates).
+    pub async fn get_build_page(
+        &self,
+        slug: &str,
+        lane: Option<&str>,
+        target_champion: Option<&str>,
+    ) -> Result<Arc<BuildPage>> {
+        let key = format!(
+            "{slug}:{}:{}",
+            lane.unwrap_or("_"),
+            target_champion.unwrap_or("_")
+        );
         if let Some(hit) = self
             .build_pages
             .read()
@@ -108,7 +122,16 @@ impl OpggApi {
             Some(lane) => format!("/lol/champions/{slug}/build/{lane}"),
             None => format!("/lol/champions/{slug}/build"),
         };
-        let html = self.fetch_html(&path).await?;
+        let mut request = self.http.get(format!("{BASE}{path}"));
+        if let Some(target) = target_champion {
+            request = request.query(&[("target_champion", target)]);
+        }
+        let html = request
+            .send_with_retry()
+            .await?
+            .error_for_status()?
+            .text()
+            .await?;
         let value = Arc::new(parse_build_page(&html));
         self.build_pages.write().await.insert(
             key,

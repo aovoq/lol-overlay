@@ -3,14 +3,17 @@
 //! op.gg publishes no JSON API of its own; every value here is recovered from
 //! the flight (React Server Component) payload embedded in the site's
 //! server-rendered HTML — see the [`flight`] module docs for why, and
-//! [`api`] for how the two page types (`/build[/lane]`, `/counters[/lane]`)
-//! are fetched and parsed.
+//! [`api`] for how the page types (`/build[/lane]`, `/counters[/lane]`,
+//! `/lol/champions?position=<lane>`) are fetched and parsed.
 //!
 //! * **Items, skill max order, summoner spells** come from the rendered
 //!   element tree of the build page (no clean data prop exists for them).
 //! * **Runes** come from a clean `rune_pages` data prop on the same page —
 //!   op.gg is the only one of this codebase's providers with rune data this
-//!   complete, so [`runes`] and [`rune_build`] are fully supported.
+//!   complete, so [`runes`] and [`rune_build`] are fully supported,
+//!   **including matchup-specific pages**: adding `?target_champion=<slug>`
+//!   to the build page scopes every number on it (items included) to that
+//!   specific matchup.
 //! * **Counters** come from a clean `data` prop on the counters page.
 //! * **Tier list** comes from a clean `data` prop too, but on a different
 //!   route: `/lol/champions?position=<lane>` (one fetch per lane — op.gg has
@@ -18,9 +21,6 @@
 //!   response (that ships a small unrelated "trending" preview instead); the
 //!   `position` query param is what makes the server render the full,
 //!   per-lane flight payload.
-//! * **Matchup-specific rune pages** have no equivalent in what op.gg ships
-//!   client-side, so matchup [`rune_build`] calls return
-//!   [`ProviderError::NotEnoughData`].
 //!
 //! [`runes`]: OpggProvider::runes
 //! [`rune_build`]: OpggProvider::rune_build
@@ -97,7 +97,7 @@ impl BuildProvider for OpggProvider {
             })?;
         let slug = self.champion_slug(id).await?;
         let lane = opgg_lane(&snapshot.self_position);
-        let page = self.api.get_build_page(&slug, lane).await?;
+        let page = self.api.get_build_page(&slug, lane, None).await?;
 
         let mut build_ids = Vec::new();
         build_ids.extend(page.starter_items.iter().copied());
@@ -137,7 +137,7 @@ impl BuildProvider for OpggProvider {
             })?;
         let slug = self.champion_slug(id).await?;
         let lane = opgg_lane(&snapshot.self_position);
-        let page = self.api.get_build_page(&slug, lane).await?;
+        let page = self.api.get_build_page(&slug, lane, None).await?;
 
         if page.skill_max_order.is_empty() {
             return Err(ProviderError::NotEnoughData);
@@ -192,16 +192,22 @@ impl BuildProvider for OpggProvider {
         role: Option<&str>,
         enemy_champion_id: Option<i64>,
     ) -> Result<RuneBuild> {
-        // op.gg's per-matchup rune pages (if any) aren't reachable through the
-        // flight payload this provider parses — only the champion-wide
-        // recommendation is available.
-        if enemy_champion_id.is_some() {
-            return Err(ProviderError::NotEnoughData);
-        }
-
         let slug = self.champion_slug(champion_id).await?;
         let lane = role.and_then(opgg_lane);
-        let page = self.api.get_build_page(&slug, lane).await?;
+
+        // `?target_champion=<slug>` scopes every number on the build page to
+        // that specific matchup (confirmed: sample sizes and win rates both
+        // shrink/shift relative to the champion-wide page) — same page, same
+        // parser, so the only difference from the solo path is this query
+        // param and the resulting `matchup` flag.
+        let enemy_slug = match enemy_champion_id {
+            Some(enemy_id) => Some(self.champion_slug(enemy_id).await?),
+            None => None,
+        };
+        let page = self
+            .api
+            .get_build_page(&slug, lane, enemy_slug.as_deref())
+            .await?;
 
         let rune_page = page.runes.first().ok_or(ProviderError::NotEnoughData)?;
         let build = rune_page
@@ -218,8 +224,15 @@ impl BuildProvider for OpggProvider {
 
         let name = self.champion_display_name(champion_id).await;
         let lane_label = lane.unwrap_or("default").to_string();
+        let page_name = match enemy_champion_id {
+            Some(enemy_id) => {
+                let foe = self.champion_display_name(enemy_id).await;
+                format!("OP.GG {name} vs {foe} {lane_label}")
+            }
+            None => format!("OP.GG {name} {lane_label}"),
+        };
         Ok(RuneBuild {
-            page_name: format!("OP.GG {name} {lane_label}"),
+            page_name,
             lane: lane_label,
             win_rate: rune_page.win_rate,
             games: rune_page.play,
@@ -229,7 +242,7 @@ impl BuildProvider for OpggProvider {
             sub_perk_ids,
             shard_ids,
             spell_ids: page.spell_ids.clone(),
-            matchup: false,
+            matchup: enemy_champion_id.is_some(),
         })
     }
 

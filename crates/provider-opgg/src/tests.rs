@@ -199,11 +199,28 @@ async fn fetch_tier_list_from_live_site() {
 }
 
 #[tokio::test]
-#[ignore = "network: matchup-specific rune pages are unsupported by this provider"]
-async fn matchup_rune_build_reports_not_enough_data() {
+#[ignore = "network: live op.gg matchup-specific rune page, Aatrox top vs Yone"]
+async fn matchup_rune_build_scopes_to_the_matchup() {
     let provider = OpggProvider::new(Arc::new(DdragonClient::new())).expect("provider");
-    assert!(matches!(
-        provider.rune_build(266, Some("top"), Some(75)).await,
-        Err(ProviderError::NotEnoughData)
-    ));
+
+    // Aatrox = 266, Yone = 777.
+    let solo = provider
+        .rune_build(266, Some("top"), None)
+        .await
+        .expect("solo rune_build");
+    let matchup = provider
+        .rune_build(266, Some("top"), Some(777))
+        .await
+        .expect("matchup rune_build");
+
+    assert!(!solo.matchup);
+    assert!(matchup.matchup);
+    assert_eq!(matchup.primary_perk_ids.len(), 4);
+    assert_eq!(matchup.sub_perk_ids.len(), 2);
+    assert_eq!(matchup.shard_ids.len(), 3);
+    // The matchup page is scoped to a much smaller sample than the
+    // champion-wide page (this specific lane matchup vs. every top laner).
+    assert!(matchup.games < solo.games);
+    println!("solo: {solo:?}");
+    println!("matchup: {matchup:?}");
 }
