@@ -91,7 +91,7 @@ fn collect_key<'a>(value: &'a Value, key: &str, out: &mut Vec<&'a Value>) {
 
 /// A `metaType`-tagged leaf pulled out of a rendered React element tree
 /// (`{"metaType":"item","metaId":3161}` for an item icon, `{"metaType":
-/// "skill","metaId":"aatrox","extraData":"Q"}` for a skill-priority pip, …).
+/// "spell","metaId":4}` for a summoner-spell icon, …).
 #[derive(Debug, Clone)]
 pub struct MetaNode {
     /// Every ancestor React element `key` on the way down to this node,
@@ -101,7 +101,6 @@ pub struct MetaNode {
     pub section_path: Vec<String>,
     pub meta_type: String,
     pub meta_id: Value,
-    pub extra_data: Option<String>,
 }
 
 /// Walk every chunk's element tree and collect every `metaType`-tagged node,
@@ -140,10 +139,6 @@ fn walk_elements(value: &Value, path: &mut Vec<String>, out: &mut Vec<MetaNode>)
                     section_path: path.clone(),
                     meta_type: meta_type.to_string(),
                     meta_id: props.get("metaId").cloned().unwrap_or(Value::Null),
-                    extra_data: props
-                        .get("extraData")
-                        .and_then(Value::as_str)
-                        .map(str::to_string),
                 });
             }
             for v in props.values() {

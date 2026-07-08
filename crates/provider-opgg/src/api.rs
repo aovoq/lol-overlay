@@ -15,7 +15,7 @@ use overlay_provider::{ProviderError, Result};
 use tokio::sync::RwLock;
 
 use crate::flight::{self, MetaNode};
-use crate::types::{CounterRow, RunePage, TierRow};
+use crate::types::{CounterRow, RunePage, SkillMastery, TierRow};
 
 const BASE: &str = "https://op.gg";
 const CACHE_TTL: Duration = Duration::from_hours(6);
@@ -48,9 +48,6 @@ pub struct BuildPage {
     pub boots: Vec<i64>,
     /// `[spell1, spell2]` of the top summoner-spell combo; empty if unknown.
     pub spell_ids: Vec<i64>,
-    /// Basic-skill max-priority order (Riot ids: 1=Q, 2=W, 3=E); empty if
-    /// unknown. op.gg doesn't expose a level-by-level order.
-    pub skill_max_order: Vec<i64>,
     /// Sorted by popularity; `runes[0]` is what op.gg recommends.
     pub runes: Vec<RunePage>,
 }
@@ -63,6 +60,8 @@ pub struct OpggApi {
     counters: RwLock<HashMap<String, Cached<Vec<CounterRow>>>>,
     /// lane → the lane's full tier-list rows.
     tier_lists: RwLock<HashMap<String, Cached<Vec<TierRow>>>>,
+    /// `"{slug}:{lane}"` → skill-leveling masteries.
+    skills: RwLock<HashMap<String, Cached<Vec<SkillMastery>>>>,
 }
 
 impl OpggApi {
@@ -79,6 +78,7 @@ impl OpggApi {
             build_pages: RwLock::new(HashMap::new()),
             counters: RwLock::new(HashMap::new()),
             tier_lists: RwLock::new(HashMap::new()),
+            skills: RwLock::new(HashMap::new()),
         })
     }
 
@@ -216,6 +216,41 @@ impl OpggApi {
         }
         Ok(value)
     }
+
+    /// Skill-leveling masteries for a champion/lane, from the dedicated
+    /// `/skills[/lane]` page's clean `skill_masteries` data prop — the only
+    /// source with a full level-by-level order (the build page's rendered
+    /// element tree only exposes the 3-letter max-priority summary).
+    pub async fn get_skills(
+        &self,
+        slug: &str,
+        lane: Option<&str>,
+    ) -> Result<Arc<Vec<SkillMastery>>> {
+        let key = format!("{slug}:{}", lane.unwrap_or("_"));
+        if let Some(hit) = self.skills.read().await.get(&key).and_then(Cached::fresh) {
+            return Ok(hit);
+        }
+        let path = match lane {
+            Some(lane) => format!("/lol/champions/{slug}/skills/{lane}"),
+            None => format!("/lol/champions/{slug}/skills"),
+        };
+        let html = self.fetch_html(&path).await?;
+        let chunks = flight::extract_flight_chunks(&html);
+        let masteries: Vec<SkillMastery> =
+            flight::find_data_field(&chunks, "skill_masteries").unwrap_or_default();
+        let value = Arc::new(masteries);
+        self.skills.write().await.insert(
+            key,
+            Cached {
+                loaded_at: Instant::now(),
+                value: value.clone(),
+            },
+        );
+        if value.is_empty() {
+            return Err(ProviderError::NotEnoughData);
+        }
+        Ok(value)
+    }
 }
 
 /// Reconstruct a [`BuildPage`] from the page's flight chunks: the rune table
@@ -232,7 +267,6 @@ fn parse_build_page(html: &str) -> BuildPage {
         core_items,
         boots,
         spell_ids: parse_spell_ids(&nodes),
-        skill_max_order: parse_skill_max_order(&nodes),
         runes,
     }
 }
@@ -289,28 +323,6 @@ fn in_section(node: &MetaNode, section: &str) -> bool {
     node.section_path.iter().any(|s| s == section)
 }
 
-/// Skill-priority pips are tagged `metaType: "skill"` with `extraData` set to
-/// the ability letter (`"Q"`/`"W"`/`"E"`), in max-priority order; the
-/// ultimate isn't listed (it's always maxed on its own schedule).
-fn parse_skill_max_order(nodes: &[MetaNode]) -> Vec<i64> {
-    nodes
-        .iter()
-        .filter(|n| n.meta_type == "skill")
-        .filter_map(|n| n.extra_data.as_deref())
-        .filter_map(skill_letter_id)
-        .collect()
-}
-
-fn skill_letter_id(letter: &str) -> Option<i64> {
-    match letter {
-        "Q" => Some(1),
-        "W" => Some(2),
-        "E" => Some(3),
-        "R" => Some(4),
-        _ => None,
-    }
-}
-
 trait RequestBuilderRetryExt {
     async fn send_with_retry(self) -> std::result::Result<reqwest::Response, reqwest::Error>;
 }
@@ -351,7 +363,6 @@ mod tests {
             section_path: vec![section.to_string()],
             meta_type: "item".to_string(),
             meta_id: json!(id),
-            extra_data: None,
         }
     }
 
@@ -380,52 +391,23 @@ mod tests {
                 section_path: vec!["spell_0".to_string()],
                 meta_type: "spell".into(),
                 meta_id: json!(4),
-                extra_data: None,
             },
             MetaNode {
                 section_path: vec!["spell_1".to_string()],
                 meta_type: "spell".into(),
                 meta_id: json!(14),
-                extra_data: None,
             },
             MetaNode {
                 section_path: vec!["spell_0".to_string()],
                 meta_type: "spell".into(),
                 meta_id: json!(4),
-                extra_data: None,
             },
             MetaNode {
                 section_path: vec!["spell_1".to_string()],
                 meta_type: "spell".into(),
                 meta_id: json!(12),
-                extra_data: None,
             },
         ];
         assert_eq!(parse_spell_ids(&nodes), vec![4, 14]);
-    }
-
-    #[test]
-    fn parse_skill_max_order_maps_letters() {
-        let nodes = vec![
-            MetaNode {
-                section_path: vec!["skill_0".to_string()],
-                meta_type: "skill".into(),
-                meta_id: json!("aatrox"),
-                extra_data: Some("Q".into()),
-            },
-            MetaNode {
-                section_path: vec!["skill_1".to_string()],
-                meta_type: "skill".into(),
-                meta_id: json!("aatrox"),
-                extra_data: Some("E".into()),
-            },
-            MetaNode {
-                section_path: vec!["skill_2".to_string()],
-                meta_type: "skill".into(),
-                meta_id: json!("aatrox"),
-                extra_data: Some("W".into()),
-            },
-        ];
-        assert_eq!(parse_skill_max_order(&nodes), vec![1, 3, 2]);
     }
 }

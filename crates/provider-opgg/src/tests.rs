@@ -1,6 +1,7 @@
 use super::*;
 use crate::types::{
-    CounterChampion, CounterRow, Perk, PerkStyle, RuneBuildData, RunePage, TierRow,
+    CounterChampion, CounterRow, Perk, PerkStyle, RuneBuildData, RunePage, SkillBuild,
+    SkillMastery, TierRow,
 };
 
 fn perk(id: i64, is_active: bool) -> Perk {
@@ -139,6 +140,54 @@ fn tier_entries_maps_slug_to_id_converts_percent_and_sorts_by_win_rate() {
     assert_eq!(entries[1].champion_id, 86);
 }
 
+#[test]
+fn skill_order_from_masteries_maps_letters_and_picks_top_variant() {
+    let masteries = vec![
+        SkillMastery {
+            ids: vec!["Q".into(), "E".into(), "W".into()],
+            builds: vec![
+                SkillBuild {
+                    order: vec![
+                        "Q", "E", "W", "Q", "Q", "R", "Q", "E", "Q", "E", "R", "E", "E", "W", "W",
+                    ]
+                    .into_iter()
+                    .map(String::from)
+                    .collect(),
+                    play: 94430,
+                    win_rate: 0.546,
+                },
+                SkillBuild {
+                    order: vec!["Q".into(), "W".into()],
+                    play: 6371,
+                    win_rate: 0.555,
+                },
+            ],
+        },
+        SkillMastery {
+            ids: vec!["Q".into(), "W".into(), "E".into()],
+            builds: vec![],
+        },
+    ];
+    let order = skill_order_from_masteries(&masteries).expect("skill order");
+    assert_eq!(order.max_order, vec![1, 3, 2]);
+    assert_eq!(
+        order.level_order,
+        vec![1, 3, 2, 1, 1, 4, 1, 3, 1, 3, 4, 3, 3, 2, 2]
+    );
+    assert_eq!(order.games, 94430);
+    assert!((order.win_rate - 0.546).abs() < 1e-9);
+}
+
+#[test]
+fn skill_order_from_masteries_none_when_empty() {
+    assert!(skill_order_from_masteries(&[]).is_none());
+    assert!(skill_order_from_masteries(&[SkillMastery {
+        ids: vec!["Q".into()],
+        builds: vec![],
+    }])
+    .is_none());
+}
+
 #[tokio::test]
 #[ignore = "network: live op.gg build page for Aatrox top"]
 async fn fetch_items_runes_and_skill_order_from_live_site() {
@@ -169,6 +218,7 @@ async fn fetch_items_runes_and_skill_order_from_live_site() {
 
     let skills = provider.skill_order(&snapshot).await.expect("skill_order");
     assert!(!skills.max_order.is_empty());
+    assert!(!skills.level_order.is_empty());
     println!("skill order: {skills:?}");
 }
 

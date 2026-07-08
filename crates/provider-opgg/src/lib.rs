@@ -6,9 +6,15 @@
 //! [`api`] for how the page types (`/build[/lane]`, `/counters[/lane]`,
 //! `/lol/champions?position=<lane>`) are fetched and parsed.
 //!
-//! * **Items, skill max order, summoner spells** come from the rendered
-//!   element tree of the build page (no clean data prop exists for them).
-//! * **Runes** come from a clean `rune_pages` data prop on the same page —
+//! * **Items and summoner spells** come from the rendered element tree of
+//!   the build page (no clean data prop exists for them).
+//! * **Skill order** comes from a clean `skill_masteries` data prop, but on
+//!   its own dedicated route (`/skills[/lane]`) rather than the build page —
+//!   the build page renders the same table straight to elements (like items)
+//!   with no clean prop, so fetching `/skills` separately trades one extra
+//!   request for a real level-by-level order instead of just the 3-letter
+//!   max-priority summary.
+//! * **Runes** come from a clean `rune_pages` data prop on the build page —
 //!   op.gg is the only one of this codebase's providers with rune data this
 //!   complete, so [`runes`] and [`rune_build`] are fully supported,
 //!   **including matchup-specific pages**: adding `?target_champion=<slug>`
@@ -41,7 +47,18 @@ use overlay_provider::{
 use overlay_types::{GameSnapshot, RuneBuild, SkillOrder, TierEntry};
 
 use crate::api::{BuildPage, OpggApi};
-use crate::types::{CounterRow, Perk, TierRow};
+use crate::types::{CounterRow, Perk, SkillMastery, TierRow};
+
+/// LCU/Live-Client skill ids follow Riot's convention: 1=Q, 2=W, 3=E, 4=R.
+fn skill_letter_id(letter: &str) -> Option<i64> {
+    match letter {
+        "Q" => Some(1),
+        "W" => Some(2),
+        "E" => Some(3),
+        "R" => Some(4),
+        _ => None,
+    }
+}
 
 pub struct OpggProvider {
     ddragon: Arc<DdragonClient>,
@@ -137,18 +154,8 @@ impl BuildProvider for OpggProvider {
             })?;
         let slug = self.champion_slug(id).await?;
         let lane = opgg_lane(&snapshot.self_position);
-        let page = self.api.get_build_page(&slug, lane, None).await?;
-
-        if page.skill_max_order.is_empty() {
-            return Err(ProviderError::NotEnoughData);
-        }
-        let (win_rate, games) = top_rune_page_stats(&page);
-        Ok(SkillOrder {
-            max_order: page.skill_max_order.clone(),
-            level_order: Vec::new(),
-            win_rate: win_rate / 100.0,
-            games,
-        })
+        let masteries = self.api.get_skills(&slug, lane).await?;
+        skill_order_from_masteries(&masteries).ok_or(ProviderError::NotEnoughData)
     }
 
     async fn runes(&self, champion_id: i64, role: Option<&str>) -> Result<RuneRecommendation> {
@@ -312,6 +319,33 @@ fn tier_entries(rows: &[TierRow], slug_to_id: &HashMap<String, i64>) -> Vec<Tier
         .collect();
     entries.sort_by(|a, b| b.win_rate.total_cmp(&a.win_rate));
     entries
+}
+
+/// Convert the top-recommended [`SkillMastery`] into a [`SkillOrder`].
+/// `None` when there's no mastery data or its max-priority letters don't map
+/// to any known skill (both signal "nothing usable here" to the caller).
+fn skill_order_from_masteries(masteries: &[SkillMastery]) -> Option<SkillOrder> {
+    let mastery = masteries.first()?;
+    let build = mastery.builds.first()?;
+    let max_order: Vec<i64> = mastery
+        .ids
+        .iter()
+        .filter_map(|l| skill_letter_id(l))
+        .collect();
+    if max_order.is_empty() {
+        return None;
+    }
+    let level_order: Vec<i64> = build
+        .order
+        .iter()
+        .filter_map(|l| skill_letter_id(l))
+        .collect();
+    Some(SkillOrder {
+        max_order,
+        level_order,
+        win_rate: build.win_rate,
+        games: build.play,
+    })
 }
 
 /// LCU/Live-Client position string → op.gg lane path segment. `None` for
