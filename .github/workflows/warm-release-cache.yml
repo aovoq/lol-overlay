@@ -1,0 +1,60 @@
+name: warm-release-cache
+
+# Tag builds can only restore caches created on the default branch, so the
+# release workflow's Rust cache is warmed here on main. Runs only when
+# dependencies change (rust-cache keeps dependency artifacts, not workspace
+# crates), because private-repo macOS/Windows minutes are billed at 10x/2x.
+on:
+  push:
+    branches: ["main"]
+    paths:
+      - "Cargo.lock"
+      - "**/Cargo.toml"
+      - ".github/workflows/warm-release-cache.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  warm:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: macos-latest
+            args: --target aarch64-apple-darwin
+          - platform: windows-latest
+            args: ""
+    runs-on: ${{ matrix.platform }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: enable corepack
+        run: corepack enable
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "lts/*"
+          cache: "pnpm"
+
+      - name: install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.platform == 'macos-latest' && 'aarch64-apple-darwin' || '' }}
+
+      - name: cache Rust build artifacts
+        uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: release
+
+      - name: install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # tauri::generate_context! embeds the frontend dist at compile time,
+      # so the frontend must be built before cargo can compile the app.
+      - name: build frontend
+        run: pnpm build
+
+      - name: build release dependencies
+        run: cargo build --release --workspace ${{ matrix.args }}

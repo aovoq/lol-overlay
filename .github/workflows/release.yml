@@ -34,8 +34,14 @@ jobs:
         with:
           targets: ${{ matrix.platform == 'macos-latest' && 'aarch64-apple-darwin' || '' }}
 
+      # Restores the cache warmed on main by warm-release-cache.yml (tag runs
+      # can only read default-branch caches). Saving from a tag run is useless
+      # — no other tag can restore it — so skip the ~2 min upload.
       - name: cache Rust build artifacts
         uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: release
+          save-if: false
 
       - name: install dependencies
         run: pnpm install --frozen-lockfile
