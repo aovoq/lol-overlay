@@ -2,7 +2,7 @@ import type { PairingLink } from "@lol-overlay/protocol";
 import { normalizePairingCode, parsePairingLink } from "@lol-overlay/protocol";
 import { CameraView, useCameraPermissions } from "expo-camera";
 import { useCallback, useRef, useState } from "react";
-import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
+import { Platform, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 export function PairingScreen({ onPair }: { onPair: (link: PairingLink) => void }) {
@@ -28,7 +28,11 @@ export function PairingScreen({ onPair }: { onPair: (link: PairingLink) => void 
 
   const acceptCode = useCallback(async () => {
     const code = normalizePairingCode(manualValue);
-    const relayUrl = (process.env.EXPO_PUBLIC_MOBILE_RELAY_URL ?? "").trim().replace(/\/$/, "");
+    const configuredRelay = (process.env.EXPO_PUBLIC_MOBILE_RELAY_URL ?? "").trim();
+    const relayUrl = (
+      configuredRelay ||
+      (Platform.OS === "web" && typeof window !== "undefined" ? window.location.origin : "")
+    ).replace(/\/$/, "");
     if (!code) {
       setError("6桁の接続コードを入力してください");
       return;
@@ -94,23 +98,29 @@ export function PairingScreen({ onPair }: { onPair: (link: PairingLink) => void 
     <SafeAreaView style={styles.pairingRoot} edges={["top", "bottom"]}>
       <View style={styles.brandBlock}>
         <Text style={styles.brand}>LOL SIDEBOARD</Text>
-        <Text style={styles.pairingTitle}>iPhoneを試合画面に接続</Text>
+        <Text style={styles.pairingTitle}>
+          {Platform.OS === "web" ? "ブラウザを試合画面に接続" : "iPhoneを試合画面に接続"}
+        </Text>
         <Text style={styles.pairingCopy}>
-          WindowsアプリのQRコードを読み取るか、6桁のコードを入力します。
+          {Platform.OS === "web"
+            ? "Windowsアプリに表示された6桁のコードを入力します。"
+            : "WindowsアプリのQRコードを読み取るか、6桁のコードを入力します。"}
         </Text>
       </View>
-      <Pressable
-        accessibilityRole="button"
-        style={styles.primaryButton}
-        onPress={async () => {
-          scanned.current = false;
-          const result = permission?.granted ? permission : await requestPermission();
-          if (result.granted) setScanning(true);
-          else setError("設定からカメラへのアクセスを許可してください");
-        }}
-      >
-        <Text style={styles.primaryButtonText}>QRコードを読み取る</Text>
-      </Pressable>
+      {Platform.OS !== "web" && (
+        <Pressable
+          accessibilityRole="button"
+          style={styles.primaryButton}
+          onPress={async () => {
+            scanned.current = false;
+            const result = permission?.granted ? permission : await requestPermission();
+            if (result.granted) setScanning(true);
+            else setError("設定からカメラへのアクセスを許可してください");
+          }}
+        >
+          <Text style={styles.primaryButtonText}>QRコードを読み取る</Text>
+        </Pressable>
+      )}
       <View style={styles.manualSection}>
         <Text style={styles.sectionLabel}>6-DIGIT CONNECTION CODE</Text>
         <TextInput

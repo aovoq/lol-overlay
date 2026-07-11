@@ -56,7 +56,7 @@ bun run dev            # frontend only
 bun run tauri build    # distributable build, run on Windows
 bun run dev:relay      # local Cloudflare Relay on :8787
 bun run dev:mobile     # Expo dev server
-bun run build:relay    # Wrangler bundle dry-run
+bun run build:relay    # Expo Web viewer + Wrangler bundle dry-run
 bun run build:mobile   # Expo export
 ```
 
@@ -75,6 +75,8 @@ RelayはWranglerの`secrets.required`で`MOBILE_RELAY_CREATE_SECRET`だけをプ
 起動する。本番Workerには`cd apps/relay && bunx wrangler secret put
 MOBILE_RELAY_CREATE_SECRET`で、desktopと同じsecretを登録する。secretは
 `EXPO_PUBLIC_`変数にはせず、frontend bundleへ埋め込まない。
+Relay起動後は`/debug`でHono JSXの診断画面、`/viewer/`でiOSと共通のExpo Web画面を
+確認できる。`bun run build:relay`とdeployはExpo Web viewerも自動でexportする。
 
 GitHubのリポジトリ設定には次を登録する。配布desktopはGitHub Actionsでビルドされるため、
 ローカル`.env`の値はrelease workflowには渡らない。
@@ -86,8 +88,9 @@ GitHubのリポジトリ設定には次を登録する。配布desktopはGitHub 
 | `TAURI_SIGNING_PRIVATE_KEY` | Actions Secret | updater署名鍵 |
 
 Relayは1ペアリングにつき1 Durable Objectを作り、4時間で失効する。切断（DISCONNECT）時は
-producerがセッションをrevokeし、viewerのWebSocketも閉じる。スナップショットはメモリ上のみで
-履歴は永続化しない。想定利用はWindows上のデスクトップから試合中データを送ること
+producerがセッションをrevokeし、viewerのWebSocketも閉じる。最新スナップショットだけを
+Durable Objectに保持し、履歴は保存しない。6桁コードは専用Durable Objectで10分間保持する。
+想定利用はWindows上のデスクトップから試合中データを送ること
 （OS自体の強制チェックはない）。公開Workerでは`MOBILE_RELAY_CREATE_SECRET`必須（未設定は503）。
 ローカル`wrangler dev`のみsecretなしを許可する。Workerをデプロイする前に
 `apps/relay/wrangler.jsonc`の`MOBILE_APP_URL`とWorker名を本番値へ変更する。

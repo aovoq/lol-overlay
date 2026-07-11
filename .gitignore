@@ -15,6 +15,7 @@ dist
 dist-ssr
 .expo/
 .wrangler/
+apps/relay/public/viewer/
 *.local
 
 # Environment

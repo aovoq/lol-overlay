@@ -13,8 +13,24 @@ export default function App() {
   useEffect(() => {
     const consume = (url: string | null) => {
       if (!url) return;
-      const parsed = parsePairingLink(url);
-      if (parsed) setLink(parsed);
+      let parsed = parsePairingLink(url);
+      if (!parsed) {
+        try {
+          const pair = new URLSearchParams(new URL(url).hash.slice(1)).get("pair");
+          parsed = pair ? parsePairingLink(pair) : null;
+        } catch {
+          parsed = null;
+        }
+      }
+      if (!parsed) return;
+      setLink(parsed);
+      if (typeof window !== "undefined" && window.location.hash) {
+        window.history.replaceState(
+          null,
+          "",
+          `${window.location.pathname}${window.location.search}`,
+        );
+      }
     };
     Linking.getInitialURL().then(consume);
     const subscription = Linking.addEventListener("url", ({ url }) => consume(url));

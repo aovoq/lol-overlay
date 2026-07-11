@@ -5,15 +5,19 @@
   "type": "module",
   "scripts": {
     "dev": "wrangler dev",
-    "deploy": "wrangler deploy",
-    "typecheck": "tsc --noEmit"
+    "build:viewer": "bun run --cwd ../mobile export -- --platform web --output-dir ../relay/public/viewer",
+    "deploy": "bun run build:viewer && wrangler deploy",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
   },
   "dependencies": {
-    "@lol-overlay/protocol": "workspace:*"
+    "@lol-overlay/protocol": "workspace:*",
+    "hono": "^4.9.0"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20260702.1",
     "typescript": "~5.9.2",
+    "vitest": "^4.1.9",
     "wrangler": "4.108.0"
   }
 }
