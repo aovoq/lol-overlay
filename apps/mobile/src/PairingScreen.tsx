@@ -1,5 +1,5 @@
 import type { PairingLink } from "@lol-overlay/protocol";
-import { parsePairingLink } from "@lol-overlay/protocol";
+import { normalizePairingCode, parsePairingLink } from "@lol-overlay/protocol";
 import { CameraView, useCameraPermissions } from "expo-camera";
 import { useCallback, useRef, useState } from "react";
 import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
@@ -10,6 +10,7 @@ export function PairingScreen({ onPair }: { onPair: (link: PairingLink) => void 
   const [scanning, setScanning] = useState(false);
   const [manualValue, setManualValue] = useState("");
   const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
   const scanned = useRef(false);
 
   const accept = useCallback(
@@ -24,6 +25,40 @@ export function PairingScreen({ onPair }: { onPair: (link: PairingLink) => void 
     },
     [onPair],
   );
+
+  const acceptCode = useCallback(async () => {
+    const code = normalizePairingCode(manualValue);
+    const relayUrl = (process.env.EXPO_PUBLIC_MOBILE_RELAY_URL ?? "").trim().replace(/\/$/, "");
+    if (!code) {
+      setError("6桁の接続コードを入力してください");
+      return;
+    }
+    if (!relayUrl) {
+      setError("接続先Relayが設定されていません");
+      return;
+    }
+    setLoading(true);
+    setError("");
+    try {
+      const response = await fetch(`${relayUrl}/v1/pair`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ code }),
+      });
+      if (!response.ok) throw new Error("invalid code");
+      const value: unknown = await response.json();
+      const parsed =
+        typeof value === "object" && value !== null && "viewerUrl" in value
+          ? parsePairingLink(String(value.viewerUrl))
+          : null;
+      if (!parsed) throw new Error("invalid response");
+      onPair(parsed);
+    } catch {
+      setError("接続コードが無効か、有効期限が切れています");
+    } finally {
+      setLoading(false);
+    }
+  }, [manualValue, onPair]);
 
   if (scanning && permission?.granted) {
     return (
@@ -60,7 +95,9 @@ export function PairingScreen({ onPair }: { onPair: (link: PairingLink) => void 
       <View style={styles.brandBlock}>
         <Text style={styles.brand}>LOL SIDEBOARD</Text>
         <Text style={styles.pairingTitle}>iPhoneを試合画面に接続</Text>
-        <Text style={styles.pairingCopy}>Windowsアプリに表示されたQRコードを読み取ります。</Text>
+        <Text style={styles.pairingCopy}>
+          WindowsアプリのQRコードを読み取るか、6桁のコードを入力します。
+        </Text>
       </View>
       <Pressable
         accessibilityRole="button"
@@ -75,24 +112,27 @@ export function PairingScreen({ onPair }: { onPair: (link: PairingLink) => void 
         <Text style={styles.primaryButtonText}>QRコードを読み取る</Text>
       </Pressable>
       <View style={styles.manualSection}>
-        <Text style={styles.sectionLabel}>MANUAL CONNECTION</Text>
+        <Text style={styles.sectionLabel}>6-DIGIT CONNECTION CODE</Text>
         <TextInput
-          autoCapitalize="none"
-          autoCorrect={false}
-          multiline
-          placeholder="接続リンクを貼り付け"
+          accessibilityLabel="6桁の接続コード"
+          keyboardType="number-pad"
+          maxLength={6}
+          placeholder="000000"
           placeholderTextColor="#747985"
           style={styles.input}
           value={manualValue}
-          onChangeText={setManualValue}
+          onChangeText={(value) => setManualValue(value.replace(/\D/g, "").slice(0, 6))}
         />
         <Pressable
           accessibilityRole="button"
-          disabled={!manualValue.trim()}
-          style={[styles.secondaryButton, !manualValue.trim() && styles.disabledButton]}
-          onPress={() => accept(manualValue)}
+          disabled={manualValue.length !== 6 || loading}
+          style={[
+            styles.secondaryButton,
+            (manualValue.length !== 6 || loading) && styles.disabledButton,
+          ]}
+          onPress={acceptCode}
         >
-          <Text style={styles.secondaryButtonText}>接続</Text>
+          <Text style={styles.secondaryButtonText}>{loading ? "接続中…" : "接続"}</Text>
         </Pressable>
         {!!error && <Text style={styles.errorText}>{error}</Text>}
       </View>
@@ -122,13 +162,16 @@ const styles = StyleSheet.create({
   manualSection: { marginTop: 36, gap: 12 },
   sectionLabel: { color: "#ff7183", fontSize: 11, fontWeight: "800" },
   input: {
-    minHeight: 72,
+    minHeight: 58,
     borderWidth: 1,
     borderColor: "#343741",
     borderRadius: 4,
     color: "#f6f7f9",
     padding: 12,
-    textAlignVertical: "top",
+    textAlign: "center",
+    fontSize: 28,
+    fontWeight: "800",
+    letterSpacing: 10,
     backgroundColor: "#111318",
   },
   secondaryButton: {

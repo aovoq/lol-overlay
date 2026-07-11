@@ -803,6 +803,8 @@ pub async fn poller(app: AppHandle, engine: Arc<Engine>, tx: UnboundedSender<Val
                     log(&app, "warn", format!("live client snapshot failed: {e}"));
                     live_snapshot_error_logged = true;
                 }
+                // Don't leave the phone stuck on the last in-game frame.
+                engine.mobile.publish_idle(&app, phase.label(), client_up);
             }
         }
         engine.phase_in_game.store(in_game, Ordering::SeqCst);

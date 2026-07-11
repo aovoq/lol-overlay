@@ -4,6 +4,7 @@
 //!   * `engine`      — shared state + the poller / rune-import tasks
 //!   * `events`      — payloads emitted to the frontend
 //!   * `hittest`     — region-based click-through (always-clickable headers)
+//!   * `mobile`      — ephemeral Cloudflare relay pairing for the iPhone sideboard
 //!   * `mock`        — debug mode driving synthetic state (Ctrl+Shift+D)
 //!   * `hotkeys`     — global shortcuts
 //!   * `commands`    — frontend-invokable commands

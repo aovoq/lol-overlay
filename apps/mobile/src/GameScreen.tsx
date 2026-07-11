@@ -380,7 +380,17 @@ export function GameScreen({
     <SafeAreaView style={styles.gameRoot} edges={["top", "bottom"]}>
       <View style={[styles.topBar, landscape && styles.topBarCompact]}>
         <Text style={styles.brandSmall}>LOL SIDEBOARD</Text>
-        <StatusLine state={state} stale={stale} />
+        <View style={styles.topBarActions}>
+          <StatusLine state={state} stale={stale} />
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="接続を解除"
+            style={styles.topDisconnect}
+            onPress={onDisconnect}
+          >
+            <Text style={styles.topDisconnectText}>解除</Text>
+          </Pressable>
+        </View>
       </View>
 
       <ScrollView
@@ -436,6 +446,14 @@ const styles = StyleSheet.create({
   },
   topBarCompact: { minHeight: 40, paddingHorizontal: 14 },
   brandSmall: { color: "#d7d9df", fontSize: 11, fontWeight: "800", letterSpacing: 0 },
+  topBarActions: { flexDirection: "row", alignItems: "center", gap: 12 },
+  topDisconnect: {
+    minHeight: 28,
+    paddingHorizontal: 8,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  topDisconnectText: { color: "#9297a3", fontSize: 11, fontWeight: "700" },
   statusLine: { flexDirection: "row", alignItems: "center", gap: 7 },
   statusDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: "#42d392" },
   statusDotWaiting: { backgroundColor: "#f2b84b" },

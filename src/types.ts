@@ -186,6 +186,8 @@ export interface MobilePairingState {
   status: "disconnected" | "paired" | "error";
   sessionId: string;
   viewerUrl: string;
+  pairingCode: string;
+  pairingCodeExpiresAt: number;
   expiresAt: number;
   message: string;
 }

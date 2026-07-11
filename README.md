@@ -61,14 +61,17 @@ bun run build:mobile   # Expo export
 ```
 
 モバイルMVPをローカルで動かす場合は、`bun run dev:relay`、`bun run dev:mobile`、
-`bun run tauri dev`の順で起動する。デスクトップは未設定時にデプロイ済みの
-`https://lol-overlay-relay.voq.workers.dev`を使う。ローカルRelayへ接続する場合は
-`VITE_MOBILE_RELAY_URL=http://127.0.0.1:8787`を設定する。
+`bun run tauri dev`の順で起動する。デスクトップは`.env`の
+`VITE_MOBILE_RELAY_URL`を参照する（未設定時は接続ボタンが無効）。ローカルRelayへ
+接続する場合は`VITE_MOBILE_RELAY_URL=http://127.0.0.1:8787`を設定する。本番Workerで
+`SESSION_CREATE_SECRET`を有効にしている場合は、同じ値を`MOBILE_RELAY_CREATE_SECRET`
+としてTauriプロセスの環境に渡す。
 
-Relayは1ペアリングにつき1 Durable Objectを作り、4時間で失効する。
-Windowsからのスナップショットだけを受け付け、履歴は保存しない。
-Workerをデプロイする前に`apps/relay/wrangler.jsonc`の`MOBILE_APP_URL`と
-Worker名を本番値へ変更する。
+Relayは1ペアリングにつき1 Durable Objectを作り、4時間で失効する。切断（DISCONNECT）時は
+producerがセッションをrevokeし、viewerのWebSocketも閉じる。スナップショットはメモリ上のみで
+履歴は永続化しない。想定利用はWindows上のデスクトップから試合中データを送ること
+（OS自体の強制チェックはない）。Workerをデプロイする前に`apps/relay/wrangler.jsonc`の
+`MOBILE_APP_URL`とWorker名を本番値へ変更する。
 
 通常の検証:
 

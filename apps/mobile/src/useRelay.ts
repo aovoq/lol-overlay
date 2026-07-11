@@ -10,6 +10,8 @@ import { useEffect, useRef, useState } from "react";
 export type ConnectionState = "idle" | "connecting" | "waiting" | "live" | "reconnecting" | "error";
 
 const DD = "https://ddragon.leagueoflegends.com";
+const MAX_OPEN_RETRIES = 3;
+const MAX_LIVE_RETRIES = 8;
 
 export function useDataDragonVersion(): string {
   const [version, setVersion] = useState("");
@@ -27,16 +29,25 @@ export function useRelay(link: PairingLink) {
   const [snapshot, setSnapshot] = useState<RelayMessage & { type: "snapshot" }>();
   const [receivedAt, setReceivedAt] = useState(0);
   const [error, setError] = useState("");
-  const reconnectAttempt = useRef(0);
+  const consecutiveFailures = useRef(0);
+  const everHealthy = useRef(false);
 
   useEffect(() => {
     let active = true;
     let socket: WebSocket | undefined;
     let retryTimer: ReturnType<typeof setTimeout> | undefined;
+    consecutiveFailures.current = 0;
+    everHealthy.current = false;
+
+    const markHealthy = () => {
+      consecutiveFailures.current = 0;
+      everHealthy.current = true;
+    };
 
     const connect = () => {
       if (!active) return;
-      setState(reconnectAttempt.current ? "reconnecting" : "connecting");
+      setState(consecutiveFailures.current ? "reconnecting" : "connecting");
+      let opened = false;
       try {
         socket = new WebSocket(viewerWebSocketUrl(link), [
           RELAY_SUBPROTOCOL,
@@ -48,18 +59,24 @@ export function useRelay(link: PairingLink) {
         return;
       }
       socket.onopen = () => {
-        reconnectAttempt.current = 0;
+        opened = true;
         setError("");
         setState("waiting");
+        // Do not reset consecutiveFailures here — open-then-immediate-close
+        // loops would otherwise reconnect forever.
       };
       socket.onmessage = (event) => {
         try {
           const message: unknown = JSON.parse(String(event.data));
           if (!isRelayMessage(message)) throw new Error("invalid relay message");
           if (message.type === "snapshot") {
+            markHealthy();
             setSnapshot(message);
             setReceivedAt(Date.now());
             setState(message.snapshot.game ? "live" : "waiting");
+          } else if (message.type === "status") {
+            markHealthy();
+            setState("waiting");
           } else if (message.type === "error") {
             setError(message.message);
             setState("error");
@@ -72,15 +89,30 @@ export function useRelay(link: PairingLink) {
       socket.onerror = () => setError("Relayへ接続できません");
       socket.onclose = (event) => {
         if (!active) return;
-        if (event.code === 4001 || event.code === 4003) {
-          setError("接続セッションの有効期限が切れました");
+        // 4001 expired, 4002 revoked by producer, 4003 reserved for unauthorized.
+        if (event.code === 4001 || event.code === 4002 || event.code === 4003) {
+          setError(
+            event.code === 4002
+              ? "接続セッションが切断されました"
+              : "接続セッションの有効期限が切れました",
+          );
           setState("error");
           return;
         }
-        reconnectAttempt.current += 1;
+
+        consecutiveFailures.current += 1;
+        const limit = everHealthy.current ? MAX_LIVE_RETRIES : MAX_OPEN_RETRIES;
+        if (consecutiveFailures.current > limit) {
+          setError("Relayへ接続できません");
+          setState("error");
+          return;
+        }
+
         setState("reconnecting");
-        const delay = Math.min(15_000, 500 * 2 ** reconnectAttempt.current);
+        const delay = Math.min(15_000, 500 * 2 ** consecutiveFailures.current);
         retryTimer = setTimeout(connect, delay);
+        // `opened` is unused for limits now but kept for clarity of handshake vs live.
+        void opened;
       };
     };
 

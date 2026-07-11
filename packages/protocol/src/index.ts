@@ -55,6 +55,8 @@ export interface PairingSession {
   sessionId: string;
   producerToken: string;
   viewerUrl: string;
+  pairingCode: string;
+  pairingCodeExpiresAt: number;
   expiresAt: number;
 }
 
@@ -67,6 +69,11 @@ export interface PairingLink {
   relayUrl: string;
   sessionId: string;
   viewerToken: string;
+}
+
+export function normalizePairingCode(value: string): string | null {
+  const code = value.replace(/\D/g, "");
+  return code.length === 6 ? code : null;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -183,7 +190,11 @@ export function parsePairingLink(rawUrl: string): PairingLink | null {
       return null;
     }
     const relay = new URL(relayUrl);
-    if (relay.protocol !== "http:" && relay.protocol !== "https:") return null;
+    if (relay.protocol === "http:") {
+      if (!["127.0.0.1", "localhost", "[::1]"].includes(relay.hostname)) return null;
+    } else if (relay.protocol !== "https:") {
+      return null;
+    }
     return {
       relayUrl: relay.href.replace(/\/$/, ""),
       sessionId,

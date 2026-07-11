@@ -199,7 +199,7 @@ pub async fn mock_loop(app: AppHandle, engine: Arc<Engine>, generation: u64) {
         let _ = app.emit(
             "phase",
             PhaseEvent {
-                phase: "InProgress (mock)".into(),
+                phase: "InProgress".into(),
                 client_up: true,
                 in_game: true,
             },
@@ -207,7 +207,7 @@ pub async fn mock_loop(app: AppHandle, engine: Arc<Engine>, generation: u64) {
         let _ = app.emit("recommendations", recommendations.clone());
         engine
             .mobile
-            .publish_game(&app, "InProgress (mock)", true, &snapshot, &recommendations);
+            .publish_game(&app, "InProgress", true, &snapshot, &recommendations);
         tokio::time::sleep(Duration::from_millis(1500)).await;
     }
 

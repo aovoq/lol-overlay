@@ -377,6 +377,9 @@ pub async fn start_mobile_pairing(
 }
 
 #[tauri::command]
-pub fn stop_mobile_pairing(app: AppHandle, engine: State<'_, Arc<Engine>>) -> MobilePairingState {
-    engine.mobile.stop(&app)
+pub async fn stop_mobile_pairing(
+    app: AppHandle,
+    engine: State<'_, Arc<Engine>>,
+) -> error::Result<MobilePairingState> {
+    Ok(engine.mobile.stop(&app).await)
 }

@@ -38,3 +38,4 @@ cargo test -p overlay-provider-ugg --lib -- --ignored --nocapture
 - Target platform is Windows. Anything touching LCU or Live Client Data API needs a running League client on Windows.
 - Shared Rust logic lives in the Cargo workspace under `crates/`; the app shell is in `src-tauri/`.
 - Frontend event payloads mirror Rust serde structs and use camelCase.
+- Mobile sideboard: `apps/mobile` (Expo) + `apps/relay` (Cloudflare Worker/DO) + `packages/protocol` + `src-tauri/src/mobile.rs`. Pairing uses `VITE_MOBILE_RELAY_URL`; optional `MOBILE_RELAY_CREATE_SECRET` / Worker `SESSION_CREATE_SECRET`.

@@ -20,6 +20,8 @@
   "vars": {
     "MOBILE_APP_URL": "loloverlay://pair"
   },
+  // Set in production with: wrangler secret put SESSION_CREATE_SECRET
+  // When set, desktop must send the same value via MOBILE_RELAY_CREATE_SECRET.
   "observability": {
     "enabled": true
   }

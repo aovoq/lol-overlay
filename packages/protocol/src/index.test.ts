@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { isMobileSnapshot, isRelayMessage, parsePairingLink, viewerWebSocketUrl } from ".";
+import {
+  isMobileSnapshot,
+  isRelayMessage,
+  normalizePairingCode,
+  parsePairingLink,
+  viewerWebSocketUrl,
+} from ".";
 
 const snapshot = {
   protocolVersion: 1,
@@ -22,6 +28,10 @@ const snapshot = {
 } as const;
 
 describe("pairing links", () => {
+  it("normalizes a six-digit pairing code", () => {
+    expect(normalizePairingCode("123 456")).toBe("123456");
+    expect(normalizePairingCode("12345")).toBeNull();
+  });
   it("parses the relay, session, and fragment token", () => {
     expect(
       parsePairingLink(
@@ -48,8 +58,21 @@ describe("pairing links", () => {
     "loloverlay://pair?relay=file%3A%2F%2Ftmp&session=abc#token=secret",
     "loloverlay://pair?relay=https%3A%2F%2Frelay.example.com&session=../abc#token=secret",
     "loloverlay://pair?relay=https%3A%2F%2Frelay.example.com&session=abc#token=bad%20token",
+    "loloverlay://pair?relay=http%3A%2F%2Fevil.example.com&session=abc#token=secret",
   ])("rejects unsafe connection fields", (url) => {
     expect(parsePairingLink(url)).toBeNull();
+  });
+
+  it("allows localhost http relays for local development", () => {
+    expect(
+      parsePairingLink(
+        "loloverlay://pair?relay=http%3A%2F%2F127.0.0.1%3A8787&session=abc#token=secret",
+      ),
+    ).toEqual({
+      relayUrl: "http://127.0.0.1:8787",
+      sessionId: "abc",
+      viewerToken: "secret",
+    });
   });
 });
 
