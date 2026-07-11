@@ -1,22 +1,10 @@
 import { invoke } from "@tauri-apps/api/core";
 import { createMemo, Show } from "solid-js";
-import {
-  activeTab,
-  champSelect,
-  importState,
-  selectedRole,
-  setImportState,
-  vsEnemyId,
-} from "../../state/backend";
+import { importState, setImportState } from "../../state/backend";
 import { importSpells, spellsFlipped } from "../../state/settings";
 
-function effectiveRole() {
-  const cs = champSelect();
-  return cs?.myRole || selectedRole();
-}
-
-export function ImportButton() {
-  const my = createMemo(() => champSelect()?.myChampionId ?? 0);
+export function ImportButton(props: { championId: number; role: string; enemyId?: number | null }) {
+  const my = createMemo(() => props.championId);
   let importTimer: number | undefined;
 
   const finishImport = (state: "imported" | "failed", revertAfterMs: number) => {
@@ -44,8 +32,8 @@ export function ImportButton() {
     setImportState("importing");
     invoke("import_build", {
       championId: champ,
-      role: effectiveRole(),
-      enemyChampionId: activeTab() === "vs" && vsEnemyId() ? vsEnemyId() : null,
+      role: props.role,
+      enemyChampionId: props.enemyId ?? null,
       includeSpells: importSpells(),
       flipSpells: spellsFlipped(),
     }).then(

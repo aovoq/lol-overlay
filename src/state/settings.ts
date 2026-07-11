@@ -26,11 +26,15 @@ const [dataSources, setDataSources] = createSignal<string[]>(["deeplol"]);
 const [presentationMode, setPresentationModeState] = createSignal<PresentationMode>("overlay");
 const [themeMode, setThemeModeState] = createSignal<ThemeMode>(storedTheme());
 const [developerMode, setDeveloperModeState] = createSignal(false);
+const [autoOpenChampion, setAutoOpenChampionState] = createSignal(true);
+const [autoOpenLive, setAutoOpenLiveState] = createSignal(true);
 
 applyTheme(themeMode());
 
 export {
   autoImport,
+  autoOpenChampion,
+  autoOpenLive,
   dataSource,
   dataSources,
   developerMode,
@@ -40,6 +44,16 @@ export {
   spellsFlipped,
   themeMode,
 };
+
+export function setAutoOpenChampion(enabled: boolean) {
+  setAutoOpenChampionState(enabled);
+  invoke("set_auto_open_champion", { enabled }).catch(() => {});
+}
+
+export function setAutoOpenLive(enabled: boolean) {
+  setAutoOpenLiveState(enabled);
+  invoke("set_auto_open_live", { enabled }).catch(() => {});
+}
 
 export function setImportSpells(on: boolean) {
   setImportSpellsState(on);
@@ -79,6 +93,8 @@ export function applySettings(s: Partial<Settings>) {
   if (s.dataSource !== undefined) setDataSourceState(s.dataSource);
   if (s.presentationMode !== undefined) setPresentationModeState(s.presentationMode);
   if (s.developerMode !== undefined) setDeveloperModeState(s.developerMode);
+  if (s.autoOpenChampion !== undefined) setAutoOpenChampionState(s.autoOpenChampion);
+  if (s.autoOpenLive !== undefined) setAutoOpenLiveState(s.autoOpenLive);
 }
 
 invoke<Settings>("get_settings")

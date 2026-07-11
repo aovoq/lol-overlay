@@ -1,27 +1,11 @@
 import { createMemo, For, Show } from "solid-js";
 import { champName, getPerk, getShard, getStyle } from "../../assets";
 import { OPENLOL_MARK_SVG, roleLabel } from "../../lib/openlol";
-import { activeTab, champSelect, hoverChampId, selectedRole, vsEnemyId } from "../../state/backend";
 import { buildCache, buildKey } from "../../state/caches";
 import type { RuneBuild } from "../../types";
 import { Icon } from "../Icon";
 import { ScrollArea } from "../ScrollArea";
 import { SectionError } from "./SectionError";
-
-function effectiveRole() {
-  const cs = champSelect();
-  return cs?.myRole || selectedRole();
-}
-
-function displayedTarget(): { champ: number; enemy: number | null } | null {
-  if (hoverChampId()) return { champ: hoverChampId(), enemy: null };
-  const my = champSelect()?.myChampionId ?? 0;
-  if (!my) return null;
-  return {
-    champ: my,
-    enemy: activeTab() === "vs" && vsEnemyId() ? vsEnemyId() : null,
-  };
-}
 
 function TreeHead(props: { styleId: number; primary: boolean }) {
   const s = () => getStyle(props.styleId);
@@ -136,9 +120,9 @@ function NotEnoughData(props: { championId: number; matchup: boolean }) {
   );
 }
 
-export function BuildArea() {
-  const role = createMemo(() => effectiveRole());
-  const target = createMemo(() => displayedTarget());
+export function BuildArea(props: { championId: number; role: string; enemyId?: number | null }) {
+  const role = createMemo(() => props.role);
+  const target = createMemo(() => ({ champ: props.championId, enemy: props.enemyId ?? null }));
   const cacheKey = createMemo(() => {
     const t = target();
     return t ? buildKey(t.champ, role(), t.enemy) : "";

@@ -163,8 +163,7 @@
   /* HUD corner brackets: accent L-marks on opposing corners. Applied to
    * every framed surface (.panel and the champ-select shell). Both are
    * already positioned (fixed/relative), so the pseudos anchor to them. */
-  .panel::before,
-  .openlol-shell::before {
+  .panel::before {
     content: "";
     position: absolute;
     top: 0;
@@ -176,8 +175,7 @@
     pointer-events: none;
   }
 
-  .panel::after,
-  .openlol-shell::after {
+  .panel::after {
     content: "";
     position: absolute;
     bottom: 0;
@@ -339,46 +337,545 @@
     color: var(--hx-text);
   }
 
-  .control-home {
-    display: flex;
+  .desktop-shell {
+    display: grid;
+    grid-template-columns: 190px minmax(0, 1fr);
     height: 100%;
+    min-height: 0;
+    background: var(--hx-bg);
+  }
+
+  .desktop-sidebar {
+    display: flex;
+    min-height: 0;
+    flex-direction: column;
+    padding: 24px 14px 18px;
+    border-right: 1px solid var(--hx-border);
+    background: var(--hx-panel);
+  }
+
+  .desktop-brand {
+    padding: 0 12px 24px;
+    color: var(--hx-accent);
+    font-family: var(--font-hx-display);
+    font-size: 14px;
+    font-weight: 800;
+    letter-spacing: 0.28em;
+  }
+
+  .desktop-nav {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .desktop-nav-link {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 12px;
+    border-left: 2px solid transparent;
+    border-radius: 3px;
+    color: var(--hx-muted);
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    text-decoration: none;
+  }
+
+  .desktop-nav-link:hover,
+  .desktop-nav-link--active {
+    border-left-color: var(--hx-accent);
+    background: var(--hx-accent-wash);
+    color: var(--hx-accent);
+  }
+
+  .desktop-live-dot,
+  .desktop-state-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--hx-red);
+  }
+
+  .desktop-live-dot,
+  .desktop-state-dot.is-online {
+    background: var(--hx-up);
+    box-shadow: 0 0 8px color-mix(in srgb, var(--hx-up) 60%, transparent);
+  }
+
+  .desktop-client-state {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: auto;
+    padding: 12px;
+    color: var(--hx-muted);
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+  }
+
+  .desktop-content {
+    min-width: 0;
+    min-height: 0;
+    overflow: hidden;
+  }
+
+  .desktop-page {
+    display: flex;
+    box-sizing: border-box;
+    min-height: 100%;
+    flex-direction: column;
+    gap: 18px;
+    padding: 32px 36px;
+  }
+
+  .desktop-page-header h1,
+  .desktop-detail-header h1 {
+    margin: 4px 0 0;
+    color: var(--hx-text-strong);
+    font-size: 26px;
+    line-height: 1.2;
+  }
+
+  .desktop-page-header p {
+    margin: 7px 0 0;
+    color: var(--hx-muted);
+    font-size: 12px;
+  }
+
+  .desktop-eyebrow,
+  .desktop-detail-header span {
+    color: var(--hx-accent);
+    font-size: 9px;
+    font-weight: 800;
+    letter-spacing: 0.24em;
+  }
+
+  .desktop-card {
+    position: relative;
+    padding: 20px;
+    border: 1px solid var(--hx-border);
+    border-radius: 5px;
+    background: var(--hx-panel-bg);
+  }
+
+  .desktop-profile-card {
+    display: grid;
+    grid-template-columns: auto minmax(180px, 1fr) auto auto;
+    align-items: center;
+    gap: 24px;
+  }
+
+  .desktop-profile-icon {
+    width: 58px;
+    height: 58px;
+    border: 1px solid var(--hx-border);
+    border-radius: 5px;
+  }
+
+  .desktop-profile-copy,
+  .desktop-rank-stat,
+  .desktop-match-row > div,
+  .desktop-champion-card > div {
+    display: flex;
+    min-width: 0;
+    flex-direction: column;
+    gap: 3px;
+  }
+
+  .desktop-profile-copy strong {
+    font-size: 15px;
+  }
+  .desktop-profile-copy strong span {
+    color: var(--hx-muted);
+    font-weight: 400;
+  }
+  .desktop-profile-copy small,
+  .desktop-rank-stat small,
+  .desktop-match-row small,
+  .desktop-champion-card small {
+    color: var(--hx-muted);
+    font-size: 10px;
+  }
+  .desktop-rank-stat {
+    min-width: 110px;
+    padding-left: 22px;
+    border-left: 1px solid var(--hx-border);
+  }
+  .desktop-rank-stat > span {
+    color: var(--hx-muted);
+    font-size: 9px;
+    letter-spacing: 0.14em;
+  }
+  .desktop-rank-stat strong {
+    color: var(--hx-accent);
+    font-size: 16px;
+  }
+
+  .desktop-section-heading {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .desktop-section-heading h2 {
+    margin: 0;
+    font-size: 14px;
+  }
+  .desktop-section-heading > span {
+    color: var(--hx-muted);
+    font-size: 9px;
+    letter-spacing: 0.14em;
+  }
+
+  .desktop-match-list {
+    padding: 0;
+    overflow: hidden;
+  }
+  .desktop-match-row {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 14px;
+    border-left: 3px solid var(--hx-red);
+    border-bottom: 1px solid var(--hx-border);
+  }
+  .desktop-match-row:last-child {
+    border-bottom: 0;
+  }
+  .desktop-match-row.is-win {
+    border-left-color: var(--hx-up);
+  }
+  .desktop-match-icon {
+    width: 34px;
+    height: 34px;
+    border-radius: 4px;
+  }
+  .desktop-kda {
+    color: var(--hx-text);
+    font-size: 12px;
+    font-weight: 700;
+  }
+  .desktop-empty {
+    display: grid;
+    min-height: 100px;
+    place-items: center;
+    color: var(--hx-muted);
+    font-size: 12px;
+  }
+
+  .desktop-role-tabs {
+    display: flex;
+    gap: 6px;
+  }
+  .desktop-role-tabs button {
+    padding: 7px 14px;
+    border: 1px solid var(--hx-border);
+    border-radius: 3px;
+    background: transparent;
+    color: var(--hx-muted);
+    font: inherit;
+    font-size: 10px;
+    font-weight: 700;
+    cursor: pointer;
+  }
+  .desktop-role-tabs button.is-active {
+    border-color: var(--hx-accent);
+    background: var(--hx-accent-wash);
+    color: var(--hx-accent);
+  }
+
+  .desktop-champion-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+  }
+
+  .desktop-champion-tools {
+    display: flex;
+    gap: 8px;
+  }
+
+  .desktop-champion-tools input,
+  .desktop-champion-tools select,
+  .desktop-matchup-select input {
+    padding: 8px 10px;
+    border: 1px solid var(--hx-border);
+    border-radius: 3px;
+    background: var(--hx-bg-raised);
+    color: var(--hx-text);
+    font: inherit;
+    font-size: 11px;
+  }
+
+  .desktop-champion-tools input {
+    min-width: 220px;
+    flex: 1;
+  }
+
+  .desktop-error-state {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .desktop-error-state button,
+  .desktop-error-state a {
+    color: var(--hx-accent);
+    font: inherit;
+    font-size: 11px;
+  }
+  .desktop-champion-card {
+    display: grid;
+    grid-template-columns: 24px auto minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 11px;
+    padding: 10px 12px;
+    border: 1px solid var(--hx-border);
+    border-radius: 4px;
+    color: var(--hx-text);
+    text-decoration: none;
+  }
+  .desktop-champion-card:hover {
+    border-color: var(--hx-accent);
+    background: var(--hx-accent-wash);
+  }
+  .desktop-champion-rank {
+    color: var(--hx-muted);
+    font-size: 10px;
+    text-align: right;
+  }
+  .desktop-champion-icon {
+    width: 38px;
+    height: 38px;
+    border-radius: 4px;
+  }
+  .desktop-champion-wr {
+    display: flex;
+    flex-direction: column;
+    color: var(--hx-accent);
+    font-size: 13px;
+    font-weight: 700;
+    text-align: right;
+  }
+
+  .desktop-champion-detail {
+    height: 100%;
+  }
+  .desktop-detail-header {
+    display: grid;
+    grid-template-columns: auto auto minmax(0, 1fr);
+    align-items: center;
+    gap: 16px;
+  }
+  .desktop-back-link {
+    align-self: start;
+    color: var(--hx-muted);
+    font-size: 9px;
+    text-decoration: none;
+  }
+  .desktop-detail-icon {
+    width: 58px;
+    height: 58px;
+    border-radius: 5px;
+  }
+  .desktop-build-card {
+    display: flex;
+    min-height: 0;
+    flex: 1;
+    flex-direction: column;
+  }
+
+  .desktop-detail-grid {
+    display: grid;
+    min-height: 0;
+    flex: 1;
+    grid-template-columns: 280px minmax(0, 1fr);
+    gap: 14px;
+  }
+
+  .desktop-detail-aside {
+    display: flex;
     min-height: 0;
     flex-direction: column;
     gap: 14px;
-    padding: 16px;
-    box-sizing: border-box;
   }
 
-  .control-status-panel,
-  .control-settings-panel {
-    position: relative;
-    width: auto;
-    pointer-events: auto;
+  .desktop-matchup-card,
+  .desktop-counter-card {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
   }
 
-  .control-status-panel {
-    padding: 14px;
-  }
-
-  .control-settings-panel {
+  .desktop-counter-card {
     flex: 1;
-    min-height: 0;
   }
 
-  .control-ingame {
-    height: 100vh;
-    min-height: 0;
-    padding: 16px;
-    box-sizing: border-box;
+  .desktop-counter-card > div:last-child > div:first-child {
+    margin-bottom: 10px;
   }
 
-  .control-ingame .ingame-panel {
+  .desktop-matchup-select {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .desktop-matchup-select > span,
+  .desktop-draft-enemies > span {
+    color: var(--hx-muted);
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+  }
+
+  .desktop-matchup-select select,
+  .desktop-matchup-select input {
+    width: 100%;
+    padding: 8px 9px;
+    border: 1px solid var(--hx-border);
+    border-radius: 3px;
+    background: var(--hx-bg-raised);
+    color: var(--hx-text);
+    font: inherit;
+    font-size: 11px;
+  }
+
+  .desktop-combobox-menu {
+    position: absolute;
+    top: calc(100% + 4px);
+    right: 0;
+    left: 0;
+    z-index: 20;
+    display: flex;
+    max-height: 260px;
+    flex-direction: column;
+    overflow-y: auto;
+    padding: 4px;
+    border: 1px solid var(--hx-border);
+    border-radius: 4px;
+    background: var(--hx-panel);
+    box-shadow: 0 12px 28px rgba(0, 0, 0, 0.22);
+  }
+
+  .desktop-combobox-menu button {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 8px;
+    border: 0;
+    border-radius: 3px;
+    background: transparent;
+    color: var(--hx-text);
+    font: inherit;
+    font-size: 11px;
+    text-align: left;
+    cursor: pointer;
+  }
+
+  .desktop-combobox-menu button:hover {
+    background: var(--hx-accent-wash);
+  }
+  .desktop-combobox-menu img {
+    width: 24px;
+    height: 24px;
+    border-radius: 3px;
+  }
+
+  .desktop-build-extras {
+    border-top: 1px solid var(--hx-border);
+  }
+
+  .desktop-item-build {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    padding: 10px 12px;
+  }
+
+  .desktop-item-build > span {
+    width: 96px;
+    color: var(--hx-accent-dim);
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: 0.14em;
+  }
+
+  .desktop-item-build img {
+    width: 34px;
+    height: 34px;
+    border: 1px solid var(--hx-border);
+    border-radius: 4px;
+  }
+
+  .desktop-build-details-status {
+    padding: 9px 12px;
+    border-top: 1px solid var(--hx-border);
+    color: var(--hx-muted);
+    font-size: 10px;
+  }
+
+  .desktop-build-details-status.is-error {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .desktop-build-details-status button {
+    border: 0;
+    background: transparent;
+    color: var(--hx-accent);
+    font: inherit;
+    cursor: pointer;
+  }
+
+  .desktop-draft-enemies {
+    display: flex;
+    flex-direction: column;
+    gap: 7px;
+  }
+
+  .desktop-draft-enemies > div {
+    display: flex;
+    gap: 6px;
+  }
+
+  .desktop-draft-enemies button {
+    width: 38px;
+    height: 38px;
+    padding: 0;
+    overflow: hidden;
+    border: 1px solid var(--hx-border);
+    border-radius: 4px;
+    background: var(--hx-bg-raised);
+    cursor: pointer;
+  }
+
+  .desktop-draft-enemies button.is-active {
+    border-color: var(--hx-accent);
+    box-shadow: 0 0 0 1px var(--hx-accent);
+  }
+
+  .desktop-draft-enemies img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+  .desktop-live-empty {
+    min-height: 280px;
+  }
+  .desktop-live-panel .ingame-panel {
     max-width: none;
-    box-sizing: border-box;
   }
-
-  .control-ingame .rec-list {
-    max-height: 320px;
+  .desktop-settings-page {
+    max-width: 860px;
+  }
+  .desktop-settings-page > .desktop-card {
+    flex: none;
   }
 
   .mobile-pairing-grid {
@@ -402,6 +899,11 @@
     overflow: hidden;
   }
 
+  .desktop-build-card .hx-scroll-root {
+    flex: 1;
+    min-height: 0;
+  }
+
   .hx-scroll-viewport {
     width: 100%;
     height: 100%;
@@ -421,10 +923,6 @@
   .hx-scrollbar-thumb:hover {
     background: var(--color-hx-accent);
   }
-
-  .openlol img {
-    -webkit-user-drag: none;
-  }
 }
 
 body.interactive::after {
@@ -433,10 +931,6 @@ body.interactive::after {
   inset: 0;
   pointer-events: none;
   border: 2px solid var(--hx-overlay-ring);
-}
-
-body.champselect.interactive::after {
-  display: none;
 }
 
 @keyframes hx-shimmer {

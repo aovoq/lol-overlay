@@ -5,7 +5,6 @@ import {
   type MockStage,
   mockStage,
   selectMockStage,
-  setPlaygroundOpen,
 } from "../state/debug";
 
 /** Debug-build-only panel: jump the mock scenario directly and inspect the
@@ -42,13 +41,6 @@ export function DebugPanel() {
           </For>
         </div>
       </div>
-      <button
-        type="button"
-        class="rounded border border-hx-border bg-hx-bg-raised px-2 py-1 font-hx-display text-[10px] font-semibold tracking-[0.16em] text-hx-muted hover:text-hx-accent cursor-pointer"
-        onClick={() => setPlaygroundOpen(true)}
-      >
-        UI Playground
-      </button>
       <div class="flex items-center justify-between">
         <span class="text-[11px] text-hx-muted">イベントログ ({eventLog().length})</span>
         <button

@@ -180,6 +180,19 @@ export interface Settings {
   dataSource?: string;
   presentationMode?: PresentationMode;
   developerMode?: boolean;
+  autoOpenChampion?: boolean;
+  autoOpenLive?: boolean;
+}
+
+export interface AppSnapshot {
+  phase: PhaseEvent;
+  champSelect: ChampSelectEvent;
+  windowMode: WindowMode;
+}
+
+export interface BuildDetails {
+  items: ItemRecommendation[];
+  skillOrder?: SkillOrder | null;
 }
 
 export interface MobilePairingState {

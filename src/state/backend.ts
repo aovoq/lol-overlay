@@ -1,6 +1,8 @@
+import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { createSignal } from "solid-js";
 import type {
+  AppSnapshot,
   ChampSelectEvent,
   LogEvent,
   LpChangeEvent,
@@ -23,19 +25,14 @@ const [interactive, setInteractive] = createSignal(false);
 const [champSelect, setChampSelect] = createSignal<ChampSelectEvent | null>(null);
 
 const [selectedRole, setSelectedRole] = createSignal("middle");
-const [activeTab, setActiveTab] = createSignal<"best" | "vs">("best");
 const [vsEnemyId, setVsEnemyId] = createSignal(0);
 const [userPickedVsEnemy, setUserPickedVsEnemy] = createSignal(false);
-const [hoverChampId, setHoverChampId] = createSignal(0);
 const [importState, setImportState] = createSignal<"idle" | "importing" | "imported" | "failed">(
   "idle",
 );
-const [vsMenuOpen, setVsMenuOpen] = createSignal(false);
 
 export {
-  activeTab,
   champSelect,
-  hoverChampId,
   importState,
   interactive,
   lpChange,
@@ -44,19 +41,34 @@ export {
   recommendations,
   runeImported,
   selectedRole,
-  setActiveTab,
-  setHoverChampId,
   setImportState,
   setSelectedRole,
   setUserPickedVsEnemy,
   setVsEnemyId,
-  setVsMenuOpen,
   summoner,
   userPickedVsEnemy,
   vsEnemyId,
-  vsMenuOpen,
   windowMode,
 };
+
+function applyChampSelect(payload: ChampSelectEvent) {
+  setChampSelect(payload);
+  const revealed = payload.enemyChampionIds.filter((id) => id > 0);
+  if (!revealed.includes(vsEnemyId())) {
+    setVsEnemyId(revealed[0] ?? 0);
+    setUserPickedVsEnemy(false);
+  }
+}
+
+export function hydrateBackend(snapshot: AppSnapshot) {
+  setPhase(snapshot.phase);
+  setWindowMode(snapshot.windowMode);
+  applyChampSelect(snapshot.champSelect);
+}
+
+export const backendReady = invoke<AppSnapshot>("get_app_snapshot")
+  .then(hydrateBackend)
+  .catch(() => {});
 
 listen<PhaseEvent>("phase", (e) => setPhase(e.payload)).catch(() => {});
 listen<RecommendationsEvent>("recommendations", (e) => setRecommendations(e.payload)).catch(
@@ -73,16 +85,5 @@ listen<WindowMode>("window-mode", (e) => setWindowMode(e.payload)).catch(() => {
 listen<boolean>("interactive", (e) => setInteractive(e.payload)).catch(() => {});
 
 listen<ChampSelectEvent>("champ-select", (e) => {
-  const payload = e.payload;
-  setChampSelect(payload);
-
-  const revealed = payload.enemyChampionIds.filter((id) => id > 0);
-
-  if (!revealed.includes(vsEnemyId())) {
-    setVsEnemyId(revealed[0] ?? 0);
-    setUserPickedVsEnemy(false);
-  }
-
-  if (!vsEnemyId() && activeTab() === "vs") setActiveTab("best");
-  if (!payload.active) setHoverChampId(0);
+  applyChampSelect(e.payload);
 }).catch(() => {});

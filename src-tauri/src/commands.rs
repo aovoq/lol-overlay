@@ -14,13 +14,16 @@ use crate::engine::{
     self, Engine, MockStage, PanelPosition, PresentationMode, Settings, UiLayout, WindowGeometry,
 };
 use crate::error;
-use crate::events::{log, RuneImportedEvent};
+use crate::events::{log, PhaseEvent, RuneImportedEvent};
 use crate::hittest::HitRegion;
 use crate::mobile::MobilePairingState;
 use overlay_lcu::{self as lcu, RunePagePayload};
 use overlay_provider::BuildProvider;
 use overlay_provider::ProviderKind;
-use overlay_types::{CounterEntry, RuneBuild, TierEntry};
+use overlay_types::{
+    CounterEntry, EnemyChampion, GameSnapshot, ItemRecommendation, RuneBuild, SkillOrder, TierEntry,
+};
+use serde::Serialize;
 
 /// An empty role string means "unknown" on the frontend; the provider's
 /// optional-role APIs take `None` for that.
@@ -35,6 +38,42 @@ fn role_opt(role: &str) -> Option<&str> {
 #[tauri::command]
 pub fn get_settings(engine: State<'_, Arc<Engine>>) -> Settings {
     engine.settings()
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AppSnapshot {
+    phase: PhaseEvent,
+    champ_select: overlay_types::ChampSelectEvent,
+    window_mode: String,
+}
+
+#[tauri::command]
+pub fn get_app_snapshot(engine: State<'_, Arc<Engine>>) -> AppSnapshot {
+    let champ_select = engine.last_champ_select.lock().clone().unwrap_or_default();
+    let in_game = engine.phase_in_game.load(Ordering::SeqCst);
+    let is_draft_phase = engine.phase_champselect.load(Ordering::SeqCst);
+    let phase = engine
+        .last_phase
+        .lock()
+        .clone()
+        .unwrap_or_else(|| PhaseEvent {
+            phase: if is_draft_phase {
+                "ChampSelect"
+            } else if in_game {
+                "InProgress"
+            } else {
+                "None"
+            }
+            .into(),
+            client_up: is_draft_phase || in_game,
+            in_game,
+        });
+    AppSnapshot {
+        phase,
+        champ_select,
+        window_mode: engine::current_window_mode(&engine).as_str().into(),
+    }
 }
 
 #[tauri::command]
@@ -58,6 +97,18 @@ pub fn set_spells_flipped(engine: State<'_, Arc<Engine>>, flipped: bool) -> erro
     {
         engine.settings.lock().spells_flipped = flipped;
     }
+    engine.persist()
+}
+
+#[tauri::command]
+pub fn set_auto_open_champion(engine: State<'_, Arc<Engine>>, enabled: bool) -> error::Result<()> {
+    engine.settings.lock().auto_open_champion = enabled;
+    engine.persist()
+}
+
+#[tauri::command]
+pub fn set_auto_open_live(engine: State<'_, Arc<Engine>>, enabled: bool) -> error::Result<()> {
+    engine.settings.lock().auto_open_live = enabled;
     engine.persist()
 }
 
@@ -232,6 +283,60 @@ pub async fn get_rune_build(
             );
             e.into()
         })
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BuildDetails {
+    items: Vec<ItemRecommendation>,
+    skill_order: Option<SkillOrder>,
+}
+
+#[tauri::command]
+pub async fn get_build_details(
+    app: AppHandle,
+    engine: State<'_, Arc<Engine>>,
+    champion_id: i64,
+    role: String,
+    enemy_champion_id: Option<i64>,
+) -> error::Result<BuildDetails> {
+    let (self_champion, self_raw_name) = engine
+        .provider
+        .champion_names(champion_id)
+        .await
+        .ok_or_else(|| error::Error::Other(format!("unknown champion id: {champion_id}")))?;
+    let enemies = if let Some(enemy_id) = enemy_champion_id {
+        engine
+            .provider
+            .champion_names(enemy_id)
+            .await
+            .map(|(name, raw_name)| {
+                vec![EnemyChampion {
+                    name,
+                    raw_name,
+                    position: String::new(),
+                    items: vec![],
+                }]
+            })
+            .unwrap_or_default()
+    } else {
+        vec![]
+    };
+    let snapshot = GameSnapshot {
+        game_mode: "CLASSIC".into(),
+        game_time: 0.0,
+        self_champion,
+        self_raw_name,
+        self_position: role,
+        enemies,
+        allies: vec![],
+    };
+    let items = engine.provider.items(&snapshot).await.map_err(|e| {
+        log(&app, "warn", format!("get_build_details items failed: {e}"));
+        error::Error::from(e)
+    })?;
+    let skill_order = engine.provider.skill_order(&snapshot).await.ok();
+    Ok(BuildDetails { items, skill_order })
 }
 
 /// Manually import the currently displayed build: write the rune page and

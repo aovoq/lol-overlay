@@ -1,7 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { type Accessor, createSignal } from "solid-js";
-import type { CounterEntry, RuneBuild, TierEntry } from "../types";
+import type { BuildDetails, CounterEntry, RuneBuild, TierEntry } from "../types";
 
 type CacheEntry<T> =
   | { state: "loading" }
@@ -85,6 +85,15 @@ export const buildCache = makeCache<RuneBuild>((key) => {
   });
 });
 
+export const buildDetailsCache = makeCache<BuildDetails>((key) => {
+  const [champ, role, enemy] = key.split("|");
+  return invoke("get_build_details", {
+    championId: Number(champ),
+    role,
+    enemyChampionId: Number(enemy) || null,
+  });
+});
+
 export const buildKey = (champ: number, role: string, enemy: number | null) =>
   `${champ}|${role}|${enemy ?? 0}`;
 
@@ -92,4 +101,5 @@ listen<string>("data-source", () => {
   tierCache.clear();
   counterCache.clear();
   buildCache.clear();
+  buildDetailsCache.clear();
 }).catch(() => {});

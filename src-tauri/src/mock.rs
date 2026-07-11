@@ -1,7 +1,7 @@
 //! Debug/mock mode (Ctrl+Shift+D cycles: off → champ select → in game → off).
 //!
 //! Drives the overlay with synthetic state through the *real* provider
-//! pipeline, so both the OPENLOL champ-select panel and the in-game UI can be
+//! pipeline, so both the champion detail page and the in-game UI can be
 //! exercised without launching League (e.g. on macOS).
 //!
 //! The scenarios themselves are built from **live DeepLoL data**: the current
@@ -19,6 +19,11 @@ use crate::engine::{self, Engine, MockStage};
 use crate::events::{log, ChampSelectEvent, PhaseEvent, RecommendationsEvent, RuneImportedEvent};
 use overlay_provider::{classify_threats, BuildProvider};
 use overlay_types::{EnemyChampion, GameSnapshot};
+
+fn emit_phase(app: &AppHandle, engine: &Engine, event: PhaseEvent) {
+    *engine.last_phase.lock() = Some(event.clone());
+    let _ = app.emit("phase", event);
+}
 
 /// Switch the mock scenario to `next` and spawn/stop the matching loop.
 /// Shared by the Ctrl+Shift+D hotkey (cycling) and the debug-panel command
@@ -41,9 +46,10 @@ pub fn apply_stage(app: &AppHandle, engine: &Arc<Engine>, next: MockStage) {
         MockStage::Off => {
             engine.phase_champselect.store(false, Ordering::SeqCst);
             engine.phase_in_game.store(false, Ordering::SeqCst);
-            let _ = app.emit("champ-select", ChampSelectEvent::default());
-            let _ = app.emit(
-                "phase",
+            engine::emit_champ_select(app, engine, ChampSelectEvent::default());
+            emit_phase(
+                app,
+                engine,
                 PhaseEvent {
                     phase: "None".into(),
                     client_up: false,
@@ -58,7 +64,7 @@ pub fn apply_stage(app: &AppHandle, engine: &Arc<Engine>, next: MockStage) {
 /// Champ-select mock: me on the top meta jungler, the runner-up revealed as
 /// the enemy jungler, real ban targets in the ban slots. The frontend then
 /// drives tier list / counters / runes through the live provider, so the
-/// whole panel is testable end to end.
+/// whole flow is testable end to end.
 pub async fn mock_champ_select_loop(app: AppHandle, engine: Arc<Engine>, generation: u64) {
     engine.phase_champselect.store(true, Ordering::SeqCst);
     engine.phase_in_game.store(false, Ordering::SeqCst);
@@ -69,15 +75,16 @@ pub async fn mock_champ_select_loop(app: AppHandle, engine: Arc<Engine>, generat
     // Re-emit on a timer (like the in-game mock) so a stray event can't
     // strand the panel; stop as soon as the hotkey advances the cycle.
     while engine.mock_stage() == MockStage::ChampSelect && engine.mock_generation() == generation {
-        let _ = app.emit(
-            "phase",
+        emit_phase(
+            &app,
+            &engine,
             PhaseEvent {
                 phase: "ChampSelect".into(),
                 client_up: true,
                 in_game: false,
             },
         );
-        let _ = app.emit("champ-select", ev.clone());
+        engine::emit_champ_select(&app, &engine, ev.clone());
         tokio::time::sleep(Duration::from_millis(1500)).await;
     }
 
@@ -88,7 +95,7 @@ pub async fn mock_champ_select_loop(app: AppHandle, engine: Arc<Engine>, generat
     // Close the champ-select control. Only return to compact mode when the
     // cycle is actually leaving mock mode; advancing to InGame immediately
     // switches to the in-game overlay panel.
-    let _ = app.emit("champ-select", ChampSelectEvent::default());
+    engine::emit_champ_select(&app, &engine, ChampSelectEvent::default());
     if engine.mock_stage() == MockStage::Off {
         engine.phase_champselect.store(false, Ordering::SeqCst);
         engine::apply_desired_window_mode(&app, &engine);
@@ -196,8 +203,9 @@ pub async fn mock_loop(app: AppHandle, engine: Arc<Engine>, generation: u64) {
     };
 
     while engine.mock_stage() == MockStage::InGame && engine.mock_generation() == generation {
-        let _ = app.emit(
-            "phase",
+        emit_phase(
+            &app,
+            &engine,
             PhaseEvent {
                 phase: "InProgress".into(),
                 client_up: true,
@@ -216,8 +224,9 @@ pub async fn mock_loop(app: AppHandle, engine: Arc<Engine>, generation: u64) {
     }
 
     // Reset the UI on the way out of mock mode.
-    let _ = app.emit(
-        "phase",
+    emit_phase(
+        &app,
+        &engine,
         PhaseEvent {
             phase: "None".into(),
             client_up: false,

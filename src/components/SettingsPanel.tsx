@@ -2,12 +2,16 @@ import { invoke } from "@tauri-apps/api/core";
 import { type JSX, Show } from "solid-js";
 import {
   autoImport,
+  autoOpenChampion,
+  autoOpenLive,
   dataSource,
   dataSources,
   developerMode,
   importSpells,
   presentationMode,
   setAutoImport,
+  setAutoOpenChampion,
+  setAutoOpenLive,
   setDataSource,
   setDeveloperMode,
   setImportSpells,
@@ -133,6 +137,19 @@ export function SettingsForm() {
           value={themeMode()}
           options={themeOptions}
           onChange={setThemeMode}
+        />
+      </Section>
+
+      <Section title="NAVIGATION">
+        <ToggleRow
+          label="チャンピオン確定時に詳細を開く"
+          checked={autoOpenChampion()}
+          onChange={setAutoOpenChampion}
+        />
+        <ToggleRow
+          label="試合開始時にLiveを開く"
+          checked={autoOpenLive()}
+          onChange={setAutoOpenLive}
         />
       </Section>
 

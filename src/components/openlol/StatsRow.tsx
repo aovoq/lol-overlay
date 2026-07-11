@@ -1,6 +1,5 @@
 import { createMemo, For, Show } from "solid-js";
 import { fmtPct, fmtThousands, getSpell } from "../../assets";
-import { activeTab, champSelect, hoverChampId, selectedRole, vsEnemyId } from "../../state/backend";
 import { buildCache, buildKey } from "../../state/caches";
 import {
   importSpells,
@@ -10,24 +9,9 @@ import {
 } from "../../state/settings";
 import { Icon } from "../Icon";
 
-function effectiveRole() {
-  const cs = champSelect();
-  return cs?.myRole || selectedRole();
-}
-
-function displayedTarget(): { champ: number; enemy: number | null } | null {
-  if (hoverChampId()) return { champ: hoverChampId(), enemy: null };
-  const my = champSelect()?.myChampionId ?? 0;
-  if (!my) return null;
-  return {
-    champ: my,
-    enemy: activeTab() === "vs" && vsEnemyId() ? vsEnemyId() : null,
-  };
-}
-
-export function StatsRow() {
-  const role = createMemo(() => effectiveRole());
-  const target = createMemo(() => displayedTarget());
+export function StatsRow(props: { championId: number; role: string; enemyId?: number | null }) {
+  const role = createMemo(() => props.role);
+  const target = createMemo(() => ({ champ: props.championId, enemy: props.enemyId ?? null }));
   const cacheKey = createMemo(() => {
     const t = target();
     return t ? buildKey(t.champ, role(), t.enemy) : "";

@@ -74,6 +74,7 @@ pub fn run() {
         mock_stage: Mutex::new(MockStage::Off),
         mock_generation: AtomicU64::new(0),
         last_champ_select: Mutex::new(None),
+        last_phase: Mutex::new(None),
         hit_regions: Mutex::new(Vec::new()),
         drag_active: AtomicBool::new(false),
         forced_interactive: AtomicBool::new(false),
@@ -132,7 +133,10 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             commands::get_settings,
+            commands::get_app_snapshot,
             commands::set_auto_import,
+            commands::set_auto_open_champion,
+            commands::set_auto_open_live,
             commands::set_interactive,
             commands::set_hit_regions,
             commands::set_drag_active,
@@ -146,6 +150,7 @@ pub fn run() {
             commands::get_tier_list,
             commands::get_counters,
             commands::get_rune_build,
+            commands::get_build_details,
             commands::import_build,
             commands::set_developer_mode,
             commands::get_mock_stage,

@@ -1,19 +1,13 @@
 import { createMemo, For, Show } from "solid-js";
 import { assetsReady, champIconByKey, champName, fmtPct } from "../../assets";
-import { champSelect, selectedRole, setHoverChampId, vsEnemyId } from "../../state/backend";
 import { counterCache } from "../../state/caches";
 import type { CounterEntry } from "../../types";
 import { Icon } from "../Icon";
 import { SectionError } from "./SectionError";
 
-function effectiveRole() {
-  const cs = champSelect();
-  return cs?.myRole || selectedRole();
-}
-
-export function Counters() {
-  const enemy = createMemo(() => vsEnemyId());
-  const role = createMemo(() => effectiveRole());
+export function Counters(props: { championId: number; role: string }) {
+  const enemy = createMemo(() => props.championId);
+  const role = createMemo(() => props.role);
   const entry = createMemo(() => {
     const e = enemy();
     return e ? counterCache.get(`${e}|${role()}`) : null;
@@ -55,11 +49,7 @@ export function Counters() {
                 >
                   <For each={counters()}>
                     {(c) => (
-                      <div
-                        class="w-[34px] text-center flex flex-col gap-0.5 items-center"
-                        onMouseEnter={() => setHoverChampId(c.championId)}
-                        onMouseLeave={() => setHoverChampId(0)}
-                      >
+                      <div class="w-[34px] text-center flex flex-col gap-0.5 items-center">
                         <Show when={assetsReady()}>
                           <Icon
                             url={champIconByKey(c.championId)}

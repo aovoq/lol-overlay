@@ -13,9 +13,8 @@ export interface DebugLogEntry {
 
 const [mockStage, setMockStage] = createSignal<MockStage>("off");
 const [eventLog, setEventLog] = createSignal<DebugLogEntry[]>([]);
-const [playgroundOpen, setPlaygroundOpen] = createSignal(false);
 
-export { eventLog, mockStage, playgroundOpen, setPlaygroundOpen };
+export { eventLog, mockStage };
 
 export function selectMockStage(stage: MockStage) {
   // The backend echoes `mock-stage`, which updates the signal.

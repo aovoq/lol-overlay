@@ -53,6 +53,12 @@ pub struct Settings {
     /// in the control window and unlocks the mock commands.
     #[serde(default)]
     pub developer_mode: bool,
+    /// Navigate the desktop client to the locked champion during champ select.
+    #[serde(default = "default_true")]
+    pub auto_open_champion: bool,
+    /// Navigate the desktop client to Live when a game starts.
+    #[serde(default = "default_true")]
+    pub auto_open_live: bool,
 }
 
 fn default_true() -> bool {
@@ -86,6 +92,8 @@ impl Default for Settings {
             data_source: ProviderKind::default(),
             presentation_mode: PresentationMode::default(),
             developer_mode: false,
+            auto_open_champion: true,
+            auto_open_live: true,
         }
     }
 }
@@ -222,6 +230,8 @@ pub struct Engine {
     /// Last `champ-select` event emitted, so duplicate sessions (WS + REST
     /// fallback) don't spam the frontend with identical state.
     pub last_champ_select: Mutex<Option<ChampSelectEvent>>,
+    /// Last gameflow event, used to hydrate a reloaded webview synchronously.
+    pub last_phase: Mutex<Option<PhaseEvent>>,
     /// Clickable rects reported by the frontend (`data-hit` elements), in
     /// window-relative logical px. Read by `hittest::cursor_watcher`.
     pub hit_regions: Mutex<Vec<HitRegion>>,
@@ -331,14 +341,13 @@ pub fn emit_champ_select(app: &AppHandle, engine: &Engine, ev: ChampSelectEvent)
     *last = Some(ev);
 }
 
-/// Control window sizes. Compact is the startup/status view; pick is the
-/// normal-window version of the old OPENLOL champ-select panel.
-const CONTROL_COMPACT_SIZE: (f64, f64) = (520.0, 220.0);
-const CONTROL_PICK_SIZE: (f64, f64) = (1040.0, 860.0);
-const CONTROL_INGAME_SIZE: (f64, f64) = (540.0, 820.0);
-const CONTROL_COMPACT_MIN_SIZE: (f64, f64) = (420.0, 180.0);
-const CONTROL_PICK_MIN_SIZE: (f64, f64) = (860.0, 620.0);
-const CONTROL_INGAME_MIN_SIZE: (f64, f64) = (360.0, 420.0);
+/// The desktop client keeps a stable, navigable canvas across game phases.
+const CONTROL_COMPACT_SIZE: (f64, f64) = (1100.0, 760.0);
+const CONTROL_PICK_SIZE: (f64, f64) = (1100.0, 760.0);
+const CONTROL_INGAME_SIZE: (f64, f64) = (1100.0, 760.0);
+const CONTROL_COMPACT_MIN_SIZE: (f64, f64) = (800.0, 560.0);
+const CONTROL_PICK_MIN_SIZE: (f64, f64) = (800.0, 560.0);
+const CONTROL_INGAME_MIN_SIZE: (f64, f64) = (800.0, 560.0);
 
 /// The screen region the overlay window may occupy on `monitor`.
 ///
@@ -543,7 +552,7 @@ pub async fn rune_processor(app: AppHandle, engine: Arc<Engine>, mut rx: Unbound
     let mut last_imported: i64 = 0;
 
     while let Some(session) = rx.recv().await {
-        // OPENLOL panel state: every session parses into a ChampSelectEvent,
+        // Champion detail state: every session parses into a ChampSelectEvent,
         // emitted only on change (the poller emits the `active: false` end).
         if let Some(ev) = lcu::parse_champ_select(&session) {
             emit_champ_select(&app, &engine, ev);
@@ -654,7 +663,7 @@ pub async fn poller(app: AppHandle, engine: Arc<Engine>, tx: UnboundedSender<Val
             .phase_champselect
             .store(phase == Phase::ChampSelect, Ordering::SeqCst);
 
-        // Leaving champ select closes the OPENLOL panel — the WebSocket has no
+        // Leaving champ select clears the draft context — the WebSocket has no
         // "session gone" signal we consume, so the poller owns the inactive
         // sentinel.
         if phase != Phase::ChampSelect && prev_phase == Phase::ChampSelect {
@@ -809,14 +818,13 @@ pub async fn poller(app: AppHandle, engine: Arc<Engine>, tx: UnboundedSender<Val
         }
         engine.phase_in_game.store(in_game, Ordering::SeqCst);
 
-        let _ = app.emit(
-            "phase",
-            PhaseEvent {
-                phase: phase.label().to_string(),
-                client_up,
-                in_game,
-            },
-        );
+        let phase_event = PhaseEvent {
+            phase: phase.label().to_string(),
+            client_up,
+            in_game,
+        };
+        *engine.last_phase.lock() = Some(phase_event.clone());
+        let _ = app.emit("phase", phase_event);
         apply_desired_window_mode(&app, &engine);
 
         tokio::time::sleep(POLL_INTERVAL).await;
@@ -873,7 +881,7 @@ mod tests {
 
         assert_eq!(pos.x, 10.0);
         assert_eq!(pos.y, 20.0);
-        assert_eq!(size.width, 500.0);
+        assert_eq!(size.width, CONTROL_INGAME_MIN_SIZE.0);
         assert_eq!(size.height, CONTROL_INGAME_MIN_SIZE.1);
     }
 
@@ -883,6 +891,8 @@ mod tests {
 
         assert!(settings.auto_import_runes);
         assert!(settings.import_spells);
+        assert!(settings.auto_open_champion);
+        assert!(settings.auto_open_live);
         assert_eq!(settings.data_source, ProviderKind::Deeplol);
         assert_eq!(settings.presentation_mode, PresentationMode::Overlay);
     }

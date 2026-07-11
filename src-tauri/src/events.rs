@@ -52,7 +52,7 @@ pub struct RuneImportedEvent {
     pub page_name: String,
 }
 
-/// Champ-select state for the OPENLOL panel. Emitted on every parsed change of
+/// Champ-select state for the desktop champion detail. Emitted on every parsed change of
 /// the champ-select session (deduped by equality), and once with
 /// `active: false` when champ select ends.
 
