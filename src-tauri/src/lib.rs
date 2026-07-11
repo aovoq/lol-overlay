@@ -17,6 +17,7 @@ mod events;
 mod hittest;
 #[cfg(desktop)]
 mod hotkeys;
+mod mobile;
 mod mock;
 
 use std::sync::atomic::{AtomicBool, AtomicU64};
@@ -80,6 +81,7 @@ pub fn run() {
         window_ingame: AtomicBool::new(false),
         phase_champselect: AtomicBool::new(false),
         phase_in_game: AtomicBool::new(false),
+        mobile: mobile::MobileRelay::new().expect("failed to build mobile relay client"),
     });
 
     tauri::Builder::default()
@@ -150,6 +152,9 @@ pub fn run() {
             commands::get_data_source,
             commands::list_data_sources,
             commands::set_data_source,
+            commands::get_mobile_pairing,
+            commands::start_mobile_pairing,
+            commands::stop_mobile_pairing,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

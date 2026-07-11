@@ -1,0 +1,26 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "lol-overlay-relay",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-07-09",
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "SESSIONS",
+        "class_name": "GameSession"
+      }
+    ]
+  },
+  "migrations": [
+    {
+      "tag": "v1",
+      "new_sqlite_classes": ["GameSession"]
+    }
+  ],
+  "vars": {
+    "MOBILE_APP_URL": "loloverlay://pair"
+  },
+  "observability": {
+    "enabled": true
+  }
+}

@@ -182,6 +182,14 @@ export interface Settings {
   developerMode?: boolean;
 }
 
+export interface MobilePairingState {
+  status: "disconnected" | "paired" | "error";
+  sessionId: string;
+  viewerUrl: string;
+  expiresAt: number;
+  message: string;
+}
+
 export interface PanelPosition {
   left: number;
   top: number;

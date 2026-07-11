@@ -16,6 +16,7 @@ use crate::engine::{
 use crate::error;
 use crate::events::{log, RuneImportedEvent};
 use crate::hittest::HitRegion;
+use crate::mobile::MobilePairingState;
 use overlay_lcu::{self as lcu, RunePagePayload};
 use overlay_provider::BuildProvider;
 use overlay_provider::ProviderKind;
@@ -359,4 +360,23 @@ pub fn set_data_source(
     engine.persist()?;
     let _ = app.emit("data-source", kind);
     Ok(())
+}
+
+#[tauri::command]
+pub fn get_mobile_pairing(engine: State<'_, Arc<Engine>>) -> MobilePairingState {
+    engine.mobile.state()
+}
+
+#[tauri::command]
+pub async fn start_mobile_pairing(
+    app: AppHandle,
+    engine: State<'_, Arc<Engine>>,
+    relay_url: String,
+) -> error::Result<MobilePairingState> {
+    engine.mobile.start(&app, &relay_url).await
+}
+
+#[tauri::command]
+pub fn stop_mobile_pairing(app: AppHandle, engine: State<'_, Arc<Engine>>) -> MobilePairingState {
+    engine.mobile.stop(&app)
 }

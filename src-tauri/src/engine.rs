@@ -24,6 +24,7 @@ use crate::events::{
     log, ChampSelectEvent, LpChangeEvent, PhaseEvent, RecommendationsEvent, RuneImportedEvent,
 };
 use crate::hittest::HitRegion;
+use crate::mobile::MobileRelay;
 use overlay_lcu::{self as lcu, Phase, RunePagePayload};
 use overlay_live_client::LiveClient;
 use overlay_provider::{classify_threats, BuildProvider, ProviderKind, ProviderProxy};
@@ -240,6 +241,8 @@ pub struct Engine {
     /// re-layout between poll ticks.
     pub phase_champselect: AtomicBool,
     pub phase_in_game: AtomicBool,
+    /// Optional Cloudflare relay session used by the iPhone sideboard.
+    pub mobile: MobileRelay,
 }
 
 impl Engine {
@@ -773,21 +776,27 @@ pub async fn poller(app: AppHandle, engine: Arc<Engine>, tx: UnboundedSender<Val
                     }
                 };
 
-                let _ = app.emit(
-                    "recommendations",
-                    RecommendationsEvent {
-                        self_champion: snapshot.self_champion.clone(),
-                        self_raw_name: snapshot.self_raw_name.clone(),
-                        self_position: snapshot.self_position.clone(),
-                        enemies: snapshot.enemies.clone(),
-                        threats,
-                        skill_order,
-                        items,
-                    },
+                let recommendations = RecommendationsEvent {
+                    self_champion: snapshot.self_champion.clone(),
+                    self_raw_name: snapshot.self_raw_name.clone(),
+                    self_position: snapshot.self_position.clone(),
+                    enemies: snapshot.enemies.clone(),
+                    threats,
+                    skill_order,
+                    items,
+                };
+                let _ = app.emit("recommendations", recommendations.clone());
+                engine.mobile.publish_game(
+                    &app,
+                    phase.label(),
+                    client_up,
+                    &snapshot,
+                    &recommendations,
                 );
             }
             Ok(None) => {
                 live_snapshot_error_logged = false;
+                engine.mobile.publish_idle(&app, phase.label(), client_up);
             }
             Err(e) => {
                 if !live_snapshot_error_logged {

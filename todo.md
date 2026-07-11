@@ -1,6 +1,6 @@
 # TODO — プロジェクト問題点リスト
 
-2026-07-05 時点のコードレビューで洗い出した問題点。`pnpm check`(format / lint / typecheck / Rust unit tests)は現状すべてパスしており、以下は静的チェックでは捕捉できない問題。
+2026-07-05 時点のコードレビューで洗い出した問題点。`bun run check`(format / lint / typecheck / Rust unit tests)は現状すべてパスしており、以下は静的チェックでは捕捉できない問題。
 
 ## 高優先度
 

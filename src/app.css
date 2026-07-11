@@ -381,6 +381,23 @@
     max-height: 320px;
   }
 
+  .mobile-pairing-grid {
+    display: flex;
+    align-items: stretch;
+    gap: 12px;
+  }
+
+  .mobile-qr-shell {
+    flex: none;
+    width: 140px;
+    height: 140px;
+    display: grid;
+    place-items: center;
+    background: #ffffff;
+    border: 1px solid var(--hx-border);
+    border-radius: 4px;
+  }
+
   .hx-scroll-root {
     overflow: hidden;
   }

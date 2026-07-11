@@ -17,6 +17,7 @@ import {
   themeMode,
 } from "../state/settings";
 import type { PresentationMode } from "../types";
+import { MobilePairing } from "./MobilePairing";
 
 /** Display names for the backend `ProviderKind` ids (fallback: the raw id). */
 const DATA_SOURCE_LABELS: Record<string, string> = {
@@ -151,6 +152,10 @@ export function SettingsForm() {
           </label>
         </Section>
       </Show>
+
+      <Section title="MOBILE">
+        <MobilePairing />
+      </Section>
 
       <Section title="ADVANCED">
         <ToggleRow

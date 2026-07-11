@@ -185,6 +185,16 @@ pub async fn mock_loop(app: AppHandle, engine: Arc<Engine>, generation: u64) {
         },
     );
 
+    let recommendations = RecommendationsEvent {
+        self_champion: snapshot.self_champion.clone(),
+        self_raw_name: snapshot.self_raw_name.clone(),
+        self_position: snapshot.self_position.clone(),
+        enemies: snapshot.enemies.clone(),
+        threats,
+        skill_order,
+        items,
+    };
+
     while engine.mock_stage() == MockStage::InGame && engine.mock_generation() == generation {
         let _ = app.emit(
             "phase",
@@ -194,18 +204,10 @@ pub async fn mock_loop(app: AppHandle, engine: Arc<Engine>, generation: u64) {
                 in_game: true,
             },
         );
-        let _ = app.emit(
-            "recommendations",
-            RecommendationsEvent {
-                self_champion: snapshot.self_champion.clone(),
-                self_raw_name: snapshot.self_raw_name.clone(),
-                self_position: snapshot.self_position.clone(),
-                enemies: snapshot.enemies.clone(),
-                threats,
-                skill_order: skill_order.clone(),
-                items: items.clone(),
-            },
-        );
+        let _ = app.emit("recommendations", recommendations.clone());
+        engine
+            .mobile
+            .publish_game(&app, "InProgress (mock)", true, &snapshot, &recommendations);
         tokio::time::sleep(Duration::from_millis(1500)).await;
     }
 
@@ -223,6 +225,7 @@ pub async fn mock_loop(app: AppHandle, engine: Arc<Engine>, generation: u64) {
         },
     );
     engine.phase_in_game.store(false, Ordering::SeqCst);
+    engine.mobile.publish_idle(&app, "None", false);
     engine::apply_desired_window_mode(&app, &engine);
 }
 

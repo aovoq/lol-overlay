@@ -1,0 +1,27 @@
+{
+  "expo": {
+    "name": "LoL Sideboard",
+    "slug": "lol-sideboard",
+    "version": "0.1.0",
+    "orientation": "default",
+    "scheme": "loloverlay",
+    "userInterfaceStyle": "dark",
+    "newArchEnabled": true,
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.voq.lol-overlay.sideboard",
+      "infoPlist": {
+        "NSCameraUsageDescription": "Windowsアプリに表示された接続用QRコードを読み取ります。"
+      }
+    },
+    "plugins": [
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Windowsアプリに表示された接続用QRコードを読み取ります。",
+          "barcodeScannerEnabled": true
+        }
+      ]
+    ]
+  }
+}

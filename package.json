@@ -3,25 +3,39 @@
   "private": true,
   "version": "0.1.0",
   "type": "module",
-  "packageManager": "pnpm@11.9.0",
+  "packageManager": "bun@1.3.13",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "trustedDependencies": [
+    "esbuild",
+    "sharp",
+    "workerd"
+  ],
   "scripts": {
     "dev": "vite",
-    "build": "pnpm typecheck && vite build",
+    "dev:desktop": "tauri dev",
+    "dev:mobile": "bun run --filter @lol-overlay/mobile start",
+    "dev:relay": "bun run --filter @lol-overlay/relay dev",
+    "build": "bun run typecheck && vite build",
+    "build:mobile": "bun run --filter @lol-overlay/mobile export",
+    "build:relay": "bun run --filter @lol-overlay/relay deploy -- --dry-run",
     "preview": "vite preview",
     "test:frontend": "vitest run",
-    "typecheck": "tsc --noEmit",
-    "format": "pnpm format:frontend && pnpm format:rust && pnpm format:toml",
-    "format:check": "pnpm format:frontend:check && pnpm format:rust:check && pnpm format:toml:check",
+    "typecheck": "tsc --noEmit && bun run --filter './packages/**' --filter './apps/**' typecheck",
+    "format": "bun run format:frontend && bun run format:rust && bun run format:toml",
+    "format:check": "bun run format:frontend:check && bun run format:rust:check && bun run format:toml:check",
     "format:frontend": "biome check --write .",
     "format:frontend:check": "biome ci .",
     "format:rust": "cargo fmt --all",
     "format:rust:check": "cargo fmt --all -- --check",
     "format:toml": "taplo fmt Cargo.toml src-tauri/Cargo.toml crates/*/Cargo.toml",
     "format:toml:check": "taplo fmt --check --diff Cargo.toml src-tauri/Cargo.toml crates/*/Cargo.toml",
-    "lint": "pnpm lint:frontend && pnpm lint:rust",
+    "lint": "bun run lint:frontend && bun run lint:rust",
     "lint:frontend": "biome lint .",
     "lint:rust": "cargo clippy --workspace --all-targets -- -D warnings",
-    "check": "pnpm format:check && pnpm lint && pnpm typecheck && pnpm test:frontend && cargo test --workspace --lib",
+    "check": "bun run format:check && bun run lint && bun run typecheck && bun run test:frontend && cargo test --workspace --lib",
     "tauri": "tauri"
   },
   "dependencies": {
@@ -30,6 +44,7 @@
     "@tauri-apps/plugin-opener": "^2",
     "@tauri-apps/plugin-process": "^2.3.1",
     "@tauri-apps/plugin-updater": "^2.10.1",
+    "qrcode": "^1.5.4",
     "solid-js": "^1.9.13"
   },
   "devDependencies": {
@@ -37,6 +52,7 @@
     "@tailwindcss/vite": "^4.3.0",
     "@taplo/cli": "0.7.0",
     "@tauri-apps/cli": "^2",
+    "@types/qrcode": "^1.5.6",
     "tailwindcss": "^4.3.0",
     "typescript": "~5.6.2",
     "vite": "^6.0.3",

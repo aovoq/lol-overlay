@@ -1,0 +1,96 @@
+import {
+  isRelayMessage,
+  type PairingLink,
+  RELAY_SUBPROTOCOL,
+  type RelayMessage,
+  viewerWebSocketUrl,
+} from "@lol-overlay/protocol";
+import { useEffect, useRef, useState } from "react";
+
+export type ConnectionState = "idle" | "connecting" | "waiting" | "live" | "reconnecting" | "error";
+
+const DD = "https://ddragon.leagueoflegends.com";
+
+export function useDataDragonVersion(): string {
+  const [version, setVersion] = useState("");
+  useEffect(() => {
+    fetch(`${DD}/api/versions.json`)
+      .then((response) => response.json() as Promise<string[]>)
+      .then((versions) => setVersion(versions[0] ?? ""))
+      .catch(() => setVersion(""));
+  }, []);
+  return version;
+}
+
+export function useRelay(link: PairingLink) {
+  const [state, setState] = useState<ConnectionState>("connecting");
+  const [snapshot, setSnapshot] = useState<RelayMessage & { type: "snapshot" }>();
+  const [receivedAt, setReceivedAt] = useState(0);
+  const [error, setError] = useState("");
+  const reconnectAttempt = useRef(0);
+
+  useEffect(() => {
+    let active = true;
+    let socket: WebSocket | undefined;
+    let retryTimer: ReturnType<typeof setTimeout> | undefined;
+
+    const connect = () => {
+      if (!active) return;
+      setState(reconnectAttempt.current ? "reconnecting" : "connecting");
+      try {
+        socket = new WebSocket(viewerWebSocketUrl(link), [
+          RELAY_SUBPROTOCOL,
+          `auth.${link.viewerToken}`,
+        ]);
+      } catch {
+        setError("接続情報が不正です");
+        setState("error");
+        return;
+      }
+      socket.onopen = () => {
+        reconnectAttempt.current = 0;
+        setError("");
+        setState("waiting");
+      };
+      socket.onmessage = (event) => {
+        try {
+          const message: unknown = JSON.parse(String(event.data));
+          if (!isRelayMessage(message)) throw new Error("invalid relay message");
+          if (message.type === "snapshot") {
+            setSnapshot(message);
+            setReceivedAt(Date.now());
+            setState(message.snapshot.game ? "live" : "waiting");
+          } else if (message.type === "error") {
+            setError(message.message);
+            setState("error");
+          }
+        } catch {
+          setError("Relayから不正なデータを受信しました");
+          setState("error");
+        }
+      };
+      socket.onerror = () => setError("Relayへ接続できません");
+      socket.onclose = (event) => {
+        if (!active) return;
+        if (event.code === 4001 || event.code === 4003) {
+          setError("接続セッションの有効期限が切れました");
+          setState("error");
+          return;
+        }
+        reconnectAttempt.current += 1;
+        setState("reconnecting");
+        const delay = Math.min(15_000, 500 * 2 ** reconnectAttempt.current);
+        retryTimer = setTimeout(connect, delay);
+      };
+    };
+
+    connect();
+    return () => {
+      active = false;
+      if (retryTimer) clearTimeout(retryTimer);
+      socket?.close(1000, "screen closed");
+    };
+  }, [link]);
+
+  return { state, snapshot: snapshot?.snapshot ?? null, receivedAt, error };
+}
