@@ -61,6 +61,10 @@ jobs:
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Public configuration used by the desktop pairing UI.
+          EXPO_PUBLIC_MOBILE_RELAY_URL: ${{ vars.EXPO_PUBLIC_MOBILE_RELAY_URL }}
+          # Must match the Worker secret. Rust embeds this fallback in release builds.
+          MOBILE_RELAY_CREATE_SECRET: ${{ secrets.MOBILE_RELAY_CREATE_SECRET }}
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           # The updater key was generated without a password, and GitHub
           # rejects empty secrets — so pass the empty string literally.

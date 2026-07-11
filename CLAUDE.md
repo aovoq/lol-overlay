@@ -95,7 +95,7 @@ Frontend → backend commands (`commands.rs`): settings/layout setters, data-sou
 
 ### Mobile sideboard
 
-Optional iPhone companion (`apps/mobile` Expo app) receives in-game snapshots via a Cloudflare Worker relay (`apps/relay` + Durable Object). Shared types live in `packages/protocol`. The desktop publishes through `src-tauri/src/mobile.rs` from the poller/mock loop. Pairing requires `VITE_MOBILE_RELAY_URL`; production Workers should set `SESSION_CREATE_SECRET` and the desktop `MOBILE_RELAY_CREATE_SECRET`.
+Optional iPhone companion (`apps/mobile` Expo app) receives in-game snapshots via a Cloudflare Worker relay (`apps/relay` + Durable Object). Shared types live in `packages/protocol`. The desktop publishes through `src-tauri/src/mobile.rs` from the poller/mock loop. Root `.env` is shared: pairing requires `EXPO_PUBLIC_MOBILE_RELAY_URL`; production Workers and the desktop both use `MOBILE_RELAY_CREATE_SECRET`.
 
 ### Data provider abstraction (`overlay-provider`)
 

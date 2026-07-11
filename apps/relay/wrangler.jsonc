@@ -28,8 +28,13 @@
   "vars": {
     "MOBILE_APP_URL": "loloverlay://pair"
   },
-  // Production must set: wrangler secret put SESSION_CREATE_SECRET
-  // Desktop must send the same value via MOBILE_RELAY_CREATE_SECRET.
+  // Loads only this key from the root command's process environment during
+  // local development. This keeps updater signing keys out of the Worker env.
+  "secrets": {
+    "required": ["MOBILE_RELAY_CREATE_SECRET"]
+  },
+  // Production must set: wrangler secret put MOBILE_RELAY_CREATE_SECRET
+  // Desktop reads the same name from the root .env / process environment.
   // Localhost wrangler dev may omit the secret (fail-open for local only).
   "observability": {
     "enabled": true

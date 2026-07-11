@@ -7,6 +7,8 @@ const host = process.env.TAURI_DEV_HOST;
 
 export default defineConfig(async () => ({
   plugins: [solid(), tailwindcss()],
+  // The relay URL is shared with Expo from the root .env file.
+  envPrefix: ["VITE_", "EXPO_PUBLIC_"],
   clearScreen: false,
   server: {
     port: 1420,

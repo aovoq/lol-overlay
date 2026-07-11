@@ -10,6 +10,8 @@ interface Env {
   RATE_LIMITS: DurableObjectNamespace;
   MOBILE_APP_URL?: string;
   /** When set, POST /v1/sessions requires this shared secret. */
+  MOBILE_RELAY_CREATE_SECRET?: string;
+  /** Legacy binding kept so an existing deployment can rotate without downtime. */
   SESSION_CREATE_SECRET?: string;
 }
 
@@ -134,7 +136,7 @@ async function enforceDurableRateLimit(
 }
 
 async function createSession(request: Request, env: Env): Promise<Response> {
-  const configured = env.SESSION_CREATE_SECRET?.trim();
+  const configured = (env.MOBILE_RELAY_CREATE_SECRET ?? env.SESSION_CREATE_SECRET)?.trim();
   if (!configured && !isDevRelayHost(request)) {
     return json({ error: "create_secret_required" }, { status: 503 });
   }

@@ -60,19 +60,35 @@ bun run build:relay    # Wrangler bundle dry-run
 bun run build:mobile   # Expo export
 ```
 
-モバイルMVPをローカルで動かす場合は、`bun run dev:relay`、`bun run dev:mobile`、
-`bun run tauri dev`の順で起動する。デスクトップは`.env`の
-`VITE_MOBILE_RELAY_URL`を参照する（未設定時は接続ボタンが無効）。ローカルRelayへ
-接続する場合は`VITE_MOBILE_RELAY_URL=http://127.0.0.1:8787`を設定する。モバイルは
-`apps/mobile/.env`の`EXPO_PUBLIC_MOBILE_RELAY_URL`を参照する。設定例はそれぞれ
-ルートの`.env.example`と`apps/mobile/.env.example`にある。本番Workerで
-`SESSION_CREATE_SECRET`を有効にしている場合は、同じ値を`MOBILE_RELAY_CREATE_SECRET`
-としてTauriプロセスの環境に渡す。
+最初にルートの`.env.example`を`.env`へコピーする。環境設定はこのルート`.env`だけで
+管理し、desktop / mobile / relayは必ずルートの`bun run ...`コマンドから起動する。
+RelayはWranglerの`secrets.required`で`MOBILE_RELAY_CREATE_SECRET`だけをプロセス環境から
+受け取る。`apps/relay/.dev.vars`は作らない（存在するとWranglerの読み込み規則が変わる）。
+
+| 変数 | 利用先 | 用途 |
+| --- | --- | --- |
+| `EXPO_PUBLIC_MOBILE_RELAY_URL` | desktop + mobile | Relay URL（ローカルは`http://127.0.0.1:8787`） |
+| `MOBILE_RELAY_CREATE_SECRET` | desktop + relay | セッション作成用secret。ローカルでは空でもよい |
+| `TAURI_SIGNING_PRIVATE_KEY` / `_PASSWORD` | desktop buildのみ | updater署名 |
+
+モバイルMVPは`bun run dev:relay`、`bun run dev:mobile`、`bun run dev:desktop`の順で
+起動する。本番Workerには`cd apps/relay && bunx wrangler secret put
+MOBILE_RELAY_CREATE_SECRET`で、desktopと同じsecretを登録する。secretは
+`EXPO_PUBLIC_`変数にはせず、frontend bundleへ埋め込まない。
+
+GitHubのリポジトリ設定には次を登録する。配布desktopはGitHub Actionsでビルドされるため、
+ローカル`.env`の値はrelease workflowには渡らない。
+
+| GitHub設定 | 種類 | 値 |
+| --- | --- | --- |
+| `EXPO_PUBLIC_MOBILE_RELAY_URL` | Actions Variable | 本番Relay URL |
+| `MOBILE_RELAY_CREATE_SECRET` | Actions Secret | Workerに登録したものと同じ値 |
+| `TAURI_SIGNING_PRIVATE_KEY` | Actions Secret | updater署名鍵 |
 
 Relayは1ペアリングにつき1 Durable Objectを作り、4時間で失効する。切断（DISCONNECT）時は
 producerがセッションをrevokeし、viewerのWebSocketも閉じる。スナップショットはメモリ上のみで
 履歴は永続化しない。想定利用はWindows上のデスクトップから試合中データを送ること
-（OS自体の強制チェックはない）。公開Workerでは`SESSION_CREATE_SECRET`必須（未設定は503）。
+（OS自体の強制チェックはない）。公開Workerでは`MOBILE_RELAY_CREATE_SECRET`必須（未設定は503）。
 ローカル`wrangler dev`のみsecretなしを許可する。Workerをデプロイする前に
 `apps/relay/wrangler.jsonc`の`MOBILE_APP_URL`とWorker名を本番値へ変更する。
 

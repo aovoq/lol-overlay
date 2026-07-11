@@ -14,7 +14,7 @@ const DISCONNECTED: MobilePairingState = {
   message: "",
 };
 
-const RELAY_URL = (import.meta.env.VITE_MOBILE_RELAY_URL ?? "").trim();
+const RELAY_URL = (import.meta.env.EXPO_PUBLIC_MOBILE_RELAY_URL ?? "").trim();
 
 export function MobilePairing() {
   const [state, setState] = createSignal<MobilePairingState>(DISCONNECTED);
@@ -67,7 +67,7 @@ export function MobilePairing() {
 
   const start = async () => {
     if (!RELAY_URL) {
-      setError("VITE_MOBILE_RELAY_URL が未設定です（.env.example を参照）");
+      setError("EXPO_PUBLIC_MOBILE_RELAY_URL が未設定です（.env.example を参照）");
       return;
     }
     setLoading(true);
@@ -180,7 +180,7 @@ export function MobilePairing() {
       </Show>
       <Show when={!RELAY_URL}>
         <span class="text-[10px] text-hx-muted">
-          `.env` に `VITE_MOBILE_RELAY_URL` を設定してください
+          `.env` に `EXPO_PUBLIC_MOBILE_RELAY_URL` を設定してください
         </span>
       </Show>
     </div>
