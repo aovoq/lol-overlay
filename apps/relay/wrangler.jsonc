@@ -8,6 +8,10 @@
       {
         "name": "SESSIONS",
         "class_name": "GameSession"
+      },
+      {
+        "name": "RATE_LIMITS",
+        "class_name": "RateLimit"
       }
     ]
   },
@@ -15,13 +19,18 @@
     {
       "tag": "v1",
       "new_sqlite_classes": ["GameSession"]
+    },
+    {
+      "tag": "v2",
+      "new_sqlite_classes": ["RateLimit"]
     }
   ],
   "vars": {
     "MOBILE_APP_URL": "loloverlay://pair"
   },
-  // Set in production with: wrangler secret put SESSION_CREATE_SECRET
-  // When set, desktop must send the same value via MOBILE_RELAY_CREATE_SECRET.
+  // Production must set: wrangler secret put SESSION_CREATE_SECRET
+  // Desktop must send the same value via MOBILE_RELAY_CREATE_SECRET.
+  // Localhost wrangler dev may omit the secret (fail-open for local only).
   "observability": {
     "enabled": true
   }

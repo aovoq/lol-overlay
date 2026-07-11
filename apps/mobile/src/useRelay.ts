@@ -47,7 +47,6 @@ export function useRelay(link: PairingLink) {
     const connect = () => {
       if (!active) return;
       setState(consecutiveFailures.current ? "reconnecting" : "connecting");
-      let opened = false;
       try {
         socket = new WebSocket(viewerWebSocketUrl(link), [
           RELAY_SUBPROTOCOL,
@@ -59,7 +58,6 @@ export function useRelay(link: PairingLink) {
         return;
       }
       socket.onopen = () => {
-        opened = true;
         setError("");
         setState("waiting");
         // Do not reset consecutiveFailures here — open-then-immediate-close
@@ -111,8 +109,6 @@ export function useRelay(link: PairingLink) {
         setState("reconnecting");
         const delay = Math.min(15_000, 500 * 2 ** consecutiveFailures.current);
         retryTimer = setTimeout(connect, delay);
-        // `opened` is unused for limits now but kept for clarity of handshake vs live.
-        void opened;
       };
     };
 

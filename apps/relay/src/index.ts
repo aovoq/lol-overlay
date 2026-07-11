@@ -7,6 +7,7 @@ import {
 
 interface Env {
   SESSIONS: DurableObjectNamespace;
+  RATE_LIMITS: DurableObjectNamespace;
   MOBILE_APP_URL?: string;
   /** When set, POST /v1/sessions requires this shared secret. */
   SESSION_CREATE_SECRET?: string;
@@ -28,11 +29,9 @@ const PAIRING_CODE_LIFETIME_MS = 10 * 60 * 1000;
 const MAX_SNAPSHOT_BYTES = 64 * 1024;
 const CREATE_RATE_LIMIT = 20;
 const CREATE_RATE_WINDOW_MS = 60 * 60 * 1000;
+const PAIR_RATE_LIMIT = 10;
+const PAIR_RATE_WINDOW_MS = 60 * 1000;
 const TOKEN_HASH_RE = /^[a-f0-9]{64}$/;
-
-/** Soft per-isolate create throttle (defense in depth alongside SESSION_CREATE_SECRET). */
-const createCounts = new Map<string, { count: number; resetAt: number }>();
-const pairingCounts = new Map<string, { count: number; resetAt: number }>();
 
 function json(data: unknown, init: ResponseInit = {}): Response {
   const headers = new Headers(init.headers);
@@ -82,13 +81,21 @@ function createSecretFromRequest(request: Request): string | null {
 }
 
 function clientIp(request: Request): string {
-  return (
-    request.headers.get("cf-connecting-ip") ?? request.headers.get("x-forwarded-for") ?? "unknown"
-  );
+  // Prefer the Cloudflare edge IP. Do not trust X-Forwarded-For for public limits.
+  return request.headers.get("cf-connecting-ip") ?? "local";
+}
+
+function isDevRelayHost(request: Request): boolean {
+  const host = new URL(request.url).hostname;
+  return host === "127.0.0.1" || host === "localhost" || host === "[::1]";
 }
 
 function sessionStub(env: Env, sessionId: string): DurableObjectStub {
   return env.SESSIONS.get(env.SESSIONS.idFromName(sessionId));
+}
+
+function rateLimitStub(env: Env): DurableObjectStub {
+  return env.RATE_LIMITS.get(env.RATE_LIMITS.idFromName("v1"));
 }
 
 function isSessionMetadata(value: unknown): value is SessionMetadata {
@@ -105,32 +112,32 @@ function isSessionMetadata(value: unknown): value is SessionMetadata {
   );
 }
 
-function enforceCreateRateLimit(request: Request): Response | null {
-  return enforceRateLimit(request, createCounts, CREATE_RATE_LIMIT, CREATE_RATE_WINDOW_MS);
-}
-
-function enforceRateLimit(
+async function enforceDurableRateLimit(
+  env: Env,
   request: Request,
-  counts: Map<string, { count: number; resetAt: number }>,
+  bucket: string,
   limit: number,
   windowMs: number,
-): Response | null {
-  const key = clientIp(request);
-  const now = Date.now();
-  const current = counts.get(key);
-  if (!current || current.resetAt <= now) {
-    counts.set(key, { count: 1, resetAt: now + windowMs });
-    return null;
-  }
-  if (current.count >= limit) {
-    return json({ error: "rate_limited" }, { status: 429 });
-  }
-  current.count += 1;
+): Promise<Response | null> {
+  const response = await rateLimitStub(env).fetch("https://rate-limit.internal/hit", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      key: `${bucket}:${clientIp(request)}`,
+      limit,
+      windowMs,
+    }),
+  });
+  if (response.status === 429) return json({ error: "rate_limited" }, { status: 429 });
+  if (!response.ok) return json({ error: "rate_limit_unavailable" }, { status: 503 });
   return null;
 }
 
 async function createSession(request: Request, env: Env): Promise<Response> {
   const configured = env.SESSION_CREATE_SECRET?.trim();
+  if (!configured && !isDevRelayHost(request)) {
+    return json({ error: "create_secret_required" }, { status: 503 });
+  }
   if (configured) {
     const provided = createSecretFromRequest(request);
     if (!provided || !timingSafeEqualString(provided, configured)) {
@@ -138,7 +145,13 @@ async function createSession(request: Request, env: Env): Promise<Response> {
     }
   }
 
-  const limited = enforceCreateRateLimit(request);
+  const limited = await enforceDurableRateLimit(
+    env,
+    request,
+    "create",
+    CREATE_RATE_LIMIT,
+    CREATE_RATE_WINDOW_MS,
+  );
   if (limited) return limited;
 
   const sessionId = randomToken(18);
@@ -193,7 +206,13 @@ async function createSession(request: Request, env: Env): Promise<Response> {
 }
 
 async function redeemPairingCode(request: Request, env: Env): Promise<Response> {
-  const limited = enforceRateLimit(request, pairingCounts, 10, 60 * 1000);
+  const limited = await enforceDurableRateLimit(
+    env,
+    request,
+    "pair",
+    PAIR_RATE_LIMIT,
+    PAIR_RATE_WINDOW_MS,
+  );
   if (limited) return limited;
 
   let body: unknown;
@@ -431,5 +450,65 @@ export class GameSession {
 
   async alarm(): Promise<void> {
     await this.shutDown(4001, "session expired");
+  }
+}
+
+export class RateLimit {
+  constructor(private readonly state: DurableObjectState) {}
+
+  async fetch(request: Request): Promise<Response> {
+    if (request.method !== "POST") {
+      return json({ error: "method_not_allowed" }, { status: 405 });
+    }
+    let body: unknown;
+    try {
+      body = await request.json();
+    } catch {
+      return json({ error: "invalid_json" }, { status: 400 });
+    }
+    if (typeof body !== "object" || body === null || Array.isArray(body)) {
+      return json({ error: "invalid_body" }, { status: 400 });
+    }
+    const record = body as Record<string, unknown>;
+    const key = typeof record.key === "string" ? record.key : "";
+    const limit = typeof record.limit === "number" ? record.limit : NaN;
+    const windowMs = typeof record.windowMs === "number" ? record.windowMs : NaN;
+    if (
+      !key ||
+      !Number.isFinite(limit) ||
+      limit < 1 ||
+      !Number.isFinite(windowMs) ||
+      windowMs < 1
+    ) {
+      return json({ error: "invalid_body" }, { status: 400 });
+    }
+
+    const now = Date.now();
+    const current = await this.state.storage.get<{ count: number; resetAt: number }>(key);
+    if (!current || current.resetAt <= now) {
+      const next = { count: 1, resetAt: now + windowMs };
+      await this.state.storage.put(key, next);
+      await this.state.storage.setAlarm(next.resetAt);
+      return json({ ok: true, count: 1 });
+    }
+    if (current.count >= limit) {
+      return json({ error: "rate_limited" }, { status: 429 });
+    }
+    current.count += 1;
+    await this.state.storage.put(key, current);
+    return json({ ok: true, count: current.count });
+  }
+
+  async alarm(): Promise<void> {
+    const now = Date.now();
+    const entries = await this.state.storage.list<{ count: number; resetAt: number }>();
+    const deletions: string[] = [];
+    let nextAlarm = Number.POSITIVE_INFINITY;
+    for (const [key, value] of entries) {
+      if (value.resetAt <= now) deletions.push(key);
+      else nextAlarm = Math.min(nextAlarm, value.resetAt);
+    }
+    if (deletions.length > 0) await this.state.storage.delete(deletions);
+    if (Number.isFinite(nextAlarm)) await this.state.storage.setAlarm(nextAlarm);
   }
 }

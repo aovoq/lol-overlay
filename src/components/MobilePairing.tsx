@@ -22,6 +22,7 @@ export function MobilePairing() {
   const [error, setError] = createSignal("");
   const [now, setNow] = createSignal(Date.now());
   const [canvas, setCanvas] = createSignal<HTMLCanvasElement | undefined>();
+  let expiryStopSessionId = "";
 
   onMount(() => {
     let cancelled = false;
@@ -71,6 +72,7 @@ export function MobilePairing() {
     }
     setLoading(true);
     setError("");
+    expiryStopSessionId = "";
     try {
       setState(await invoke<MobilePairingState>("start_mobile_pairing", { relayUrl: RELAY_URL }));
     } catch (reason) {
@@ -85,6 +87,7 @@ export function MobilePairing() {
     try {
       setState(await invoke<MobilePairingState>("stop_mobile_pairing"));
       setError("");
+      expiryStopSessionId = "";
     } catch (reason) {
       setError(String(reason));
     } finally {
@@ -103,7 +106,10 @@ export function MobilePairing() {
       : "";
 
   createEffect(() => {
-    if (!connected() || !expired() || loading()) return;
+    const current = state();
+    if (current.status === "disconnected" || !expired() || loading()) return;
+    if (!current.sessionId || expiryStopSessionId === current.sessionId) return;
+    expiryStopSessionId = current.sessionId;
     void stop();
   });
 

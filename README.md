@@ -70,8 +70,9 @@ bun run build:mobile   # Expo export
 Relayは1ペアリングにつき1 Durable Objectを作り、4時間で失効する。切断（DISCONNECT）時は
 producerがセッションをrevokeし、viewerのWebSocketも閉じる。スナップショットはメモリ上のみで
 履歴は永続化しない。想定利用はWindows上のデスクトップから試合中データを送ること
-（OS自体の強制チェックはない）。Workerをデプロイする前に`apps/relay/wrangler.jsonc`の
-`MOBILE_APP_URL`とWorker名を本番値へ変更する。
+（OS自体の強制チェックはない）。公開Workerでは`SESSION_CREATE_SECRET`必須（未設定は503）。
+ローカル`wrangler dev`のみsecretなしを許可する。Workerをデプロイする前に
+`apps/relay/wrangler.jsonc`の`MOBILE_APP_URL`とWorker名を本番値へ変更する。
 
 通常の検証:
 
