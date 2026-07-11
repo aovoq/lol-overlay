@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  isMobileCommand,
   isMobileSnapshot,
   isRelayMessage,
   normalizePairingCode,
@@ -13,6 +14,7 @@ const snapshot = {
   capturedAt: 1,
   phase: "InProgress",
   clientUp: true,
+  matchmaking: null,
   game: {
     gameMode: "CLASSIC",
     gameTime: 42,
@@ -93,5 +95,17 @@ describe("relay payload validation", () => {
 
   it("rejects an invalid relay envelope", () => {
     expect(isRelayMessage({ type: "error", message: "broken" })).toBe(false);
+  });
+
+  it("accepts only bounded ready-check commands", () => {
+    expect(
+      isMobileCommand({ type: "readyCheckResponse", requestId: "one", response: "accept" }),
+    ).toBe(true);
+    expect(isMobileCommand({ type: "readyCheckResponse", requestId: "", response: "accept" })).toBe(
+      false,
+    );
+    expect(
+      isMobileCommand({ type: "readyCheckResponse", requestId: "one", response: "later" }),
+    ).toBe(false);
   });
 });

@@ -72,6 +72,7 @@ describe("GameSession", () => {
       capturedAt: Date.now(),
       phase: "InProgress",
       clientUp: true,
+      matchmaking: null,
       game: null,
     };
     const published = await object.fetch(
@@ -93,6 +94,51 @@ describe("GameSession", () => {
       }),
     );
     expect(unauthorized.status).toBe(401);
+  });
+
+  it("queues viewer commands once and lets only the producer take them", async () => {
+    const storage = new MemoryStorage();
+    const object = new GameSession(state(storage), {} as Env);
+    const producerToken = "producer-token";
+    const viewerToken = "viewer-token";
+    await object.fetch(
+      new Request("https://internal/init", {
+        method: "POST",
+        body: JSON.stringify({
+          producerTokenHash: await hashToken(producerToken),
+          viewerTokenHash: await hashToken(viewerToken),
+          expiresAt: Date.now() + 60_000,
+        }),
+      }),
+    );
+    const command = {
+      type: "readyCheckResponse",
+      requestId: "request-1",
+      response: "accept",
+    };
+    const enqueue = () =>
+      object.fetch(
+        new Request("https://internal/command", {
+          method: "POST",
+          headers: { authorization: `Bearer ${viewerToken}` },
+          body: JSON.stringify(command),
+        }),
+      );
+    expect((await enqueue()).status).toBe(202);
+    expect((await enqueue()).status).toBe(202);
+
+    const taken = await object.fetch(
+      new Request("https://internal/commands", {
+        headers: { authorization: `Bearer ${producerToken}` },
+      }),
+    );
+    expect(await taken.json()).toEqual({ commands: [command] });
+    const empty = await object.fetch(
+      new Request("https://internal/commands", {
+        headers: { authorization: `Bearer ${producerToken}` },
+      }),
+    );
+    expect(await empty.json()).toEqual({ commands: [] });
   });
 });
 

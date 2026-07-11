@@ -6,7 +6,7 @@ pub mod recommendation;
 pub mod snapshot;
 
 pub use champ_select::ChampSelectEvent;
-pub use lcu::{MyPick, Phase, RecentGame, RunePagePayload, SummonerInfo};
+pub use lcu::{MatchmakingInfo, MyPick, Phase, RecentGame, RunePagePayload, SummonerInfo};
 pub use recommendation::{
     CounterEntry, ItemRecommendation, RuneBuild, RuneRecommendation, SkillOrder, ThreatProfile,
     TierEntry,

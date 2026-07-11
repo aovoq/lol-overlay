@@ -1,14 +1,16 @@
 import type { MobileGame, PairingLink } from "@lol-overlay/protocol";
 import { useKeepAwake } from "expo-keep-awake";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
+  Alert,
   Image,
   Pressable,
   ScrollView,
   StyleSheet,
   Text,
   useWindowDimensions,
+  Vibration,
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -316,13 +318,16 @@ export function GameScreen({
   link: PairingLink;
   onDisconnect: () => void;
 }) {
-  const { state, snapshot, receivedAt, error } = useRelay(link);
+  const { state, snapshot, receivedAt, error, respondToReadyCheck } = useRelay(link);
   const version = useDataDragonVersion();
   const [now, setNow] = useState(Date.now());
   const [page, setPage] = useState(0);
   const pager = useRef<ScrollView>(null);
   const { width, height } = useWindowDimensions();
   const previousWidth = useRef(width);
+  const readyCheckNotified = useRef(false);
+  const [responsePending, setResponsePending] = useState(false);
+  const [responseError, setResponseError] = useState("");
   const landscape = width > height;
   useKeepAwake();
 
@@ -342,6 +347,37 @@ export function GameScreen({
   const gameTime = snapshot?.game
     ? snapshot.game.gameTime + Math.max(0, now - receivedAt) / 1000
     : 0;
+  const matchmaking = snapshot?.matchmaking;
+  const readyCheck = matchmaking?.state === "readyCheck";
+  const respond = useCallback(
+    async (response: "accept" | "decline") => {
+      if (responsePending) return;
+      setResponsePending(true);
+      setResponseError("");
+      try {
+        await respondToReadyCheck(response);
+      } catch {
+        setResponseError("Windowsへ操作を送信できませんでした");
+      } finally {
+        setResponsePending(false);
+      }
+    },
+    [respondToReadyCheck, responsePending],
+  );
+
+  useEffect(() => {
+    if (!readyCheck) {
+      readyCheckNotified.current = false;
+      return;
+    }
+    if (readyCheckNotified.current) return;
+    readyCheckNotified.current = true;
+    Vibration.vibrate([0, 300, 150, 300]);
+    Alert.alert("マッチが見つかりました", "承諾しますか？", [
+      { text: "拒否", style: "destructive", onPress: () => void respond("decline") },
+      { text: "承諾", onPress: () => void respond("accept") },
+    ]);
+  }, [readyCheck, respond]);
 
   if (!snapshot?.game) {
     return (
@@ -351,13 +387,47 @@ export function GameScreen({
           <StatusLine state={state} stale={stale} />
         </View>
         <View style={styles.waitingContent}>
-          <ActivityIndicator color="#ff465d" size="large" />
+          {!readyCheck && <ActivityIndicator color="#ff465d" size="large" />}
           <Text style={styles.waitingTitle}>
-            {state === "error" ? "接続できません" : "試合を待っています"}
+            {state === "error"
+              ? "接続できません"
+              : readyCheck
+                ? "マッチが見つかりました"
+                : matchmaking?.state === "searching"
+                  ? `検索中 ${formatTime(matchmaking.timeInQueue + Math.max(0, now - receivedAt) / 1000)}`
+                  : "試合を待っています"}
           </Text>
           <Text style={styles.waitingCopy}>
-            {error || "WindowsでLoLの試合が始まると自動で表示します。"}
+            {error ||
+              responseError ||
+              (readyCheck
+                ? matchmaking.playerResponse === "accepted"
+                  ? "承諾しました"
+                  : matchmaking.playerResponse === "declined"
+                    ? "拒否しました"
+                    : "時間内に応答してください"
+                : matchmaking?.state === "searching"
+                  ? `予想待ち時間 ${formatTime(matchmaking.estimatedQueueTime)}`
+                  : "WindowsでLoLの試合が始まると自動で表示します。")}
           </Text>
+          {readyCheck && matchmaking.playerResponse === "none" && (
+            <View style={styles.readyActions}>
+              <Pressable
+                disabled={responsePending}
+                style={[styles.readyButton, styles.declineButton]}
+                onPress={() => void respond("decline")}
+              >
+                <Text style={styles.declineButtonText}>拒否</Text>
+              </Pressable>
+              <Pressable
+                disabled={responsePending}
+                style={[styles.readyButton, styles.acceptButton]}
+                onPress={() => void respond("accept")}
+              >
+                <Text style={styles.acceptButtonText}>承諾</Text>
+              </Pressable>
+            </View>
+          )}
         </View>
         <Pressable
           accessibilityRole="button"
@@ -472,6 +542,18 @@ const styles = StyleSheet.create({
     textAlign: "center",
     marginTop: 8,
   },
+  readyActions: { flexDirection: "row", gap: 12, marginTop: 28 },
+  readyButton: {
+    minWidth: 120,
+    minHeight: 48,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: 3,
+  },
+  declineButton: { borderWidth: 1, borderColor: "#ff7183" },
+  acceptButton: { backgroundColor: "#42d392" },
+  declineButtonText: { color: "#ff7183", fontSize: 15, fontWeight: "800" },
+  acceptButtonText: { color: "#090a0d", fontSize: 15, fontWeight: "800" },
   disconnectButton: {
     minHeight: 48,
     margin: 18,

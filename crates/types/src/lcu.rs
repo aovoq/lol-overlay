@@ -2,6 +2,16 @@
 
 use serde::Serialize;
 
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MatchmakingInfo {
+    pub state: String,
+    pub time_in_queue: f64,
+    pub estimated_queue_time: f64,
+    pub ready_check_expires_at: Option<u64>,
+    pub player_response: String,
+}
+
 /// Gameflow phases we branch on.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 pub enum Phase {

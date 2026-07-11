@@ -1,4 +1,9 @@
-import { isMobileSnapshot, type PairingSession, RELAY_SUBPROTOCOL } from "@lol-overlay/protocol";
+import {
+  isMobileCommand,
+  isMobileSnapshot,
+  type PairingSession,
+  RELAY_SUBPROTOCOL,
+} from "@lol-overlay/protocol";
 import { Hono } from "hono";
 import { cors } from "hono/cors";
 import type { FC } from "hono/jsx";
@@ -179,6 +184,33 @@ async function revokeSession(request: Request, env: Env, sessionId: string): Pro
   });
 }
 
+async function enqueueCommand(request: Request, env: Env, sessionId: string): Promise<Response> {
+  const token = bearerToken(request);
+  if (!token) return Response.json({ error: "unauthorized" }, { status: 401 });
+  let command: unknown;
+  try {
+    command = await request.json();
+  } catch {
+    return Response.json({ error: "invalid_json" }, { status: 400 });
+  }
+  if (!isMobileCommand(command)) {
+    return Response.json({ error: "invalid_command" }, { status: 400 });
+  }
+  return sessionStub(env, sessionId).fetch("https://session.internal/command", {
+    method: "POST",
+    headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
+    body: JSON.stringify(command),
+  });
+}
+
+async function takeCommands(request: Request, env: Env, sessionId: string): Promise<Response> {
+  const token = bearerToken(request);
+  if (!token) return Response.json({ error: "unauthorized" }, { status: 401 });
+  return sessionStub(env, sessionId).fetch("https://session.internal/commands", {
+    headers: { authorization: `Bearer ${token}` },
+  });
+}
+
 function viewerTokenFromProtocols(request: Request): string | null {
   const protocols = request.headers
     .get("sec-websocket-protocol")
@@ -317,6 +349,12 @@ export function createApp(): Hono<AppEnv> {
   );
   app.delete("/v1/sessions/:sessionId", (c) =>
     revokeSession(c.req.raw, c.env, c.req.param("sessionId")),
+  );
+  app.post("/v1/sessions/:sessionId/command", (c) =>
+    enqueueCommand(c.req.raw, c.env, c.req.param("sessionId")),
+  );
+  app.get("/v1/sessions/:sessionId/commands", (c) =>
+    takeCommands(c.req.raw, c.env, c.req.param("sessionId")),
   );
   app.get("/v1/sessions/:sessionId/view", (c) =>
     connectViewer(c.req.raw, c.env, c.req.param("sessionId")),

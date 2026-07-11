@@ -658,6 +658,11 @@ pub async fn poller(app: AppHandle, engine: Arc<Engine>, tx: UnboundedSender<Val
         let phase = lcu::fetch_phase().await;
         let client_up = phase.is_ok();
         let phase = phase.unwrap_or(Phase::None);
+        let matchmaking = if client_up {
+            lcu::fetch_matchmaking().await.unwrap_or(None)
+        } else {
+            None
+        };
 
         engine
             .phase_champselect
@@ -799,13 +804,16 @@ pub async fn poller(app: AppHandle, engine: Arc<Engine>, tx: UnboundedSender<Val
                     &app,
                     phase.label(),
                     client_up,
+                    matchmaking.as_ref(),
                     &snapshot,
                     &recommendations,
                 );
             }
             Ok(None) => {
                 live_snapshot_error_logged = false;
-                engine.mobile.publish_idle(&app, phase.label(), client_up);
+                engine
+                    .mobile
+                    .publish_idle(&app, phase.label(), client_up, matchmaking.as_ref());
             }
             Err(e) => {
                 if !live_snapshot_error_logged {
@@ -813,7 +821,9 @@ pub async fn poller(app: AppHandle, engine: Arc<Engine>, tx: UnboundedSender<Val
                     live_snapshot_error_logged = true;
                 }
                 // Don't leave the phone stuck on the last in-game frame.
-                engine.mobile.publish_idle(&app, phase.label(), client_up);
+                engine
+                    .mobile
+                    .publish_idle(&app, phase.label(), client_up, matchmaking.as_ref());
             }
         }
         engine.phase_in_game.store(in_game, Ordering::SeqCst);

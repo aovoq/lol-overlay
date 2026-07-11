@@ -3,9 +3,10 @@ import {
   type PairingLink,
   RELAY_SUBPROTOCOL,
   type RelayMessage,
+  viewerCommandUrl,
   viewerWebSocketUrl,
 } from "@lol-overlay/protocol";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 export type ConnectionState = "idle" | "connecting" | "waiting" | "live" | "reconnecting" | "error";
 
@@ -120,5 +121,30 @@ export function useRelay(link: PairingLink) {
     };
   }, [link]);
 
-  return { state, snapshot: snapshot?.snapshot ?? null, receivedAt, error };
+  const respondToReadyCheck = useCallback(
+    async (response: "accept" | "decline") => {
+      const result = await fetch(viewerCommandUrl(link), {
+        method: "POST",
+        headers: {
+          authorization: `Bearer ${link.viewerToken}`,
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          type: "readyCheckResponse",
+          requestId: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
+          response,
+        }),
+      });
+      if (!result.ok) throw new Error(`command failed: ${result.status}`);
+    },
+    [link],
+  );
+
+  return {
+    state,
+    snapshot: snapshot?.snapshot ?? null,
+    receivedAt,
+    error,
+    respondToReadyCheck,
+  };
 }

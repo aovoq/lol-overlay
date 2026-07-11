@@ -31,6 +31,7 @@ struct RelaySession {
     relay_base: String,
     session_id: String,
     snapshot_url: String,
+    commands_url: String,
     producer_token: String,
     public: MobilePairingState,
     sequence: Arc<AtomicU64>,
@@ -81,7 +82,20 @@ struct MobileSnapshot {
     captured_at: u64,
     phase: String,
     client_up: bool,
+    matchmaking: Option<overlay_types::MatchmakingInfo>,
     game: Option<MobileGame>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct MobileCommand {
+    request_id: String,
+    response: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct CommandsResponse {
+    commands: Vec<MobileCommand>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -209,6 +223,7 @@ impl MobileRelay {
             relay_base: relay_url.to_string(),
             session_id: response.session_id.clone(),
             snapshot_url: format!("{relay_url}/v1/sessions/{}/snapshot", response.session_id),
+            commands_url: format!("{relay_url}/v1/sessions/{}/commands", response.session_id),
             producer_token: response.producer_token,
             public: public.clone(),
             sequence: Arc::new(AtomicU64::new(0)),
@@ -244,8 +259,14 @@ impl MobileRelay {
             .and_then(reqwest::Response::error_for_status);
     }
 
-    pub fn publish_idle(&self, app: &AppHandle, phase: &str, client_up: bool) {
-        self.publish(app, phase, client_up, None);
+    pub fn publish_idle(
+        &self,
+        app: &AppHandle,
+        phase: &str,
+        client_up: bool,
+        matchmaking: Option<&overlay_types::MatchmakingInfo>,
+    ) {
+        self.publish(app, phase, client_up, matchmaking, None);
     }
 
     pub fn publish_game(
@@ -253,6 +274,7 @@ impl MobileRelay {
         app: &AppHandle,
         phase: &str,
         client_up: bool,
+        matchmaking: Option<&overlay_types::MatchmakingInfo>,
         snapshot: &GameSnapshot,
         recommendations: &RecommendationsEvent,
     ) {
@@ -260,6 +282,7 @@ impl MobileRelay {
             app,
             phase,
             client_up,
+            matchmaking,
             Some(MobileGame {
                 game_mode: snapshot.game_mode.clone(),
                 game_time: snapshot.game_time,
@@ -275,7 +298,14 @@ impl MobileRelay {
         );
     }
 
-    fn publish(&self, app: &AppHandle, phase: &str, client_up: bool, game: Option<MobileGame>) {
+    fn publish(
+        &self,
+        app: &AppHandle,
+        phase: &str,
+        client_up: bool,
+        matchmaking: Option<&overlay_types::MatchmakingInfo>,
+        game: Option<MobileGame>,
+    ) {
         let Some(session) = self.inner.session.lock().clone() else {
             return;
         };
@@ -289,6 +319,7 @@ impl MobileRelay {
                 .as_millis() as u64,
             phase: phase.to_string(),
             client_up,
+            matchmaking: matchmaking.cloned(),
             game,
         };
         *session.pending.lock() = Some(payload);
@@ -333,6 +364,7 @@ impl MobileRelay {
 
                 match result {
                     Ok(_) => {
+                        relay.execute_commands(&app, &session).await;
                         if session.upload_failed.swap(false, Ordering::Relaxed) {
                             relay.emit_current(
                                 &app,
@@ -356,6 +388,48 @@ impl MobileRelay {
                 }
             }
         });
+    }
+
+    async fn execute_commands(&self, app: &AppHandle, session: &RelaySession) {
+        let response = self
+            .inner
+            .http
+            .get(&session.commands_url)
+            .bearer_auth(&session.producer_token)
+            .send()
+            .await
+            .and_then(reqwest::Response::error_for_status);
+        let Ok(response) = response else {
+            return;
+        };
+        let Ok(payload) = response.json::<CommandsResponse>().await else {
+            return;
+        };
+        for command in payload.commands {
+            let result = match command.response.as_str() {
+                "accept" => overlay_lcu::accept_ready_check().await,
+                "decline" => overlay_lcu::decline_ready_check().await,
+                _ => continue,
+            };
+            match result {
+                Ok(()) => log(
+                    app,
+                    "info",
+                    format!(
+                        "mobile ready-check response applied: {}",
+                        command.request_id
+                    ),
+                ),
+                Err(error) => log(
+                    app,
+                    "warn",
+                    format!(
+                        "mobile ready-check response failed ({}): {error}",
+                        command.request_id
+                    ),
+                ),
+            }
+        }
     }
 
     fn emit_current(
@@ -406,6 +480,7 @@ mod tests {
             captured_at: 2,
             phase: "None".into(),
             client_up: false,
+            matchmaking: None,
             game: None,
         };
         assert_eq!(
@@ -416,6 +491,7 @@ mod tests {
                 "capturedAt": 2,
                 "phase": "None",
                 "clientUp": false,
+                "matchmaking": null,
                 "game": null,
             })
         );

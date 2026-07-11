@@ -48,7 +48,22 @@ export interface MobileSnapshot {
   capturedAt: number;
   phase: string;
   clientUp: boolean;
+  matchmaking: MobileMatchmaking | null;
   game: MobileGame | null;
+}
+
+export interface MobileMatchmaking {
+  state: "searching" | "readyCheck";
+  timeInQueue: number;
+  estimatedQueueTime: number;
+  readyCheckExpiresAt: number | null;
+  playerResponse: "none" | "accepted" | "declined";
+}
+
+export interface MobileCommand {
+  type: "readyCheckResponse";
+  requestId: string;
+  response: "accept" | "decline";
 }
 
 export interface PairingSession {
@@ -150,6 +165,19 @@ function isMobileGame(value: unknown): value is MobileGame {
   );
 }
 
+function isMobileMatchmaking(value: unknown): value is MobileMatchmaking {
+  return (
+    isRecord(value) &&
+    (value.state === "searching" || value.state === "readyCheck") &&
+    isFiniteNumber(value.timeInQueue) &&
+    isFiniteNumber(value.estimatedQueueTime) &&
+    (value.readyCheckExpiresAt === null || isFiniteNumber(value.readyCheckExpiresAt)) &&
+    (value.playerResponse === "none" ||
+      value.playerResponse === "accepted" ||
+      value.playerResponse === "declined")
+  );
+}
+
 export function isMobileSnapshot(value: unknown): value is MobileSnapshot {
   if (!isRecord(value)) return false;
   if (
@@ -157,12 +185,24 @@ export function isMobileSnapshot(value: unknown): value is MobileSnapshot {
     !isFiniteNumber(value.sequence) ||
     !isFiniteNumber(value.capturedAt) ||
     typeof value.phase !== "string" ||
-    typeof value.clientUp !== "boolean"
+    typeof value.clientUp !== "boolean" ||
+    !(value.matchmaking === null || isMobileMatchmaking(value.matchmaking))
   ) {
     return false;
   }
 
   return value.game === null || isMobileGame(value.game);
+}
+
+export function isMobileCommand(value: unknown): value is MobileCommand {
+  return (
+    isRecord(value) &&
+    value.type === "readyCheckResponse" &&
+    typeof value.requestId === "string" &&
+    value.requestId.length > 0 &&
+    value.requestId.length <= 100 &&
+    (value.response === "accept" || value.response === "decline")
+  );
 }
 
 export function isRelayMessage(value: unknown): value is RelayMessage {
@@ -209,4 +249,11 @@ export function viewerWebSocketUrl(link: PairingLink): string {
   const url = new URL(`/v1/sessions/${encodeURIComponent(link.sessionId)}/view`, link.relayUrl);
   url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
   return url.toString();
+}
+
+export function viewerCommandUrl(link: PairingLink): string {
+  return new URL(
+    `/v1/sessions/${encodeURIComponent(link.sessionId)}/command`,
+    link.relayUrl,
+  ).toString();
 }

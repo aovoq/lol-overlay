@@ -15,12 +15,12 @@ mod ws;
 
 pub use error::LcuError;
 pub use overlay_types::{
-    ChampSelectEvent, MyPick, Phase, RecentGame, RunePagePayload, SummonerInfo,
+    ChampSelectEvent, MatchmakingInfo, MyPick, Phase, RecentGame, RunePagePayload, SummonerInfo,
 };
 
 pub use parse::{parse_champ_select, parse_my_pick};
 pub use rest::{
-    apply_runes, apply_spells, fetch_phase, fetch_platform_id, fetch_recent_matches, fetch_session,
-    fetch_summoner,
+    accept_ready_check, apply_runes, apply_spells, decline_ready_check, fetch_matchmaking,
+    fetch_phase, fetch_platform_id, fetch_recent_matches, fetch_session, fetch_summoner,
 };
 pub use ws::{subscribe_champ_select, ChampSelectSubscription};

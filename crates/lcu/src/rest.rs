@@ -1,5 +1,5 @@
 use irelia::rest::LcuClient;
-use overlay_types::{Phase, RecentGame, RunePagePayload, SummonerInfo};
+use overlay_types::{MatchmakingInfo, Phase, RecentGame, RunePagePayload, SummonerInfo};
 use serde::Serialize;
 use serde_json::Value;
 
@@ -146,6 +146,78 @@ pub async fn fetch_phase() -> Result<Phase, LcuError> {
         .await
         .map_err(ie)?;
     Ok(Phase::from_api(&raw))
+}
+
+/// Current matchmaking queue or ready-check state.
+pub async fn fetch_matchmaking() -> Result<Option<MatchmakingInfo>, LcuError> {
+    let client = LcuClient::connect().map_err(ie)?;
+    let search: Value = client
+        .get("/lol-matchmaking/v1/search")
+        .await
+        .unwrap_or(Value::Null);
+    let ready: Value = client
+        .get("/lol-matchmaking/v1/ready-check")
+        .await
+        .unwrap_or(Value::Null);
+
+    let ready_state = ready.get("state").and_then(Value::as_str).unwrap_or("");
+    let ready_active = matches!(ready_state, "InProgress" | "Pending");
+    let search_state = search
+        .get("searchState")
+        .and_then(Value::as_str)
+        .unwrap_or("");
+    if !ready_active && !matches!(search_state, "Searching" | "Found") {
+        return Ok(None);
+    }
+
+    let number =
+        |value: &Value, key: &str| value.get(key).and_then(Value::as_f64).unwrap_or_default();
+    let timer = number(&ready, "timer");
+    let ready_check_expires_at = ready_active.then(|| {
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_millis() as u64
+            + std::time::Duration::from_secs_f64(timer.max(0.0)).as_millis() as u64
+    });
+    let player_response = match ready
+        .get("playerResponse")
+        .and_then(Value::as_str)
+        .unwrap_or("None")
+    {
+        "Accepted" => "accepted",
+        "Declined" => "declined",
+        _ => "none",
+    };
+    Ok(Some(MatchmakingInfo {
+        state: if ready_active {
+            "readyCheck"
+        } else {
+            "searching"
+        }
+        .into(),
+        time_in_queue: number(&search, "timeInQueue"),
+        estimated_queue_time: number(&search, "estimatedQueueTime"),
+        ready_check_expires_at,
+        player_response: player_response.into(),
+    }))
+}
+
+async fn respond_to_ready_check(path: &str) -> Result<(), LcuError> {
+    let client = LcuClient::connect().map_err(ie)?;
+    let result: std::result::Result<Option<Value>, _> = client.post(path, &()).await;
+    match result {
+        Ok(_) | Err(irelia::requests::Error::RmpDecode(_)) => Ok(()),
+        Err(error) => Err(ie(error)),
+    }
+}
+
+pub async fn accept_ready_check() -> Result<(), LcuError> {
+    respond_to_ready_check("/lol-matchmaking/v1/ready-check/accept").await
+}
+
+pub async fn decline_ready_check() -> Result<(), LcuError> {
+    respond_to_ready_check("/lol-matchmaking/v1/ready-check/decline").await
 }
 
 /// The raw champ-select session, or `None` if not currently in champ select.

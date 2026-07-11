@@ -1,4 +1,9 @@
-import { isMobileSnapshot, type RelayMessage } from "@lol-overlay/protocol";
+import {
+  isMobileCommand,
+  isMobileSnapshot,
+  type MobileCommand,
+  type RelayMessage,
+} from "@lol-overlay/protocol";
 import { bearerToken, hashToken, isSessionMetadata, timingSafeEqualString } from "./shared";
 import type { Env, PairingCodeMetadata, SessionMetadata } from "./types";
 
@@ -78,6 +83,38 @@ export class GameSession {
     return json({ ok: true });
   }
 
+  private async enqueueCommand(request: Request): Promise<Response> {
+    const token = bearerToken(request);
+    if (!token || !(await this.authorized(token, "viewer"))) {
+      return json({ error: "unauthorized" }, { status: 401 });
+    }
+    let command: unknown;
+    try {
+      command = await request.json();
+    } catch {
+      return json({ error: "invalid_json" }, { status: 400 });
+    }
+    if (!isMobileCommand(command)) {
+      return json({ error: "invalid_command" }, { status: 400 });
+    }
+    const commands = (await this.state.storage.get<MobileCommand[]>("commands")) ?? [];
+    if (!commands.some((item) => item.requestId === command.requestId)) {
+      commands.push(command);
+      await this.state.storage.put("commands", commands.slice(-8));
+    }
+    return json({ queued: true }, { status: 202 });
+  }
+
+  private async takeCommands(request: Request): Promise<Response> {
+    const token = bearerToken(request);
+    if (!token || !(await this.authorized(token, "producer"))) {
+      return json({ error: "unauthorized" }, { status: 401 });
+    }
+    const commands = (await this.state.storage.get<MobileCommand[]>("commands")) ?? [];
+    await this.state.storage.delete("commands");
+    return json({ commands });
+  }
+
   private async connectViewer(request: Request): Promise<Response> {
     const token = request.headers.get("x-viewer-token");
     if (!token || !(await this.authorized(token, "viewer"))) {
@@ -110,6 +147,10 @@ export class GameSession {
         return this.publishSnapshot(request);
       case "POST /revoke":
         return this.revoke(request);
+      case "POST /command":
+        return this.enqueueCommand(request);
+      case "GET /commands":
+        return this.takeCommands(request);
       case "GET /view":
         return this.connectViewer(request);
       default:
