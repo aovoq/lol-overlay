@@ -9,7 +9,7 @@
     "newArchEnabled": true,
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.voq.lol-overlay.sideboard",
+      "bundleIdentifier": "work.aovoq.openlol.ios",
       "infoPlist": {
         "NSCameraUsageDescription": "Windowsアプリに表示された接続用QRコードを読み取ります。"
       }
