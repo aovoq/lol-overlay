@@ -63,7 +63,9 @@ bun run build:mobile   # Expo export
 モバイルMVPをローカルで動かす場合は、`bun run dev:relay`、`bun run dev:mobile`、
 `bun run tauri dev`の順で起動する。デスクトップは`.env`の
 `VITE_MOBILE_RELAY_URL`を参照する（未設定時は接続ボタンが無効）。ローカルRelayへ
-接続する場合は`VITE_MOBILE_RELAY_URL=http://127.0.0.1:8787`を設定する。本番Workerで
+接続する場合は`VITE_MOBILE_RELAY_URL=http://127.0.0.1:8787`を設定する。モバイルは
+`apps/mobile/.env`の`EXPO_PUBLIC_MOBILE_RELAY_URL`を参照する。設定例はそれぞれ
+ルートの`.env.example`と`apps/mobile/.env.example`にある。本番Workerで
 `SESSION_CREATE_SECRET`を有効にしている場合は、同じ値を`MOBILE_RELAY_CREATE_SECRET`
 としてTauriプロセスの環境に渡す。
 
