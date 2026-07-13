@@ -1254,7 +1254,10 @@ mod tests {
             delay: Duration::ZERO,
         })
         .expect("mock server");
-        let provider = mock_provider(&server, Duration::from_secs(1));
+        // The full workspace suite runs many tests in parallel. Give this
+        // 20-request hydration fixture enough scheduling headroom so local
+        // loopback contention cannot be mistaken for an upstream partial page.
+        let provider = mock_provider(&server, Duration::from_secs(5));
         let error = tokio::runtime::Builder::new_current_thread()
             .enable_all()
             .build()
@@ -1372,7 +1375,12 @@ mod tests {
         let first = runtime
             .block_on(provider.recent_matches(&player, None, Some(1700), false))
             .expect("first mock page");
-        assert_eq!(first.matches.len(), 19);
+        assert_eq!(
+            first.matches.len(),
+            19,
+            "unexpected fixture failures: {:?}",
+            first.partial_failures
+        );
         assert_eq!(first.partial_failures.len(), 1);
         assert_eq!(first.partial_failures[0].match_id, "KR_BAD");
         assert_eq!(first.next_cursor.as_deref(), Some("20"));
