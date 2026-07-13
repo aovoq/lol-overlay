@@ -31,7 +31,9 @@ use tauri::{AppHandle, Manager, WindowEvent};
 use tokio::sync::mpsc::UnboundedSender;
 
 use overlay_ddragon::DdragonClient;
-use overlay_provider::{BuildProvider, BuildProviderProxy, ProviderKind};
+use overlay_provider::{
+    BuildProvider, BuildProviderProxy, PlayerStatsProvider, PlayerStatsProxy, ProviderKind,
+};
 use overlay_provider_deeplol::DeepLolProvider;
 use overlay_provider_lolalytics::LolalyticsProvider;
 use overlay_provider_opgg::OpggProvider;
@@ -43,29 +45,45 @@ use overlay_live_client::LiveClient;
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let ddragon = Arc::new(DdragonClient::new());
-    let deeplol: Arc<dyn BuildProvider> =
+    let deeplol =
         Arc::new(DeepLolProvider::new(ddragon.clone()).expect("failed to build DeepLoL provider"));
+    let deeplol_build = deeplol.clone() as Arc<dyn BuildProvider>;
     let ugg: Arc<dyn BuildProvider> =
         Arc::new(UggProvider::new(ddragon.clone()).expect("failed to build u.gg provider"));
     let lolalytics: Arc<dyn BuildProvider> = Arc::new(
         LolalyticsProvider::new(ddragon.clone()).expect("failed to build LoLalytics provider"),
     );
-    let opgg: Arc<dyn BuildProvider> =
+    let opgg =
         Arc::new(OpggProvider::new(ddragon.clone()).expect("failed to build op.gg provider"));
+    let opgg_build = opgg.clone() as Arc<dyn BuildProvider>;
     let proxy = BuildProviderProxy::new(
         ProviderKind::Deeplol,
         [
-            (ProviderKind::Deeplol, deeplol),
+            (ProviderKind::Deeplol, deeplol_build),
             (ProviderKind::Ugg, ugg),
             (ProviderKind::Lolalytics, lolalytics),
-            (ProviderKind::Opgg, opgg),
+            (ProviderKind::Opgg, opgg_build),
         ],
     )
     .expect("failed to build provider proxy");
     let provider = Arc::new(proxy);
+    let player_provider = Arc::new(
+        PlayerStatsProxy::new(
+            ProviderKind::Deeplol,
+            [
+                (
+                    ProviderKind::Deeplol,
+                    deeplol as Arc<dyn PlayerStatsProvider>,
+                ),
+                (ProviderKind::Opgg, opgg as Arc<dyn PlayerStatsProvider>),
+            ],
+        )
+        .expect("failed to build player stats proxy"),
+    );
 
     let engine = Arc::new(Engine {
         provider,
+        player_provider,
         live: LiveClient::new().expect("failed to build Live Client http client"),
         settings: Mutex::new(Settings::default()),
         ui_layout: Mutex::new(UiLayout::default()),
@@ -75,6 +93,8 @@ pub fn run() {
         mock_generation: AtomicU64::new(0),
         last_champ_select: Mutex::new(None),
         last_phase: Mutex::new(None),
+        current_summoner: Mutex::new(None),
+        current_platform_id: Mutex::new(None),
         hit_regions: Mutex::new(Vec::new()),
         drag_active: AtomicBool::new(false),
         forced_interactive: AtomicBool::new(false),
@@ -168,6 +188,14 @@ pub fn run() {
             commands::get_mock_stage,
             commands::set_mock_stage,
             commands::get_data_source,
+            commands::get_current_player_ref,
+            commands::get_player_stats_source,
+            commands::list_player_stats_sources,
+            commands::set_player_stats_source,
+            commands::get_player_profile,
+            commands::get_player_matches,
+            commands::get_player_champion_stats,
+            commands::refresh_player_data,
             commands::list_data_sources,
             commands::set_data_source,
             commands::get_mobile_pairing,

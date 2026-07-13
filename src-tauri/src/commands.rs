@@ -18,10 +18,11 @@ use crate::events::{log, PhaseEvent, RuneImportedEvent};
 use crate::hittest::HitRegion;
 use crate::mobile::MobilePairingState;
 use overlay_lcu::{self as lcu, RunePagePayload};
-use overlay_provider::BuildProvider;
-use overlay_provider::ProviderKind;
+use overlay_provider::{BuildProvider, PlayerStatsProvider, ProviderKind};
+use overlay_types::PlayerRef;
 use overlay_types::{
-    CounterEntry, EnemyChampion, GameSnapshot, ItemRecommendation, RuneBuild, SkillOrder, TierEntry,
+    CounterEntry, EnemyChampion, GameSnapshot, ItemRecommendation, MatchPage, PlayerChampionStats,
+    PlayerProfile, RuneBuild, SkillOrder, TierEntry,
 };
 use serde::Serialize;
 
@@ -38,6 +39,11 @@ fn role_opt(role: &str) -> Option<&str> {
 #[tauri::command]
 pub fn get_settings(engine: State<'_, Arc<Engine>>) -> Settings {
     engine.settings()
+}
+
+#[tauri::command]
+pub fn get_current_player_ref(engine: State<'_, Arc<Engine>>) -> Option<PlayerRef> {
+    engine.current_player_ref()
 }
 
 #[derive(Serialize)]
@@ -466,6 +472,95 @@ pub fn set_data_source(
     engine.persist()?;
     let _ = app.emit("data-source", kind);
     Ok(())
+}
+
+#[tauri::command]
+pub fn get_player_stats_source(engine: State<'_, Arc<Engine>>) -> String {
+    engine.player_provider.active().as_str().into()
+}
+
+#[tauri::command]
+pub fn list_player_stats_sources(
+    engine: State<'_, Arc<Engine>>,
+) -> Vec<overlay_provider::ProviderDescriptor> {
+    engine.player_provider.available()
+}
+
+#[tauri::command]
+pub fn set_player_stats_source(
+    app: AppHandle,
+    engine: State<'_, Arc<Engine>>,
+    source: String,
+) -> error::Result<()> {
+    let parsed = ProviderKind::parse(&source)
+        .ok_or_else(|| error::Error::Other(format!("unknown player stats source: {source}")))?;
+    engine.player_provider.set_active(parsed)?;
+    engine.settings.lock().player_stats_source = parsed;
+    engine.persist()?;
+    let _ = app.emit("player-stats-source", source);
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn get_player_profile(
+    engine: State<'_, Arc<Engine>>,
+    player: PlayerRef,
+    force_refresh: bool,
+) -> error::Result<PlayerProfile> {
+    engine
+        .player_provider
+        .profile(&player, force_refresh)
+        .await
+        .map_err(Into::into)
+}
+
+#[tauri::command]
+pub async fn get_player_matches(
+    engine: State<'_, Arc<Engine>>,
+    player: PlayerRef,
+    cursor: Option<String>,
+    queue: Option<i64>,
+    force_refresh: bool,
+) -> error::Result<MatchPage> {
+    engine
+        .player_provider
+        .recent_matches(&player, cursor.as_deref(), queue, force_refresh)
+        .await
+        .map_err(Into::into)
+}
+
+#[tauri::command]
+pub async fn get_player_champion_stats(
+    engine: State<'_, Arc<Engine>>,
+    player: PlayerRef,
+    season: Option<String>,
+    queue: Option<String>,
+    role: Option<String>,
+    force_refresh: bool,
+) -> error::Result<Vec<PlayerChampionStats>> {
+    engine
+        .player_provider
+        .champion_stats(
+            &player,
+            season.as_deref(),
+            queue.as_deref(),
+            role.as_deref(),
+            force_refresh,
+        )
+        .await
+        .map_err(Into::into)
+}
+
+#[tauri::command]
+pub async fn refresh_player_data(
+    engine: State<'_, Arc<Engine>>,
+    player: PlayerRef,
+) -> error::Result<overlay_types::RefreshResult> {
+    engine
+        .player_provider
+        .refresh(&player)
+        .await
+        .map_err(Into::into)
 }
 
 #[tauri::command]

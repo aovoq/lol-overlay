@@ -6,6 +6,14 @@ pub enum ProviderError {
     Http(#[from] reqwest::Error),
     #[error("parse error: {0}")]
     Json(#[from] serde_json::Error),
+    #[error("player-http:404")]
+    PlayerNotFound,
+    #[error("player-http:422 {0}")]
+    InvalidPlayerRequest(String),
+    #[error("player-http:429 retry-after={retry_after:?}")]
+    RateLimited { retry_after: Option<u64> },
+    #[error("player-timeout")]
+    Timeout,
     #[error("{0}")]
     Other(String),
 }

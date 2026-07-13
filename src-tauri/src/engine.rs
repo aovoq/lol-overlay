@@ -27,7 +27,10 @@ use crate::hittest::HitRegion;
 use crate::mobile::MobileRelay;
 use overlay_lcu::{self as lcu, Phase, RunePagePayload};
 use overlay_live_client::{GamePlayer, LiveClient};
-use overlay_provider::{classify_threats, BuildProvider, BuildProviderProxy, ProviderKind};
+use overlay_provider::{
+    classify_threats, BuildProvider, BuildProviderProxy, PlayerStatsProxy, ProviderKind,
+};
+use overlay_types::PlayerRef;
 
 /// How often the poller checks phase / in-game state.
 const POLL_INTERVAL: Duration = Duration::from_secs(2);
@@ -220,6 +223,7 @@ impl MockStage {
 /// Shared application state, held in Tauri's managed state.
 pub struct Engine {
     pub provider: Arc<BuildProviderProxy>,
+    pub player_provider: Arc<PlayerStatsProxy>,
     pub live: LiveClient,
     pub settings: Mutex<Settings>,
     pub ui_layout: Mutex<UiLayout>,
@@ -238,6 +242,10 @@ pub struct Engine {
     pub last_champ_select: Mutex<Option<ChampSelectEvent>>,
     /// Last gameflow event, used to hydrate a reloaded webview synchronously.
     pub last_phase: Mutex<Option<PhaseEvent>>,
+    /// LCU identity parts retained for the Summoners page's external-provider
+    /// auto-search. They never serve as fallback display data.
+    pub current_summoner: Mutex<Option<lcu::SummonerInfo>>,
+    pub current_platform_id: Mutex<Option<String>>,
     /// Clickable rects reported by the frontend (`data-hit` elements), in
     /// window-relative logical px. Read by `hittest::cursor_watcher`.
     pub hit_regions: Mutex<Vec<HitRegion>>,
@@ -270,6 +278,16 @@ impl Engine {
         self.ui_layout.lock().clone()
     }
 
+    pub fn current_player_ref(&self) -> Option<PlayerRef> {
+        let summoner = self.current_summoner.lock().clone()?;
+        let platform_id = self.current_platform_id.lock().clone()?;
+        Some(PlayerRef {
+            platform_id,
+            game_name: summoner.game_name,
+            tag_line: summoner.tag_line,
+        })
+    }
+
     pub fn init_store(&self, app: &AppHandle, path: PathBuf) -> crate::error::Result<()> {
         if let Some(parent) = path.parent() {
             fs::create_dir_all(parent)?;
@@ -279,6 +297,7 @@ impl Engine {
             let bytes = fs::read(&path)?;
             let stored = serde_json::from_slice::<StoredState>(&bytes)?;
             let data_source = stored.settings.build_data_source;
+            let player_stats_source = stored.settings.player_stats_source;
             *self.settings.lock() = stored.settings;
             *self.ui_layout.lock() = stored.ui_layout;
             if let Err(e) = self.provider.set_active(data_source) {
@@ -286,6 +305,15 @@ impl Engine {
                     app,
                     "warn",
                     format!("saved data source {data_source:?} could not be restored: {e}"),
+                );
+            }
+            if let Err(e) = self.player_provider.set_active(player_stats_source) {
+                log(
+                    app,
+                    "warn",
+                    format!(
+                        "saved player stats source {player_stats_source:?} could not be restored: {e}"
+                    ),
                 );
             }
         }
@@ -719,12 +747,15 @@ pub async fn poller(app: AppHandle, engine: Arc<Engine>, tx: UnboundedSender<Val
                         }
                     }
                     let _ = app.emit("summoner", info.clone());
+                    *engine.current_summoner.lock() = Some(info.clone());
                     prev_summoner = Some(info);
                 }
                 Err(e) => log(&app, "warn", format!("summoner fetch failed: {e}")),
             }
         } else {
             prev_summoner = None;
+            *engine.current_summoner.lock() = None;
+            *engine.current_platform_id.lock() = None;
             recent_games = None;
             let _ = app.emit("summoner", Value::Null);
         }
@@ -759,6 +790,7 @@ pub async fn poller(app: AppHandle, engine: Arc<Engine>, tx: UnboundedSender<Val
                 Ok(platform_id) => {
                     log(&app, "info", format!("platform resolved: {platform_id}"));
                     engine.provider.set_platform_id(&platform_id);
+                    *engine.current_platform_id.lock() = Some(platform_id);
                     platform_resolved = true;
                 }
                 Err(e) => log(&app, "warn", format!("region lookup failed: {e}")),

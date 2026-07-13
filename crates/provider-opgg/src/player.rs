@@ -289,7 +289,14 @@ impl OpggProvider {
                 "params": {"name": tool, "arguments": arguments}
             }))
             .send()
-            .await?;
+            .await
+            .map_err(|error| {
+                if error.is_timeout() {
+                    ProviderError::Timeout
+                } else {
+                    ProviderError::Http(error)
+                }
+            })?;
         let status = response.status();
         let retry_after = response
             .headers()
@@ -298,11 +305,14 @@ impl OpggProvider {
             .map(str::to_owned);
         let body = response.text().await?;
         if !status.is_success() {
-            return Err(ProviderError::Other(format!(
-                "player-http:{} retry-after={}",
-                status.as_u16(),
-                retry_after.as_deref().unwrap_or("none")
-            )));
+            return Err(match status.as_u16() {
+                404 => ProviderError::PlayerNotFound,
+                422 => ProviderError::InvalidPlayerRequest("OP.GG rejected player input".into()),
+                429 => ProviderError::RateLimited {
+                    retry_after: retry_after.and_then(|value| value.parse().ok()),
+                },
+                code => ProviderError::Other(format!("player-http:{code}")),
+            });
         }
         let value: Value = serde_json::from_str(&body)?;
         if let Some(error) = value.get("error") {

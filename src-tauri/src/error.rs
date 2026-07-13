@@ -35,6 +35,10 @@ impl From<overlay_provider::ProviderError> for Error {
             overlay_provider::ProviderError::NotEnoughData => Error::NotEnoughData,
             overlay_provider::ProviderError::Http(e) => Error::Http(e),
             overlay_provider::ProviderError::Json(e) => Error::Json(e),
+            other @ (overlay_provider::ProviderError::PlayerNotFound
+            | overlay_provider::ProviderError::InvalidPlayerRequest(_)
+            | overlay_provider::ProviderError::RateLimited { .. }
+            | overlay_provider::ProviderError::Timeout) => Error::Other(other.to_string()),
             overlay_provider::ProviderError::Other(s) => Error::Other(s),
         }
     }

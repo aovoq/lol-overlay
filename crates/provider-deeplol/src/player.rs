@@ -80,7 +80,13 @@ fn platform_id(raw: &str) -> Result<String> {
 }
 
 async fn response_json(request: reqwest::RequestBuilder) -> Result<Value> {
-    let response = request.send().await?;
+    let response = request.send().await.map_err(|error| {
+        if error.is_timeout() {
+            ProviderError::Timeout
+        } else {
+            ProviderError::Http(error)
+        }
+    })?;
     let status = response.status();
     let retry_after = response
         .headers()
@@ -98,11 +104,14 @@ async fn response_json(request: reqwest::RequestBuilder) -> Result<Value> {
                     .map(Value::to_string)
             })
             .unwrap_or_else(|| "response body unavailable".into());
-        return Err(ProviderError::Other(format!(
-            "player-http:{} retry-after={}: {detail}",
-            status.as_u16(),
-            retry_after.as_deref().unwrap_or("none")
-        )));
+        return Err(match status.as_u16() {
+            404 => ProviderError::PlayerNotFound,
+            422 => ProviderError::InvalidPlayerRequest(detail),
+            429 => ProviderError::RateLimited {
+                retry_after: retry_after.and_then(|value| value.parse().ok()),
+            },
+            code => ProviderError::Other(format!("player-http:{code}: {detail}")),
+        });
     }
     serde_json::from_str(&body).map_err(Into::into)
 }
