@@ -4,6 +4,8 @@ use crate::types::{
     SkillMastery, TierRow,
 };
 
+overlay_provider::build_provider_contract_suite!(opgg_shared_contract, "opgg");
+
 fn perk(id: i64, is_active: bool) -> Perk {
     Perk { id, is_active }
 }

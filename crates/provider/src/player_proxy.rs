@@ -353,6 +353,33 @@ mod tests {
         }
     }
 
+    #[test]
+    fn ttl_distinguishes_fresh_and_expired_entries_without_waiting() {
+        let profile = PlayerProfile {
+            source: "fixture".into(),
+            identity: PlayerIdentity {
+                platform_id: "JP1".into(),
+                game_name: "Player".into(),
+                tag_line: "JP1".into(),
+                puuid: None,
+            },
+            level: None,
+            profile_icon_id: None,
+            ranks: vec![],
+            previous_seasons: vec![],
+            ladder_rank: None,
+            ladder_percentile: None,
+            fetched_at: 1,
+            refresh: RefreshAvailability::default(),
+            extras: ProviderExtras::None,
+        };
+        assert!(fresh(Some(&(Instant::now(), profile.clone()))).is_some());
+        let expired_at = Instant::now()
+            .checked_sub(CACHE_TTL + Duration::from_millis(1))
+            .expect("test instant supports five-minute subtraction");
+        assert!(fresh(Some(&(expired_at, profile))).is_none());
+    }
+
     #[tokio::test]
     async fn switching_is_independent_and_errors_do_not_fallback() {
         let proxy = PlayerStatsProxy::new(

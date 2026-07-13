@@ -1,6 +1,8 @@
 use super::types::{MatchUp, MatchUpEntry, OtpRune, OtpSpell};
 use super::*;
 
+overlay_provider::build_provider_contract_suite!(deeplol_shared_contract, "deeplol");
+
 #[test]
 fn counter_and_rune_failures_keep_upstream_diagnostics() {
     let counter = decode_deeplol_body::<MatchupStatsResponse>(

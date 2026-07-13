@@ -907,6 +907,27 @@ mod tests {
         let error = response_json_body(200, Some("text/html"), None, "<html>oops</html>")
             .expect_err("wrong content type");
         assert!(matches!(error, ProviderError::InvalidData(_)));
+
+        let rate_limit = response_json_body(
+            429,
+            Some("application/json"),
+            Some("17"),
+            r#"{"detail":"slow down"}"#,
+        )
+        .expect_err("rate limit");
+        assert!(matches!(
+            rate_limit,
+            ProviderError::RateLimited {
+                retry_after: Some(17)
+            }
+        ));
+
+        let huge = format!("{}\nsecret tail", "x".repeat(10_000));
+        let error = response_json_body(200, Some("application/json"), None, &huge)
+            .expect_err("malformed huge response")
+            .to_string();
+        assert!(error.len() < 500);
+        assert!(!error.contains("secret tail"));
     }
 
     #[test]
@@ -952,6 +973,17 @@ mod tests {
         assert_eq!(parsed.champion_id, 103);
         assert_eq!(parsed.participants.len(), 2);
         assert!(!parsed.remake);
+    }
+
+    #[test]
+    fn match_fixture_keeps_special_queue_and_marks_short_games_as_remakes() {
+        let raw = json!({
+            "match_basic_dict": {"match_id": "KR_ARENA", "game_duration": 240, "queue_id": 1700},
+            "participants": [{"puu_id": "mine", "champion_id": 103, "is_win": false}]
+        });
+        let parsed = parse_match(&raw, "mine", "fallback").unwrap();
+        assert_eq!(parsed.queue_id, 1700);
+        assert!(parsed.remake);
     }
 
     #[test]

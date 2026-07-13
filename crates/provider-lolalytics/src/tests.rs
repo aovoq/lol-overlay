@@ -2,6 +2,8 @@ use super::*;
 use crate::types::{CounterRow, TierChampion, TierGroup, TierLane, TierResponse};
 use std::collections::HashMap;
 
+overlay_provider::build_provider_contract_suite!(lolalytics_shared_contract, "lolalytics");
+
 fn tier_response(lane: &str, rows: &[(i64, TierChampion)]) -> TierResponse {
     let cid: HashMap<String, TierChampion> = rows
         .iter()

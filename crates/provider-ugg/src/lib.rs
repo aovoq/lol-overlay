@@ -514,6 +514,8 @@ pub fn counter_entries_from_worst(worst: &[Matchup]) -> Vec<CounterEntry> {
 mod tests {
     use super::*;
 
+    overlay_provider::build_provider_contract_suite!(ugg_shared_contract, "ugg");
+
     #[test]
     fn ability_chars_map_to_skill_ids() {
         assert_eq!(

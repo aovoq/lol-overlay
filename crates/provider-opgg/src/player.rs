@@ -252,6 +252,7 @@ fn public_profile_url(player: &PlayerRef) -> Result<reqwest::Url> {
         .map_err(|error| ProviderError::Other(error.to_string()))?;
     url.path_segments_mut()
         .map_err(|()| ProviderError::Other("OP.GG profile URL cannot be a base".into()))?
+        .pop_if_empty()
         .push(&platform(&player.platform_id).to_ascii_lowercase())
         .push(&format!("{}-{}", player.game_name, player.tag_line));
     Ok(url)
@@ -900,6 +901,23 @@ mod tests {
             .expect("Flight action value");
         assert!(parsed["data"].as_array().unwrap().is_empty());
         assert!(action_json("0:{}").is_err());
+    }
+
+    #[test]
+    fn public_profile_url_encodes_riot_id_and_queue_mapping_keeps_special_modes() {
+        let url = public_profile_url(&PlayerRef {
+            platform_id: "JP1".into(),
+            game_name: "space/slash".into(),
+            tag_line: "JP 1".into(),
+        })
+        .unwrap();
+        assert_eq!(
+            url.as_str(),
+            "https://op.gg/lol/summoners/jp/space%2Fslash-JP%201"
+        );
+        assert_eq!(action_queue(Some(1700)), "ARENA");
+        assert_eq!(queue_id("ARENA"), 1700);
+        assert_eq!(queue_id("ARAM"), 450);
     }
 
     #[test]

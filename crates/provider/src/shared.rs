@@ -203,11 +203,25 @@ pub fn split_primary_secondary_runes(rune_ids: &[i64]) -> (Vec<i64>, Vec<i64>) {
 /// fixture. A new adapter can opt into the same CI contract with one macro call.
 #[macro_export]
 macro_rules! build_provider_contract_suite {
-    ($name:ident, $tier:expr, $counters:expr) => {
+    ($name:ident, $provider:literal) => {
         #[test]
         fn $name() {
-            $crate::normalize_tier_entries($tier).expect("tier contract");
-            $crate::normalize_counter_entries($counters).expect("counter contract");
+            let tier = vec![overlay_types::TierEntry {
+                champion_id: 1,
+                win_rate: 0.51,
+                win_rate_delta: None,
+                games: None,
+                pick_rate: 0.1,
+                ban_rate: 0.1,
+                provenance: overlay_types::recommendation::DataProvenance::now($provider),
+            }];
+            let counters = vec![overlay_types::CounterEntry {
+                champion_id: 2,
+                win_rate: 0.52,
+                games: $crate::MIN_MATCHUP_GAMES,
+            }];
+            $crate::normalize_tier_entries(tier).expect("tier contract");
+            $crate::normalize_counter_entries(counters).expect("counter contract");
         }
     };
 }
