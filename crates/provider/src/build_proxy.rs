@@ -95,7 +95,7 @@ impl BuildProvider for BuildProviderProxy {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::error::ProviderError;
+    use overlay_types::DataProvenance;
 
     struct StubProvider(i64);
 
@@ -115,7 +115,62 @@ mod tests {
             _champion_id: i64,
             _role: Option<&str>,
         ) -> Result<RuneRecommendation> {
-            Err(ProviderError::NotEnoughData)
+            Ok(RuneRecommendation {
+                name: format!("Runes {}", self.0),
+                primary_style_id: 8_000 + self.0,
+                sub_style_id: 8_100 + self.0,
+                selected_perk_ids: vec![1, 2, 3, 4, 5, 6],
+            })
+        }
+
+        async fn skill_order(&self, _snapshot: &GameSnapshot) -> Result<SkillOrder> {
+            Ok(SkillOrder {
+                max_order: vec![self.0],
+                level_order: vec![self.0],
+                win_rate: 0.5,
+                games: self.0,
+            })
+        }
+
+        async fn tier_list(&self, _role: &str) -> Result<Vec<TierEntry>> {
+            Ok(vec![TierEntry {
+                champion_id: self.0,
+                win_rate: 0.5,
+                win_rate_delta: None,
+                games: Some(self.0),
+                pick_rate: 0.1,
+                ban_rate: 0.1,
+                provenance: DataProvenance::now(format!("stub-{}", self.0)),
+            }])
+        }
+
+        async fn counters(&self, _champion_id: i64, _role: &str) -> Result<Vec<CounterEntry>> {
+            Ok(vec![CounterEntry {
+                champion_id: self.0,
+                win_rate: 0.5,
+                games: 30 + self.0,
+            }])
+        }
+
+        async fn rune_build(
+            &self,
+            _champion_id: i64,
+            _role: Option<&str>,
+            _enemy_champion_id: Option<i64>,
+        ) -> Result<RuneBuild> {
+            Ok(RuneBuild {
+                page_name: format!("Build {}", self.0),
+                lane: "Middle".into(),
+                win_rate: 0.5,
+                games: self.0,
+                primary_style_id: 8_000 + self.0,
+                sub_style_id: 8_100 + self.0,
+                primary_perk_ids: vec![1, 2, 3, 4],
+                sub_perk_ids: vec![5, 6],
+                shard_ids: vec![5008, 5008, 5002],
+                spell_ids: vec![4, 14],
+                matchup: false,
+            })
         }
     }
 
@@ -133,7 +188,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn forwards_to_active_build_provider_without_fallback() {
+    async fn forwards_every_endpoint_to_active_build_provider_without_fallback() {
         let proxy = BuildProviderProxy::new(
             ProviderKind::Deeplol,
             [
@@ -149,7 +204,63 @@ mod tests {
         )
         .expect("proxy");
         assert_eq!(proxy.items(&snapshot()).await.expect("items")[0].item_id, 1);
+        assert_eq!(
+            proxy.skill_order(&snapshot()).await.expect("skills").games,
+            1
+        );
+        assert_eq!(
+            proxy
+                .runes(103, Some("middle"))
+                .await
+                .expect("runes")
+                .primary_style_id,
+            8_001
+        );
+        assert_eq!(
+            proxy.tier_list("middle").await.expect("tier")[0].champion_id,
+            1
+        );
+        assert_eq!(
+            proxy.counters(103, "middle").await.expect("counters")[0].champion_id,
+            1
+        );
+        assert_eq!(
+            proxy
+                .rune_build(103, Some("middle"), None)
+                .await
+                .expect("rune build")
+                .games,
+            1
+        );
         proxy.set_active(ProviderKind::Ugg).expect("switch");
         assert_eq!(proxy.items(&snapshot()).await.expect("items")[0].item_id, 2);
+        assert_eq!(
+            proxy.skill_order(&snapshot()).await.expect("skills").games,
+            2
+        );
+        assert_eq!(
+            proxy
+                .runes(103, Some("middle"))
+                .await
+                .expect("runes")
+                .primary_style_id,
+            8_002
+        );
+        assert_eq!(
+            proxy.tier_list("middle").await.expect("tier")[0].champion_id,
+            2
+        );
+        assert_eq!(
+            proxy.counters(103, "middle").await.expect("counters")[0].champion_id,
+            2
+        );
+        assert_eq!(
+            proxy
+                .rune_build(103, Some("middle"), None)
+                .await
+                .expect("rune build")
+                .games,
+            2
+        );
     }
 }

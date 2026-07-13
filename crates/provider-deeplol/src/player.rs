@@ -26,6 +26,7 @@ type ChampionCacheKey = (PlayerRef, String, Option<String>, Option<String>);
 pub(super) struct PlayerCache {
     profiles: HashMap<PlayerRef, Timed<PlayerProfile>>,
     matches: HashMap<(PlayerRef, String, Option<i64>), Timed<MatchPage>>,
+    details: HashMap<(PlayerRef, String), Timed<PlayerMatch>>,
     champions: HashMap<ChampionCacheKey, Timed<Vec<PlayerChampionStats>>>,
 }
 
@@ -39,6 +40,7 @@ impl PlayerCache {
     fn invalidate(&mut self, player: &PlayerRef) {
         self.profiles.remove(player);
         self.matches.retain(|(cached, _, _), _| cached != player);
+        self.details.retain(|(cached, _), _| cached != player);
         self.champions
             .retain(|(cached, _, _, _), _| cached != player);
     }
@@ -696,8 +698,27 @@ impl PlayerStatsProvider for DeepLolProvider {
         ]))
         .await?;
         let ids = match_ids(&list);
-        let ids_to_hydrate = ids.clone();
-        let hydrated = stream::iter(ids_to_hydrate.into_iter().map(|match_id| {
+        let mut hydrated = Vec::new();
+        if !force {
+            let cache = self.player_cache.read().await;
+            for match_id in &ids {
+                if let Some(value) =
+                    PlayerCache::fresh(cache.details.get(&(player.clone(), match_id.clone())))
+                {
+                    hydrated.push((match_id.clone(), Ok(value)));
+                }
+            }
+        }
+        let cached_ids = hydrated
+            .iter()
+            .map(|(match_id, _)| match_id.clone())
+            .collect::<std::collections::HashSet<_>>();
+        let ids_to_hydrate = ids
+            .iter()
+            .filter(|match_id| !cached_ids.contains(*match_id))
+            .cloned()
+            .collect::<Vec<_>>();
+        let fetched = stream::iter(ids_to_hydrate.into_iter().map(|match_id| {
             let platform = platform.clone();
             async move {
                 let result = response_json(
@@ -716,6 +737,18 @@ impl PlayerStatsProvider for DeepLolProvider {
         .buffer_unordered(MATCH_CONCURRENCY)
         .collect::<Vec<_>>()
         .await;
+        hydrated.extend(fetched);
+        {
+            let mut cache = self.player_cache.write().await;
+            for (match_id, result) in &hydrated {
+                if let Ok(value) = result {
+                    cache.details.insert(
+                        (player.clone(), match_id.clone()),
+                        (Instant::now(), value.clone()),
+                    );
+                }
+            }
+        }
         let by_id = hydrated.into_iter().collect::<HashMap<_, _>>();
         let mut matches = vec![];
         let mut partial_failures = vec![];
@@ -925,6 +958,39 @@ mod tests {
     fn match_list_uses_actual_count_for_offset_cursor() {
         let value = json!({"match_id_list": [{"match_id": "a"}, {"match_id": "b"}]});
         assert_eq!(match_ids(&value), vec!["a", "b"]);
+    }
+
+    #[test]
+    fn refresh_invalidation_clears_match_pages_and_individual_details() {
+        let player = PlayerRef {
+            platform_id: "KR".into(),
+            game_name: "Player".into(),
+            tag_line: "KR1".into(),
+        };
+        let other = PlayerRef {
+            platform_id: "JP1".into(),
+            game_name: "Other".into(),
+            tag_line: "JP1".into(),
+        };
+        let mut cache = PlayerCache::default();
+        let detail = parse_match(
+            &json!({"match_id": "KR_1", "participants": [{"puuid": "p", "champion_id": 1}]}),
+            "p",
+            "KR_1",
+        )
+        .unwrap();
+        cache.details.insert(
+            (player.clone(), "KR_1".into()),
+            (Instant::now(), detail.clone()),
+        );
+        cache
+            .details
+            .insert((other.clone(), "JP1_1".into()), (Instant::now(), detail));
+
+        cache.invalidate(&player);
+
+        assert!(!cache.details.contains_key(&(player, "KR_1".into())));
+        assert!(cache.details.contains_key(&(other, "JP1_1".into())));
     }
 
     #[test]
