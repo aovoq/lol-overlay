@@ -18,7 +18,7 @@ use tauri::{AppHandle, Emitter};
 use crate::engine::{self, Engine, MockStage};
 use crate::events::{log, ChampSelectEvent, PhaseEvent, RecommendationsEvent, RuneImportedEvent};
 use overlay_provider::{classify_threats, BuildProvider};
-use overlay_types::{EnemyChampion, GameSnapshot};
+use overlay_types::{EnemyChampion, GamePlayer, GameSnapshot};
 
 fn emit_phase(app: &AppHandle, engine: &Engine, event: PhaseEvent) {
     *engine.last_phase.lock() = Some(event.clone());
@@ -216,6 +216,7 @@ pub async fn mock_loop(app: AppHandle, engine: Arc<Engine>, generation: u64) {
             },
         );
         let _ = app.emit("recommendations", recommendations.clone());
+        let _ = app.emit("game-players", &snapshot.players);
         engine
             .mobile
             .publish_game(&app, "InProgress", true, None, &snapshot, &recommendations);
@@ -285,6 +286,26 @@ async fn ingame_scenario(engine: &Engine) -> (GameSnapshot, i64) {
         return (offline_snapshot(), 17);
     };
 
+    // Fake Riot IDs so the load-screen name display is testable in mock mode.
+    let mut players: Vec<GamePlayer> = enemies
+        .iter()
+        .enumerate()
+        .map(|(i, e)| GamePlayer {
+            riot_id: format!("MockEnemy{}#JP1", i + 1),
+            name: e.name.clone(),
+            raw_name: e.raw_name.clone(),
+            position: e.position.clone(),
+            ally: false,
+        })
+        .collect();
+    players.push(GamePlayer {
+        riot_id: "You#MOCK".into(),
+        name: my_name.clone(),
+        raw_name: my_image.clone(),
+        position: "TOP".into(),
+        ally: true,
+    });
+
     (
         GameSnapshot {
             game_mode: "CLASSIC (mock)".into(),
@@ -294,6 +315,7 @@ async fn ingame_scenario(engine: &Engine) -> (GameSnapshot, i64) {
             self_position: "TOP".into(),
             enemies,
             allies: vec![],
+            players,
         },
         me.champion_id,
     )
@@ -322,5 +344,6 @@ fn offline_snapshot() -> GameSnapshot {
             mk("Jinx", "BOTTOM"),
         ],
         allies: vec![],
+        players: vec![],
     }
 }

@@ -14,6 +14,22 @@ pub struct EnemyChampion {
     pub items: Vec<i64>,
 }
 
+/// One participant (either team) with the identity data that becomes
+/// available on the load screen — payload of the "game-players" event.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GamePlayer {
+    /// Riot ID, e.g. "Faker#KR1" ("" when unavailable).
+    pub riot_id: String,
+    /// Localized champion display name (for the UI).
+    pub name: String,
+    /// English champion name for id lookups (e.g. "Talon").
+    pub raw_name: String,
+    /// "TOP" | "JUNGLE" | "MIDDLE" | "BOTTOM" | "UTILITY" | "".
+    pub position: String,
+    pub ally: bool,
+}
+
 /// The slice of game state we care about: who we are and who we face.
 #[derive(Debug, Clone, Serialize)]
 pub struct GameSnapshot {
@@ -27,4 +43,6 @@ pub struct GameSnapshot {
     pub self_position: String,
     pub enemies: Vec<EnemyChampion>,
     pub allies: Vec<String>,
+    /// All ten participants incl. Riot IDs (empty when spectating).
+    pub players: Vec<GamePlayer>,
 }

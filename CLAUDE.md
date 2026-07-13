@@ -89,7 +89,7 @@ Three concurrent pieces share the channel `tokio::sync::mpsc`:
 
 ### Backend → frontend events (Tauri `emit` / `listen`)
 
-`phase`, `champ-select`, `recommendations`, `summoner`, `match-history`, `lp-change`, `rune-imported`, `window-mode`, `interactive`, `log`, `data-source`, `mock-stage`, `mobile-pairing`. Payload structs live in `events.rs` / `overlay-types` and are mirrored as TypeScript interfaces in `src/types.ts`. **All payloads use `#[serde(rename_all = "camelCase")]`** — keep both sides in sync when changing a payload.
+`phase`, `champ-select`, `recommendations`, `game-players`, `summoner`, `match-history`, `lp-change`, `rune-imported`, `window-mode`, `interactive`, `log`, `data-source`, `mock-stage`, `mobile-pairing`. Payload structs live in `events.rs` / `overlay-types` and are mirrored as TypeScript interfaces in `src/types.ts`. **All payloads use `#[serde(rename_all = "camelCase")]`** — keep both sides in sync when changing a payload.
 
 Frontend → backend commands (`commands.rs`): settings/layout setters, data-source switching (`get_data_source`, `list_data_sources`, `set_data_source`), OPENLOL data lookups (`get_tier_list`, `get_rune_build`, `get_counters`, `import_build`), click-through plumbing (`set_hit_regions`, `set_drag_active`, `set_interactive`), developer mode (`set_developer_mode`, `get_mock_stage`, `set_mock_stage` — the settings-panel toggle that shows the debug panel and unlocks mock scenarios), and mobile pairing (`get_mobile_pairing`, `start_mobile_pairing`, `stop_mobile_pairing`).
 

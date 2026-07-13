@@ -11,7 +11,7 @@ pub use recommendation::{
     CounterEntry, ItemRecommendation, RuneBuild, RuneRecommendation, SkillOrder, ThreatProfile,
     TierEntry,
 };
-pub use snapshot::{EnemyChampion, GameSnapshot};
+pub use snapshot::{EnemyChampion, GamePlayer, GameSnapshot};
 
 #[cfg(test)]
 mod tests {

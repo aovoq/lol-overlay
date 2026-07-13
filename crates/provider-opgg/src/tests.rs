@@ -201,6 +201,7 @@ async fn fetch_items_runes_and_skill_order_from_live_site() {
         self_position: "top".into(),
         enemies: vec![],
         allies: vec![],
+        players: vec![],
     };
     let items = provider.items(&snapshot).await.expect("items");
     assert!(!items.is_empty());

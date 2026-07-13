@@ -191,6 +191,7 @@ mod tests {
             self_position: "middle".into(),
             enemies: Vec::new(),
             allies: Vec::new(),
+            players: vec![],
         }
     }
 

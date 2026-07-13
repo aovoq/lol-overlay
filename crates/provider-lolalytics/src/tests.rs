@@ -127,6 +127,7 @@ async fn fetch_items_and_counters_from_live_api() {
         self_position: "top".into(),
         enemies: vec![],
         allies: vec![],
+        players: vec![],
     };
     let items = provider.items(&snapshot).await.expect("items");
     assert!(!items.is_empty());

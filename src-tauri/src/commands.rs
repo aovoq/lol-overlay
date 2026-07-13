@@ -330,6 +330,7 @@ pub async fn get_build_details(
         self_position: role,
         enemies,
         allies: vec![],
+        players: vec![],
     };
     let items = engine.provider.items(&snapshot).await.map_err(|e| {
         log(&app, "warn", format!("get_build_details items failed: {e}"));

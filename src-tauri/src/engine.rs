@@ -26,7 +26,7 @@ use crate::events::{
 use crate::hittest::HitRegion;
 use crate::mobile::MobileRelay;
 use overlay_lcu::{self as lcu, Phase, RunePagePayload};
-use overlay_live_client::LiveClient;
+use overlay_live_client::{GamePlayer, LiveClient};
 use overlay_provider::{classify_threats, BuildProvider, ProviderKind, ProviderProxy};
 
 /// How often the poller checks phase / in-game state.
@@ -648,6 +648,9 @@ pub async fn poller(app: AppHandle, engine: Arc<Engine>, tx: UnboundedSender<Val
     let mut history_poll_age = HISTORY_REFRESH_POLLS; // refresh on first poll
     let mut platform_resolved = false;
     let mut live_snapshot_error_logged = false;
+    // Last emitted "game-players" payload; deduped so the frontend only hears
+    // about identity changes (once per game, effectively).
+    let mut last_players: Vec<GamePlayer> = Vec::new();
     loop {
         // In mock mode the UI is driven by synthetic state; don't fight it.
         if engine.mock.load(Ordering::Relaxed) {
@@ -770,6 +773,10 @@ pub async fn poller(app: AppHandle, engine: Arc<Engine>, tx: UnboundedSender<Val
             Ok(Some(snapshot)) => {
                 live_snapshot_error_logged = false;
                 in_game = true;
+                if snapshot.players != last_players {
+                    last_players = snapshot.players.clone();
+                    let _ = app.emit("game-players", &last_players);
+                }
                 let threats = classify_threats(&snapshot);
                 let items = match engine.provider.items(&snapshot).await {
                     Ok(items) => items,
@@ -811,6 +818,10 @@ pub async fn poller(app: AppHandle, engine: Arc<Engine>, tx: UnboundedSender<Val
             }
             Ok(None) => {
                 live_snapshot_error_logged = false;
+                if !last_players.is_empty() {
+                    last_players.clear();
+                    let _ = app.emit("game-players", &last_players);
+                }
                 engine
                     .mobile
                     .publish_idle(&app, phase.label(), client_up, matchmaking.as_ref());

@@ -592,6 +592,7 @@ mod tests {
             self_position: "middle".into(),
             enemies: vec![],
             allies: vec![],
+            players: vec![],
         };
 
         let items = provider.items(&snapshot).await.expect("items");

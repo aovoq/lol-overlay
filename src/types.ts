@@ -26,6 +26,18 @@ export interface EnemyChampion {
   items: number[];
 }
 
+/** One participant of the running game (snapshot.rs::GamePlayer); payload of
+ * the "game-players" event, available from the load screen onwards. */
+export interface GamePlayer {
+  /** Riot ID, e.g. "Faker#KR1" ("" when unavailable). */
+  riotId: string;
+  name: string;
+  rawName: string;
+  /** "TOP" | "JUNGLE" | "MIDDLE" | "BOTTOM" | "UTILITY" | "". */
+  position: string;
+  ally: boolean;
+}
+
 export interface ThreatProfile {
   adCount: number;
   apCount: number;

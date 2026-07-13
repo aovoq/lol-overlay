@@ -323,6 +323,7 @@ fn live_zed_items() {
             self_position: "MIDDLE".into(),
             enemies: vec![],
             allies: vec![],
+            players: vec![],
         };
         match p.items(&snap).await {
             Ok(items) => {

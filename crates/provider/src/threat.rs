@@ -33,6 +33,7 @@ mod tests {
             self_raw_name: "Ahri".into(),
             self_position: "middle".into(),
             allies: Vec::new(),
+            players: vec![],
             enemies: vec![
                 EnemyChampion {
                     name: "Zed".into(),

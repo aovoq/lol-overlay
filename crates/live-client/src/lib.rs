@@ -10,7 +10,7 @@
 use serde::Deserialize;
 use std::time::Duration;
 
-pub use overlay_types::{EnemyChampion, GameSnapshot};
+pub use overlay_types::{EnemyChampion, GamePlayer, GameSnapshot};
 
 const BASE: &str = "https://127.0.0.1:2999/liveclientdata";
 const TIMEOUT: Duration = Duration::from_secs(8);
@@ -152,8 +152,17 @@ impl LiveClient {
 
         let mut enemies = Vec::new();
         let mut allies = Vec::new();
+        let mut players = Vec::new();
         for p in &data.all_players {
-            if p.team == my_team {
+            let ally = !my_team.is_empty() && p.team == my_team;
+            players.push(GamePlayer {
+                riot_id: p.riot_id.clone(),
+                name: p.champion_name.clone(),
+                raw_name: english_name(&p.raw_champion_name, &p.champion_name),
+                position: p.position.clone(),
+                ally,
+            });
+            if ally {
                 if p.champion_name != self_champion {
                     allies.push(p.champion_name.clone());
                 }
@@ -175,6 +184,7 @@ impl LiveClient {
             self_position,
             enemies,
             allies,
+            players,
         }))
     }
 }
