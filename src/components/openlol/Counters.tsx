@@ -5,7 +5,12 @@ import type { CounterEntry } from "../../types";
 import { Icon } from "../Icon";
 import { SectionError } from "./SectionError";
 
-export function Counters(props: { championId: number; role: string }) {
+export function Counters(props: {
+  championId: number;
+  role: string;
+  /** Hover preview hook (draft board: peek at a counter pick's runes). */
+  onHoverChampion?: (championId: number) => void;
+}) {
   const enemy = createMemo(() => props.championId);
   const role = createMemo(() => props.role);
   const entry = createMemo(() => {
@@ -49,7 +54,11 @@ export function Counters(props: { championId: number; role: string }) {
                 >
                   <For each={counters()}>
                     {(c) => (
-                      <div class="w-[34px] text-center flex flex-col gap-0.5 items-center">
+                      <div
+                        class="w-[34px] text-center flex flex-col gap-0.5 items-center"
+                        onMouseEnter={() => props.onHoverChampion?.(c.championId)}
+                        onMouseLeave={() => props.onHoverChampion?.(0)}
+                      >
                         <Show when={assetsReady()}>
                           <Icon
                             url={champIconByKey(c.championId)}

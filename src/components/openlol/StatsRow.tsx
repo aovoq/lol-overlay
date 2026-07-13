@@ -11,7 +11,9 @@ import { Icon } from "../Icon";
 
 export function StatsRow(props: { championId: number; role: string; enemyId?: number | null }) {
   const role = createMemo(() => props.role);
-  const target = createMemo(() => ({ champ: props.championId, enemy: props.enemyId ?? null }));
+  const target = createMemo(() =>
+    props.championId > 0 ? { champ: props.championId, enemy: props.enemyId ?? null } : null,
+  );
   const cacheKey = createMemo(() => {
     const t = target();
     return t ? buildKey(t.champ, role(), t.enemy) : "";

@@ -881,6 +881,59 @@
     flex: none;
   }
 
+  .desktop-form-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 6px;
+    padding-bottom: 12px;
+    border-bottom: 1px solid var(--hx-border);
+  }
+  .desktop-form-strip {
+    display: flex;
+    gap: 4px;
+  }
+  .desktop-form-strip img {
+    width: 22px;
+    height: 22px;
+    border-radius: 3px;
+    border-bottom: 2px solid var(--hx-border);
+    object-fit: cover;
+  }
+  .desktop-form-strip img.is-win {
+    border-bottom-color: var(--hx-up);
+  }
+  .desktop-form-strip img.is-loss {
+    border-bottom-color: var(--hx-red);
+    filter: grayscale(0.5);
+    opacity: 0.75;
+  }
+  .desktop-form-summary {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    color: var(--hx-muted);
+    font-size: 11px;
+    white-space: nowrap;
+  }
+  .desktop-form-streak {
+    padding: 1px 6px;
+    border: 1px solid var(--hx-border);
+    border-radius: 3px;
+    color: var(--hx-muted);
+    font-size: 10px;
+    font-weight: 700;
+  }
+  .desktop-form-streak.is-win {
+    border-color: var(--hx-up);
+    color: var(--hx-up);
+  }
+  .desktop-form-streak.is-loss {
+    border-color: var(--hx-red);
+    color: var(--hx-red);
+  }
+
   .mobile-pairing-grid {
     display: flex;
     align-items: stretch;

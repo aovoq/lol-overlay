@@ -9,18 +9,10 @@ import {
   itemIconUrl,
   profileIconUrl,
 } from "../../assets";
+import { matchRank, normalizeForSearch, searchChampions } from "../../lib/championSearch";
 import { fmtTier, ROLES, roleLabel } from "../../lib/openlol";
-import {
-  champSelect,
-  matchHistory,
-  phase,
-  selectedRole,
-  setSelectedRole,
-  setUserPickedVsEnemy,
-  setVsEnemyId,
-  summoner,
-  vsEnemyId,
-} from "../../state/backend";
+import { formSummary } from "../../lib/recentForm";
+import { matchHistory, phase, selectedRole, setSelectedRole, summoner } from "../../state/backend";
 import { buildDetailsCache, buildKey, tierCache } from "../../state/caches";
 import { developerMode } from "../../state/settings";
 import { DebugPanel } from "../DebugPanel";
@@ -56,6 +48,7 @@ export function HomePage() {
     if (!value || value.soloWins + value.soloLosses === 0) return "—";
     return `${Math.round((value.soloWins / (value.soloWins + value.soloLosses)) * 100)}%`;
   });
+  const form = createMemo(() => formSummary(games()));
 
   return (
     <ScrollArea class="h-full" contentClass="desktop-page">
@@ -106,6 +99,37 @@ export function HomePage() {
         <span>{games().length} GAMES</span>
       </div>
       <section class="desktop-card desktop-match-list">
+        <Show when={form()}>
+          {(f) => (
+            <div class="desktop-form-row">
+              <div class="desktop-form-strip">
+                <Show when={assetsReady()}>
+                  <For each={games()}>
+                    {(g) => (
+                      <Icon
+                        url={champIconByKey(g.championId)}
+                        class={g.win ? "is-win" : "is-loss"}
+                        title={`${champName(g.championId)} · ${g.kills}/${g.deaths}/${g.assists} · ${g.win ? "勝利" : "敗北"}`}
+                      />
+                    )}
+                  </For>
+                </Show>
+              </div>
+              <span class="desktop-form-summary">
+                {f().record} · {f().kda}
+                <Show when={f().streakLabel}>
+                  <span
+                    class={`desktop-form-streak ${
+                      f().streakWin ? "is-win" : f().streakLoss ? "is-loss" : ""
+                    }`}
+                  >
+                    {f().streakLabel}
+                  </span>
+                </Show>
+              </span>
+            </div>
+          )}
+        </Show>
         <Show
           when={games().length > 0}
           fallback={<div class="desktop-empty">試合履歴はまだありません。</div>}
@@ -130,7 +154,7 @@ export function HomePage() {
   );
 }
 
-function RoleSelector() {
+export function RoleSelector() {
   return (
     <div class="desktop-role-tabs">
       <For each={ROLES}>
@@ -156,9 +180,14 @@ export function ChampionsPage() {
   const champions = createMemo(() => {
     const value = entry();
     if (value.state !== "ok") return [];
-    const needle = query().trim().toLocaleLowerCase();
+    const needle = normalizeForSearch(query().trim());
+    const infoByKey = new Map(allChampions().map((champ) => [champ.key, champ]));
     return [...value.value]
-      .filter((item) => !needle || champName(item.championId).toLocaleLowerCase().includes(needle))
+      .filter((item) => {
+        if (!needle) return true;
+        const info = infoByKey.get(item.championId);
+        return info !== undefined && matchRank(needle, info) >= 0;
+      })
       .sort((a, b) => b[sort()] - a[sort()]);
   });
 
@@ -237,16 +266,13 @@ export function ChampionPage() {
   const params = useParams();
   const championId = createMemo(() => Number(params.id));
   const champion = createMemo(() => allChampions().find((item) => item.key === championId()));
-  const enemies = createMemo(() => (champSelect()?.enemyChampionIds ?? []).filter((id) => id > 0));
+  const [vsEnemyId, setVsEnemyId] = createSignal(0);
   const selectedEnemy = createMemo(() => vsEnemyId() || null);
   const [enemyQuery, setEnemyQuery] = createSignal("");
   const [enemyMenuOpen, setEnemyMenuOpen] = createSignal(false);
-  const matchingEnemies = createMemo(() => {
-    const needle = enemyQuery().trim().toLocaleLowerCase();
-    return allChampions()
-      .filter((item) => !needle || item.name.toLocaleLowerCase().includes(needle))
-      .slice(0, 12);
-  });
+  const matchingEnemies = createMemo(() =>
+    searchChampions(allChampions(), enemyQuery()).slice(0, 12),
+  );
   const detailsKey = createMemo(() => buildKey(championId(), selectedRole(), selectedEnemy()));
   const details = createMemo(() => buildDetailsCache.get(detailsKey()));
   const detailsValue = createMemo(() => {
@@ -255,7 +281,6 @@ export function ChampionPage() {
   });
   const chooseEnemy = (enemyId: number) => {
     setVsEnemyId(enemyId);
-    setUserPickedVsEnemy(enemyId > 0);
     setEnemyQuery(enemyId ? champName(enemyId) : "");
     setEnemyMenuOpen(false);
   };
@@ -321,25 +346,6 @@ export function ChampionPage() {
                   </div>
                 </Show>
               </div>
-              <Show when={enemies().length > 0}>
-                <div class="desktop-draft-enemies">
-                  <span>現在の敵チーム</span>
-                  <div>
-                    <For each={enemies()}>
-                      {(id) => (
-                        <button
-                          type="button"
-                          class={selectedEnemy() === id ? "is-active" : ""}
-                          title={champName(id)}
-                          onClick={() => chooseEnemy(id)}
-                        >
-                          <Icon url={champIconByKey(id)} />
-                        </button>
-                      )}
-                    </For>
-                  </div>
-                </div>
-              </Show>
             </section>
             <section class="desktop-card desktop-counter-card">
               <div class="desktop-section-heading">
