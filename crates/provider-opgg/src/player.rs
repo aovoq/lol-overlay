@@ -23,11 +23,43 @@ use super::OpggProvider;
 const MCP_URL: &str = "https://mcp-api.op.gg/mcp";
 const PAGE_SIZE: usize = 20;
 const PLAYER_CACHE_TTL: Duration = Duration::from_secs(5 * 60);
+const RETRY_ATTEMPTS: usize = 2;
+const RETRY_DELAY: Duration = Duration::from_millis(250);
 
 #[derive(Default)]
 pub(super) struct OpggPlayerCache {
     profiles: tokio::sync::RwLock<HashMap<PlayerRef, (Instant, CompactValue)>>,
     request: tokio::sync::Mutex<()>,
+}
+
+async fn send_with_retry(request: reqwest::RequestBuilder) -> Result<reqwest::Response> {
+    let mut attempt = 0;
+    loop {
+        attempt += 1;
+        let Some(next) = request.try_clone() else {
+            return Err(ProviderError::Other(
+                "OP.GG request could not be cloned for retry".into(),
+            ));
+        };
+        match next.send().await {
+            Ok(response) if response.status().is_server_error() && attempt < RETRY_ATTEMPTS => {
+                tokio::time::sleep(RETRY_DELAY).await;
+            }
+            Ok(response) => return Ok(response),
+            Err(error)
+                if (error.is_timeout() || error.is_connect()) && attempt < RETRY_ATTEMPTS =>
+            {
+                tokio::time::sleep(RETRY_DELAY).await;
+            }
+            Err(error) => {
+                return Err(if error.is_timeout() {
+                    ProviderError::Timeout
+                } else {
+                    ProviderError::Http(error)
+                });
+            }
+        }
+    }
 }
 
 const PROFILE_FIELDS: &[&str] = &[
@@ -459,24 +491,17 @@ fn parse_action_match(value: &Value, puuid: &str) -> Result<PlayerMatch> {
 
 impl OpggProvider {
     async fn mcp_call(&self, tool: &str, arguments: Value) -> Result<CompactValue> {
-        let response = self
-            .api
-            .http()
-            .post(MCP_URL)
-            .header("accept", "application/json, text/event-stream")
-            .json(&json!({
+        let response = send_with_retry(
+            self.api
+                .http()
+                .post(MCP_URL)
+                .header("accept", "application/json, text/event-stream")
+                .json(&json!({
                 "jsonrpc": "2.0", "id": 1, "method": "tools/call",
                 "params": {"name": tool, "arguments": arguments}
-            }))
-            .send()
-            .await
-            .map_err(|error| {
-                if error.is_timeout() {
-                    ProviderError::Timeout
-                } else {
-                    ProviderError::Http(error)
-                }
-            })?;
+                })),
+        )
+        .await?;
         let status = response.status();
         let retry_after = response
             .headers()
@@ -608,33 +633,26 @@ impl OpggProvider {
         queue: Option<i64>,
     ) -> Result<Value> {
         let action = self.discover_games_action(player).await?;
-        let response = self
-            .api
-            .http()
-            .post(public_profile_url(player)?)
-            .header("accept", "text/x-component")
-            .header("content-type", "text/plain;charset=UTF-8")
-            .header("next-action", action)
-            .body(
-                json!([{
-                    "locale": "en",
-                    "region": platform(&player.platform_id)?.to_ascii_lowercase(),
-                    "puuid": puuid,
-                    "gameType": action_queue(queue),
-                    "endedAt": cursor.unwrap_or_default(),
-                    "champion": Value::Null,
-                }])
-                .to_string(),
-            )
-            .send()
-            .await
-            .map_err(|error| {
-                if error.is_timeout() {
-                    ProviderError::Timeout
-                } else {
-                    ProviderError::Http(error)
-                }
-            })?;
+        let response = send_with_retry(
+            self.api
+                .http()
+                .post(public_profile_url(player)?)
+                .header("accept", "text/x-component")
+                .header("content-type", "text/plain;charset=UTF-8")
+                .header("next-action", action)
+                .body(
+                    json!([{
+                        "locale": "en",
+                        "region": platform(&player.platform_id)?.to_ascii_lowercase(),
+                        "puuid": puuid,
+                        "gameType": action_queue(queue),
+                        "endedAt": cursor.unwrap_or_default(),
+                        "champion": Value::Null,
+                    }])
+                    .to_string(),
+                ),
+        )
+        .await?;
         let status = response.status();
         let retry_after = response
             .headers()

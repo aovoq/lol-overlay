@@ -18,6 +18,8 @@ use super::{DeepLolProvider, DEEPLOL};
 const PLAYER_CACHE_TTL: Duration = Duration::from_secs(5 * 60);
 const MATCH_CONCURRENCY: usize = 5;
 const MATCH_PAGE_SIZE: usize = 20;
+const RETRY_ATTEMPTS: usize = 2;
+const RETRY_DELAY: Duration = Duration::from_millis(250);
 
 type Timed<T> = (Instant, T);
 type ChampionCacheKey = (PlayerRef, String, Option<String>, Option<String>);
@@ -82,13 +84,33 @@ fn platform_id(raw: &str) -> Result<String> {
 }
 
 async fn response_json(request: reqwest::RequestBuilder) -> Result<Value> {
-    let response = request.send().await.map_err(|error| {
-        if error.is_timeout() {
-            ProviderError::Timeout
-        } else {
-            ProviderError::Http(error)
+    let mut attempt = 0;
+    let response = loop {
+        attempt += 1;
+        let Some(next) = request.try_clone() else {
+            return Err(ProviderError::Other(
+                "DeepLoL request could not be cloned for retry".into(),
+            ));
+        };
+        match next.send().await {
+            Ok(response) if response.status().is_server_error() && attempt < RETRY_ATTEMPTS => {
+                tokio::time::sleep(RETRY_DELAY).await;
+            }
+            Ok(response) => break response,
+            Err(error)
+                if (error.is_timeout() || error.is_connect()) && attempt < RETRY_ATTEMPTS =>
+            {
+                tokio::time::sleep(RETRY_DELAY).await;
+            }
+            Err(error) => {
+                return Err(if error.is_timeout() {
+                    ProviderError::Timeout
+                } else {
+                    ProviderError::Http(error)
+                });
+            }
         }
-    })?;
+    };
     let status = response.status();
     let retry_after = response
         .headers()
