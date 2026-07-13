@@ -416,7 +416,12 @@ export function createPlayerStatsState(gateway: PlayerStatsGateway = defaultPlay
   async function refresh() {
     const current = player();
     if (!current) return;
-    const request = generation;
+    const request = ++generation;
+    setStatus("loading");
+    setError(undefined);
+    setProfile(undefined);
+    setMatches(undefined);
+    setChampionStats([]);
     try {
       await gateway.refresh(current);
       if (request !== generation) return;
