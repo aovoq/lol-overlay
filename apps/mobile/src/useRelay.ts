@@ -29,6 +29,10 @@ export function useRelay(link: PairingLink) {
   const [state, setState] = useState<ConnectionState>("connecting");
   const [snapshot, setSnapshot] = useState<RelayMessage & { type: "snapshot" }>();
   const [receivedAt, setReceivedAt] = useState(0);
+  // When the socket last (re)opened. The desktop publishes a snapshot every
+  // couple of seconds while it is alive, so "socket open but nothing received
+  // since" is how a producer-less (orphaned) session looks.
+  const [connectedAt, setConnectedAt] = useState(0);
   const [error, setError] = useState("");
   const consecutiveFailures = useRef(0);
   const everHealthy = useRef(false);
@@ -61,6 +65,7 @@ export function useRelay(link: PairingLink) {
       socket.onopen = () => {
         setError("");
         setState("waiting");
+        setConnectedAt(Date.now());
         // Do not reset consecutiveFailures here — open-then-immediate-close
         // loops would otherwise reconnect forever.
       };
@@ -144,6 +149,7 @@ export function useRelay(link: PairingLink) {
     state,
     snapshot: snapshot?.snapshot ?? null,
     receivedAt,
+    connectedAt,
     error,
     respondToReadyCheck,
   };

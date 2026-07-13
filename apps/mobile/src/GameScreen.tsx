@@ -318,7 +318,7 @@ export function GameScreen({
   link: PairingLink;
   onDisconnect: () => void;
 }) {
-  const { state, snapshot, receivedAt, error, respondToReadyCheck } = useRelay(link);
+  const { state, snapshot, receivedAt, connectedAt, error, respondToReadyCheck } = useRelay(link);
   const version = useDataDragonVersion();
   const [now, setNow] = useState(Date.now());
   const [page, setPage] = useState(0);
@@ -343,7 +343,11 @@ export function GameScreen({
     pager.current?.scrollTo({ x: 0, animated: false });
   }, [width]);
 
-  const stale = receivedAt > 0 && now - receivedAt > 6_000;
+  // The desktop publishes a snapshot every ~2s while it runs, so silence
+  // means the producer is gone — even if no snapshot ever arrived (a phone
+  // paired to a session whose desktop app was killed sees exactly that).
+  const lastAliveAt = Math.max(receivedAt, connectedAt);
+  const stale = lastAliveAt > 0 && now - lastAliveAt > 6_000;
   const gameTime = snapshot?.game
     ? snapshot.game.gameTime + Math.max(0, now - receivedAt) / 1000
     : 0;
@@ -387,28 +391,32 @@ export function GameScreen({
           <StatusLine state={state} stale={stale} />
         </View>
         <View style={styles.waitingContent}>
-          {!readyCheck && <ActivityIndicator color="#ff465d" size="large" />}
+          {!readyCheck && !stale && <ActivityIndicator color="#ff465d" size="large" />}
           <Text style={styles.waitingTitle}>
             {state === "error"
               ? "接続できません"
-              : readyCheck
-                ? "マッチが見つかりました"
-                : matchmaking?.state === "searching"
-                  ? `検索中 ${formatTime(matchmaking.timeInQueue + Math.max(0, now - receivedAt) / 1000)}`
-                  : "試合を待っています"}
+              : stale
+                ? "Windowsと通信できません"
+                : readyCheck
+                  ? "マッチが見つかりました"
+                  : matchmaking?.state === "searching"
+                    ? `検索中 ${formatTime(matchmaking.timeInQueue + Math.max(0, now - receivedAt) / 1000)}`
+                    : "試合を待っています"}
           </Text>
           <Text style={styles.waitingCopy}>
             {error ||
               responseError ||
-              (readyCheck
-                ? matchmaking.playerResponse === "accepted"
-                  ? "承諾しました"
-                  : matchmaking.playerResponse === "declined"
-                    ? "拒否しました"
-                    : "時間内に応答してください"
-                : matchmaking?.state === "searching"
-                  ? `予想待ち時間 ${formatTime(matchmaking.estimatedQueueTime)}`
-                  : "WindowsでLoLの試合が始まると自動で表示します。")}
+              (stale
+                ? "Windows側のデスクトップアプリが起動しているか確認してください。復帰しない場合は接続を解除して再ペアリングしてください。"
+                : readyCheck
+                  ? matchmaking.playerResponse === "accepted"
+                    ? "承諾しました"
+                    : matchmaking.playerResponse === "declined"
+                      ? "拒否しました"
+                      : "時間内に応答してください"
+                  : matchmaking?.state === "searching"
+                    ? `予想待ち時間 ${formatTime(matchmaking.estimatedQueueTime)}`
+                    : "WindowsでLoLの試合が始まると自動で表示します。")}
           </Text>
           {readyCheck && matchmaking.playerResponse === "none" && (
             <View style={styles.readyActions}>
