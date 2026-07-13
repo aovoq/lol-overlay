@@ -85,6 +85,9 @@ pub async fn mock_champ_select_loop(app: AppHandle, engine: Arc<Engine>, generat
             },
         );
         engine::emit_champ_select(&app, &engine, ev.clone());
+        // Keep the phone's heartbeat alive too — the poller is paused while
+        // any mock stage is active, so nothing else publishes for it.
+        engine.mobile.publish_idle(&app, "ChampSelect", true, None);
         tokio::time::sleep(Duration::from_millis(1500)).await;
     }
 

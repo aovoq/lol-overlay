@@ -97,6 +97,18 @@ pub fn run() {
                 app.path().app_config_dir()?.join("settings.json"),
             )?;
 
+            // Resume the mobile relay session a previous run left behind
+            // (dev rebuilds kill the process without revoking; the paired
+            // phone keeps listening to that session).
+            engine
+                .mobile
+                .set_store_path(app.path().app_config_dir()?.join("mobile-session.json"));
+            {
+                let relay = engine.mobile.clone();
+                let handle = app.handle().clone();
+                tauri::async_runtime::spawn(async move { relay.restore(&handle).await });
+            }
+
             if let Some(win) = app.get_webview_window("main") {
                 // Start click-through so the overlay never steals game clicks.
                 let _ = win.set_ignore_cursor_events(true);
@@ -162,8 +174,19 @@ pub fn run() {
             commands::start_mobile_pairing,
             commands::stop_mobile_pairing,
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .build(tauri::generate_context!())
+        .expect("error while running tauri application")
+        .run(|app_handle, event| {
+            if matches!(event, tauri::RunEvent::Exit) {
+                // Graceful quit: revoke the relay session so the paired phone
+                // is told the desktop went away instead of waiting forever.
+                let relay = app_handle.state::<Arc<Engine>>().mobile.clone();
+                let _ = tauri::async_runtime::block_on(tokio::time::timeout(
+                    Duration::from_secs(3),
+                    async move { relay.shutdown().await },
+                ));
+            }
+        });
 }
 
 const CHAMP_SELECT_WS_RETRY_DELAY: Duration = Duration::from_secs(3);
