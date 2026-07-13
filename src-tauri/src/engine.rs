@@ -53,7 +53,10 @@ pub struct Settings {
     #[serde(default, alias = "dataSource")]
     pub build_data_source: ProviderKind,
     /// Player stats are selected independently and default to DeepLoL.
-    #[serde(default)]
+    #[serde(
+        default = "default_player_stats_source",
+        deserialize_with = "deserialize_player_stats_source"
+    )]
     pub player_stats_source: ProviderKind,
     #[serde(default)]
     pub presentation_mode: PresentationMode,
@@ -71,6 +74,21 @@ pub struct Settings {
 
 fn default_true() -> bool {
     true
+}
+
+fn default_player_stats_source() -> ProviderKind {
+    ProviderKind::Deeplol
+}
+
+fn deserialize_player_stats_source<'de, D>(deserializer: D) -> Result<ProviderKind, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let source = ProviderKind::deserialize(deserializer)?;
+    Ok(match source {
+        ProviderKind::Deeplol | ProviderKind::Opgg => source,
+        ProviderKind::Ugg | ProviderKind::Lolalytics => default_player_stats_source(),
+    })
 }
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -966,5 +984,25 @@ mod tests {
         let serialized = serde_json::to_value(settings).expect("serialize");
         assert_eq!(serialized["buildDataSource"], "ugg");
         assert!(serialized.get("dataSource").is_none());
+    }
+
+    #[test]
+    fn settings_repair_build_only_player_sources() {
+        for unsupported in ["ugg", "lolalytics"] {
+            let settings: Settings = serde_json::from_value(json!({
+                "buildDataSource": unsupported,
+                "playerStatsSource": unsupported,
+            }))
+            .expect("stored settings");
+            assert_eq!(settings.build_data_source.as_str(), unsupported);
+            assert_eq!(settings.player_stats_source, ProviderKind::Deeplol);
+            assert_eq!(
+                serde_json::to_value(settings).unwrap()["playerStatsSource"],
+                "deeplol"
+            );
+        }
+
+        let opgg: Settings = serde_json::from_value(json!({"playerStatsSource": "opgg"})).unwrap();
+        assert_eq!(opgg.player_stats_source, ProviderKind::Opgg);
     }
 }

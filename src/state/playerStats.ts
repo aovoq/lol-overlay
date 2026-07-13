@@ -244,10 +244,54 @@ function classifyError(error: unknown): PlayerViewError {
   return { kind: "unknown", message };
 }
 
+function playerSource(value: string): PlayerStatsSource | undefined {
+  return value === "deeplol" || value === "opgg" ? value : undefined;
+}
+
+function assertResponseSource(expected: PlayerStatsSource, actual: string, surface: string) {
+  if (actual !== expected) {
+    throw {
+      kind: "invalidData",
+      message: `${surface} returned ${actual || "an empty source"} while ${expected} was selected`,
+    } satisfies PlayerViewError;
+  }
+}
+
+function mergeMatchPages(current: MatchPage, next: MatchPage): MatchPage {
+  if (next.source !== current.source) {
+    throw {
+      kind: "invalidData",
+      message: `match pagination mixed ${current.source} and ${next.source}`,
+    } satisfies PlayerViewError;
+  }
+  const matches = [...current.matches];
+  const successfulIds = new Set(matches.map((match) => match.matchId));
+  for (const match of next.matches) {
+    if (!successfulIds.has(match.matchId)) {
+      successfulIds.add(match.matchId);
+      matches.push(match);
+    }
+  }
+  const partialFailures = [] as MatchPage["partialFailures"];
+  const failedIds = new Set<string>();
+  for (const failure of [...current.partialFailures, ...next.partialFailures]) {
+    if (!successfulIds.has(failure.matchId) && !failedIds.has(failure.matchId)) {
+      failedIds.add(failure.matchId);
+      partialFailures.push(failure);
+    }
+  }
+  const madeProgress =
+    matches.length > current.matches.length ||
+    partialFailures.length > current.partialFailures.length;
+  const nextCursor =
+    madeProgress && next.nextCursor !== current.nextCursor ? next.nextCursor : undefined;
+  return { ...next, matches, partialFailures, nextCursor };
+}
+
 export function createPlayerStatsState(gateway: PlayerStatsGateway = defaultPlayerStatsGateway()) {
   const [status, setStatus] = createSignal<PlayerViewStatus>("idle");
   const [sources, setSources] = createSignal<PlayerProviderDescriptor[]>([]);
-  const [source, setSourceState] = createSignal("deeplol");
+  const [source, setSourceState] = createSignal<PlayerStatsSource>("deeplol");
   const [player, setPlayer] = createSignal<PlayerRef>();
   const [profile, setProfile] = createSignal<PlayerProfile>();
   const [matches, setMatches] = createSignal<MatchPage>();
@@ -255,6 +299,9 @@ export function createPlayerStatsState(gateway: PlayerStatsGateway = defaultPlay
   const [error, setError] = createSignal<PlayerViewError>();
   const [loadingMore, setLoadingMore] = createSignal(false);
   let generation = 0;
+  let sourceSelection = 0;
+  let pendingSource: PlayerStatsSource | undefined;
+  let sourceQueue: Promise<void> = Promise.resolve();
   let queueFilter: number | undefined;
   let championFilters: { season?: string; queue?: string; role?: string } = {};
 
@@ -264,7 +311,8 @@ export function createPlayerStatsState(gateway: PlayerStatsGateway = defaultPlay
       (entry) => ["deeplol", "opgg"].includes(entry.id) && entry.capabilities.playerProfile,
     );
     setSources(supported);
-    if (supported.some((entry) => entry.id === active)) setSourceState(active);
+    const parsed = playerSource(active);
+    if (parsed && supported.some((entry) => entry.id === parsed)) setSourceState(parsed);
   }
 
   async function search(nextPlayer: PlayerRef, forceRefresh = false) {
@@ -276,12 +324,19 @@ export function createPlayerStatsState(gateway: PlayerStatsGateway = defaultPlay
     setMatches(undefined);
     setChampionStats([]);
     try {
-      const [nextProfile, nextMatches, nextChampions] = await Promise.all([
-        gateway.profile(nextPlayer, forceRefresh),
+      const expectedSource = source();
+      const nextProfile = await gateway.profile(nextPlayer, forceRefresh);
+      if (request !== generation) return;
+      assertResponseSource(expectedSource, nextProfile.source, "profile");
+      const [nextMatches, nextChampions] = await Promise.all([
         gateway.matches(nextPlayer, undefined, queueFilter, forceRefresh),
         gateway.championStats(nextPlayer, championFilters, forceRefresh),
       ]);
       if (request !== generation) return;
+      assertResponseSource(expectedSource, nextMatches.source, "matches");
+      for (const champion of nextChampions) {
+        assertResponseSource(expectedSource, champion.source, "champion stats");
+      }
       setProfile(nextProfile);
       setMatches(nextMatches);
       setChampionStats(nextChampions);
@@ -296,18 +351,33 @@ export function createPlayerStatsState(gateway: PlayerStatsGateway = defaultPlay
   }
 
   async function selectSource(nextSource: string) {
-    if (nextSource === source()) return;
+    const parsed = playerSource(nextSource);
     const descriptor = sources().find((entry) => entry.id === nextSource);
-    if (!descriptor?.capabilities.playerProfile) throw new Error("Unsupported player provider");
-    const request = ++generation;
+    if (!parsed || !descriptor?.capabilities.playerProfile) {
+      throw new Error("Unsupported player provider");
+    }
+    if (parsed === source() && pendingSource === undefined) return;
+    const selection = ++sourceSelection;
+    pendingSource = parsed;
+    generation += 1;
+    setStatus("loading");
+    setError(undefined);
+    setProfile(undefined);
+    setMatches(undefined);
+    setChampionStats([]);
+    const operation = sourceQueue.then(() => gateway.setSource(parsed));
+    sourceQueue = operation.catch(() => undefined);
     try {
-      await gateway.setSource(nextSource);
-      if (request !== generation) return;
-      setSourceState(nextSource);
+      await operation;
+      if (selection !== sourceSelection) return;
+      pendingSource = undefined;
+      setSourceState(parsed);
       const current = player();
       if (current) await search(current);
+      else setStatus("idle");
     } catch (cause) {
-      if (request !== generation) return;
+      if (selection !== sourceSelection) return;
+      pendingSource = undefined;
       setError(classifyError(cause));
       setStatus("error");
     }
@@ -322,15 +392,11 @@ export function createPlayerStatsState(gateway: PlayerStatsGateway = defaultPlay
     try {
       const next = await gateway.matches(current, page.nextCursor, queueFilter, false);
       if (request !== generation) return;
-      setMatches({
-        ...next,
-        matches: [...page.matches, ...next.matches],
-        partialFailures: [...page.partialFailures, ...next.partialFailures],
-      });
+      assertResponseSource(source(), next.source, "matches");
+      const merged = mergeMatchPages(page, next);
+      setMatches(merged);
       setError(undefined);
-      setStatus(
-        page.partialFailures.length + next.partialFailures.length > 0 ? "partial" : "ready",
-      );
+      setStatus(merged.partialFailures.length > 0 ? "partial" : "ready");
     } catch (cause) {
       if (request === generation) {
         setError(classifyError(cause));

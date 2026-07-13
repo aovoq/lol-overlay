@@ -10,10 +10,10 @@ import { createPlayerStatsState, type PlayerStatsGateway } from "./playerStats";
 
 const player: PlayerRef = { platformId: "KR", gameName: "Faker", tagLine: "KR1" };
 
-const profile = (source: string): PlayerProfile =>
+const profile = (source: string, gameName = player.gameName): PlayerProfile =>
   ({
     source,
-    identity: { ...player, puuid: null },
+    identity: { ...player, gameName, puuid: null },
     ranks: [],
     previousSeasons: [],
     fetchedAt: 1,
@@ -87,16 +87,16 @@ describe("player stats state", () => {
       gateway({
         profile: async () => {
           calls += 1;
-          return calls === 1 ? slow.promise : profile("new");
+          return calls === 1 ? slow.promise : profile("deeplol", "New");
         },
       }),
     );
     const first = state.search(player);
     const secondPlayer = { ...player, gameName: "New" };
     await state.search(secondPlayer);
-    slow.resolve(profile("old"));
+    slow.resolve(profile("deeplol", "Old"));
     await first;
-    expect(state.profile()?.source).toBe("new");
+    expect(state.profile()?.identity.gameName).toBe("New");
     expect(state.player()).toEqual(secondPlayer);
   });
 
@@ -122,6 +122,52 @@ describe("player stats state", () => {
     more.resolve(page("deeplol", ["b"]));
     await Promise.all([first, duplicate]);
     expect(state.matches()?.matches.map((match) => match.matchId)).toEqual(["a", "b"]);
+  });
+
+  it("deduplicates overlapping pages and stops a repeated cursor loop", async () => {
+    const state = createPlayerStatsState(
+      gateway({
+        matches: async (_player, cursor) =>
+          cursor ? page("deeplol", ["a", "b"], "20") : page("deeplol", ["a"], "20"),
+      }),
+    );
+    await state.search(player);
+    await state.loadMore();
+    expect(state.matches()?.matches.map((match) => match.matchId)).toEqual(["a", "b"]);
+    expect(state.matches()?.nextCursor).toBeUndefined();
+  });
+
+  it("rejects mixed-provider responses before publishing partial state", async () => {
+    const state = createPlayerStatsState(
+      gateway({ matches: async () => page("opgg", ["foreign"]) }),
+    );
+    await state.search(player);
+    expect(state.status()).toBe("error");
+    expect(state.error()).toMatchObject({ kind: "invalidData" });
+    expect(state.profile()).toBeUndefined();
+    expect(state.matches()).toBeUndefined();
+  });
+
+  it("orders overlapping provider selections so the last source wins", async () => {
+    const first = deferred<void>();
+    const persisted: string[] = [];
+    let calls = 0;
+    const state = createPlayerStatsState(
+      gateway({
+        setSource: async (next) => {
+          calls += 1;
+          if (calls === 1) await first.promise;
+          persisted.push(next);
+        },
+      }),
+    );
+    await state.initialize();
+    const opgg = state.selectSource("opgg");
+    const deeplol = state.selectSource("deeplol");
+    first.resolve();
+    await Promise.all([opgg, deeplol]);
+    expect(persisted).toEqual(["opgg", "deeplol"]);
+    expect(state.source()).toBe("deeplol");
   });
 
   it("classifies 404 and 429 states", async () => {

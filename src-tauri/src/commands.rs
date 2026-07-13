@@ -505,9 +505,18 @@ fn apply_player_stats_source(engine: &Engine, source: &str) -> error::PlayerResu
             .into(),
         );
     }
+    let previous_active = engine.player_provider.active();
+    let previous_setting = engine.settings().player_stats_source;
     engine.player_provider.set_active(parsed)?;
     engine.settings.lock().player_stats_source = parsed;
-    engine.persist()?;
+    if let Err(error) = engine.persist() {
+        engine
+            .player_provider
+            .set_active(previous_active)
+            .expect("previous Player Stats provider remains registered");
+        engine.settings.lock().player_stats_source = previous_setting;
+        return Err(error.into());
+    }
     Ok(())
 }
 
@@ -924,5 +933,23 @@ mod player_command_tests {
         assert_eq!(serde_json::to_value(error).unwrap()["kind"], "validation");
         assert_eq!(engine.settings().player_stats_source, ProviderKind::Opgg);
         let _ = std::fs::remove_file(path);
+    }
+
+    #[test]
+    fn player_source_command_rolls_back_when_persistence_fails() {
+        let engine = engine();
+        let parent = std::env::temp_dir().join(format!(
+            "lol-overlay-player-command-blocked-parent-{}",
+            std::process::id()
+        ));
+        std::fs::write(&parent, b"not a directory").unwrap();
+        *engine.store_path.lock() = Some(parent.join("settings.json"));
+
+        let error = apply_player_stats_source(&engine, "opgg").expect_err("persist must fail");
+        assert_eq!(serde_json::to_value(error).unwrap()["kind"], "unknown");
+        assert_eq!(engine.player_provider.active(), ProviderKind::Deeplol);
+        assert_eq!(engine.settings().player_stats_source, ProviderKind::Deeplol);
+
+        let _ = std::fs::remove_file(parent);
     }
 }
