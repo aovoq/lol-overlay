@@ -32,6 +32,7 @@ use overlay_provider::{
 use overlay_types::GameSnapshot;
 use tokio::sync::RwLock;
 
+mod player;
 mod runes;
 mod types;
 
@@ -65,6 +66,7 @@ pub struct DeepLolProvider {
     /// Aram-only zeroed dataset from `/champion/rank`.
     tier: String,
     cache: RwLock<Cache>,
+    player_cache: RwLock<player::PlayerCache>,
 }
 
 #[derive(Default)]
@@ -109,6 +111,7 @@ impl DeepLolProvider {
             platform_id: std::sync::RwLock::new("KR".into()),
             tier: "Emerald+".into(),
             cache: RwLock::new(Cache::default()),
+            player_cache: RwLock::new(player::PlayerCache::default()),
         })
     }
 

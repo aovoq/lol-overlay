@@ -8,6 +8,7 @@ overlay-provider = { workspace = true }
 overlay-types = { workspace = true }
 overlay-ddragon = { workspace = true }
 async-trait = { workspace = true }
+futures = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 reqwest = { workspace = true }
