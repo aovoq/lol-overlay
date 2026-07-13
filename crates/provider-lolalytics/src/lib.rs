@@ -232,8 +232,8 @@ fn parse_item_combo(combo: &str) -> Vec<i64> {
 
 /// Flatten every champion bucket of the `tier` payload for one lane into sorted
 /// [`TierEntry`] rows. A champion can appear once per lane; if it somehow
-/// repeats we keep the row with the most games. Win-rate delta is left at 0.0
-/// (the 30-day aggregate has no previous-patch baseline to diff against).
+/// repeats we keep the row with the most games. Win-rate delta is unknown
+/// because the 30-day aggregate has no previous-patch baseline to diff against.
 fn tier_entries(tier: &types::TierResponse, lane: &str) -> Vec<TierEntry> {
     let mut by_champion: HashMap<i64, TierEntry> = HashMap::new();
     for group in tier.tier.values() {
@@ -248,18 +248,21 @@ fn tier_entries(tier: &types::TierResponse, lane: &str) -> Vec<TierEntry> {
             if pick_rate < MIN_TIER_PICK_RATE {
                 continue;
             }
+            let mut provenance = overlay_types::recommendation::DataProvenance::now("lolalytics");
+            provenance.sample_window = Some("30d".into());
             let entry = TierEntry {
                 champion_id,
                 win_rate: champ.wr / 100.0,
-                win_rate_delta: 0.0,
-                games: champ.games,
+                win_rate_delta: None,
+                games: Some(champ.games),
                 pick_rate,
                 ban_rate: champ.br / 100.0,
+                provenance,
             };
             by_champion
                 .entry(champion_id)
                 .and_modify(|existing| {
-                    if champ.games > existing.games {
+                    if champ.games > existing.games.unwrap_or_default() {
                         *existing = entry.clone();
                     }
                 })

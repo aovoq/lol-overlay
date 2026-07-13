@@ -30,6 +30,7 @@ use overlay_provider::{
     SkillOrder, TierEntry, MIN_MATCHUP_GAMES,
 };
 use overlay_types::GameSnapshot;
+use serde::de::DeserializeOwned;
 use tokio::sync::RwLock;
 
 mod player;
@@ -49,6 +50,60 @@ const MIN_RUNE_SAMPLES: usize = 3;
 const CACHE_TTL: Duration = Duration::from_hours(6);
 const RETRY_ATTEMPTS: usize = 2;
 const RETRY_DELAY: Duration = Duration::from_millis(250);
+
+fn diagnostic_fragment(body: &str) -> String {
+    body.chars()
+        .map(|character| {
+            if character.is_control() {
+                ' '
+            } else {
+                character
+            }
+        })
+        .take(240)
+        .collect()
+}
+
+fn decode_deeplol_body<T: DeserializeOwned>(
+    status: u16,
+    content_type: Option<&str>,
+    body: &str,
+) -> Result<T> {
+    if status == 429 {
+        return Err(ProviderError::RateLimited { retry_after: None });
+    }
+    if !(200..300).contains(&status) {
+        return Err(ProviderError::Other(format!(
+            "DeepLoL HTTP {status} content-type={}: {}",
+            content_type.unwrap_or("missing"),
+            diagnostic_fragment(body)
+        )));
+    }
+    if content_type.is_some_and(|value| !value.to_ascii_lowercase().contains("json")) {
+        return Err(ProviderError::InvalidData(format!(
+            "DeepLoL expected JSON, content-type={}: {}",
+            content_type.unwrap_or("missing"),
+            diagnostic_fragment(body)
+        )));
+    }
+    serde_json::from_str(body).map_err(|error| {
+        ProviderError::InvalidData(format!(
+            "DeepLoL schema mismatch ({error}): {}",
+            diagnostic_fragment(body)
+        ))
+    })
+}
+
+async fn decode_deeplol<T: DeserializeOwned>(response: reqwest::Response) -> Result<T> {
+    let status = response.status().as_u16();
+    let content_type = response
+        .headers()
+        .get(reqwest::header::CONTENT_TYPE)
+        .and_then(|value| value.to_str().ok())
+        .map(str::to_owned);
+    let body = response.text().await?;
+    decode_deeplol_body(status, content_type.as_deref(), &body)
+}
 
 pub struct DeepLolProvider {
     http: reqwest::Client,
@@ -236,7 +291,8 @@ impl DeepLolProvider {
     ) -> Result<BuildResponse> {
         // NOTE: `language` is deliberately omitted — DeepLoL returns an empty
         // body for `/champion/build` when it is present.
-        self.http
+        let response = self
+            .http
             .get(format!("{DEEPLOL}/champion/build"))
             .query(&[
                 ("champion_id", champion_id.to_string()),
@@ -245,11 +301,8 @@ impl DeepLolProvider {
                 ("tier", self.tier.clone()),
             ])
             .send_with_retry()
-            .await?
-            .error_for_status()?
-            .json()
-            .await
-            .map_err(Into::into)
+            .await?;
+        decode_deeplol(response).await
     }
 
     /// Fetch (and cache) the `/champion/rank` payload for one game version.
@@ -262,7 +315,7 @@ impl DeepLolProvider {
                 return Ok(r.clone());
             }
         }
-        let resp: RankResponse = self
+        let response = self
             .http
             .get(format!("{DEEPLOL}/champion/rank"))
             .query(&[
@@ -271,10 +324,8 @@ impl DeepLolProvider {
                 ("game_version", game_version),
             ])
             .send_with_retry()
-            .await?
-            .error_for_status()?
-            .json()
             .await?;
+        let resp: RankResponse = decode_deeplol(response).await?;
         let arc = Arc::new(resp);
         self.cache
             .write()
@@ -399,7 +450,7 @@ impl DeepLolProvider {
         // Gate on the matchup's sample size. NOTE: an invalid pair returns 200
         // with `"stats_by_position": null` (handled by `null_default` → empty
         // map), and win rates here are PERCENT 0–100, unlike everywhere else.
-        let stats: MatchupStatsResponse = self
+        let response = self
             .http
             .get(format!("{DEEPLOL}/matchup/matchup_stats"))
             .query(&[
@@ -407,10 +458,8 @@ impl DeepLolProvider {
                 ("enemy_champion_id", enemy_champion_id.to_string()),
             ])
             .send_with_retry()
-            .await?
-            .error_for_status()?
-            .json()
             .await?;
+        let stats: MatchupStatsResponse = decode_deeplol(response).await?;
         let Some(pos) = stats
             .stats_by_position
             .get(&lane)
@@ -423,7 +472,7 @@ impl DeepLolProvider {
 
         let mut samples: Vec<OtpEntry> = Vec::new();
         for page in 1..=2 {
-            let resp: OtpResponse = self
+            let response = self
                 .http
                 .get(format!("{DEEPLOL}/matchup/OTP_match"))
                 .query(&[
@@ -433,10 +482,8 @@ impl DeepLolProvider {
                     ("player_type", "all".to_string()),
                 ])
                 .send_with_retry()
-                .await?
-                .error_for_status()?
-                .json()
                 .await?;
+            let resp: OtpResponse = decode_deeplol(response).await?;
             samples.extend(resp.match_up_list);
         }
         let filtered: Vec<&OtpEntry> = samples
@@ -474,15 +521,13 @@ impl DeepLolProvider {
 
     async fn fetch_versions(&self) -> Result<Vec<String>> {
         let platform_id = self.platform_id.read().unwrap().clone();
-        let v: VersionResponse = self
+        let response = self
             .http
             .get(format!("{DEEPLOL}/champion/version"))
             .query(&[("cnt", "3"), ("platform_id", platform_id.as_str())])
             .send_with_retry()
-            .await?
-            .error_for_status()?
-            .json()
             .await?;
+        let v: VersionResponse = decode_deeplol(response).await?;
         Ok(v.game_version_list)
     }
 }
@@ -615,7 +660,8 @@ impl BuildProvider for DeepLolProvider {
         let mut rows = tier_rows(&now, prev.as_deref(), lane);
         if let Some(total) = self.calibrate_lane_games(lane, &rows).await {
             for r in &mut rows {
-                r.games = (r.pick_rate * total).round() as i64;
+                r.games = Some((r.pick_rate * total).round() as i64);
+                r.provenance.estimated = true;
             }
         }
         self.cache
@@ -772,15 +818,19 @@ fn tier_rows(now: &RankResponse, prev: Option<&RankResponse>, lane: &str) -> Vec
             if p.win_rate <= 0.0 || p.pick_rate < 0.005 {
                 return None;
             }
+            let mut provenance = overlay_types::recommendation::DataProvenance::now("deeplol");
+            provenance.region = Some("KR".into());
+            provenance.sample_window = Some("current-patch".into());
             Some(TierEntry {
                 champion_id: c.champion_id,
                 win_rate: p.win_rate,
                 win_rate_delta: prev_wr
                     .get(&c.champion_id)
-                    .map_or(0.0, |w| (p.win_rate - w) * 100.0),
-                games: 0,
+                    .map(|w| (p.win_rate - w) * 100.0),
+                games: None,
                 pick_rate: p.pick_rate,
                 ban_rate: p.ban_rate,
+                provenance,
             })
         })
         .collect();

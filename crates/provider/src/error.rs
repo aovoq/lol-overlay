@@ -14,6 +14,8 @@ pub enum ProviderError {
     RateLimited { retry_after: Option<u64> },
     #[error("player-timeout")]
     Timeout,
+    #[error("invalid provider data: {0}")]
+    InvalidData(String),
     #[error("{0}")]
     Other(String),
 }

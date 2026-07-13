@@ -14,8 +14,8 @@ pub use player::{
     SeasonRank,
 };
 pub use recommendation::{
-    CounterEntry, ItemRecommendation, RuneBuild, RuneRecommendation, SkillOrder, ThreatProfile,
-    TierEntry,
+    CounterEntry, DataProvenance, ItemRecommendation, RuneBuild, RuneRecommendation, SkillOrder,
+    ThreatProfile, TierEntry,
 };
 pub use snapshot::{EnemyChampion, GamePlayer, GameSnapshot};
 

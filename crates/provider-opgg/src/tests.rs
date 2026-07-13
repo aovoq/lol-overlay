@@ -135,8 +135,8 @@ fn tier_entries_maps_slug_to_id_converts_percent_and_sorts_by_win_rate() {
     assert!((entries[0].win_rate - 0.535).abs() < 1e-9);
     assert!((entries[0].pick_rate - 0.041).abs() < 1e-9);
     assert!((entries[0].ban_rate - 0.02).abs() < 1e-9);
-    assert_eq!(entries[0].games, 0);
-    assert_eq!(entries[0].win_rate_delta, 0.0);
+    assert_eq!(entries[0].games, None);
+    assert_eq!(entries[0].win_rate_delta, None);
     assert_eq!(entries[1].champion_id, 86);
 }
 

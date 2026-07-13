@@ -38,7 +38,8 @@ impl From<overlay_provider::ProviderError> for Error {
             other @ (overlay_provider::ProviderError::PlayerNotFound
             | overlay_provider::ProviderError::InvalidPlayerRequest(_)
             | overlay_provider::ProviderError::RateLimited { .. }
-            | overlay_provider::ProviderError::Timeout) => Error::Other(other.to_string()),
+            | overlay_provider::ProviderError::Timeout
+            | overlay_provider::ProviderError::InvalidData(_)) => Error::Other(other.to_string()),
             overlay_provider::ProviderError::Other(s) => Error::Other(s),
         }
     }

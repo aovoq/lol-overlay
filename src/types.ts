@@ -138,18 +138,30 @@ export type PresentationMode = "overlay" | "window";
 // ---- command results (provider/mod.rs) ----
 
 /** One row of the per-role tier list. */
+export interface DataProvenance {
+  provider: string;
+  region?: string | null;
+  patch?: string | null;
+  rank?: string | null;
+  sampleWindow?: string | null;
+  fetchedAt: number;
+  estimated: boolean;
+  fallbackFrom?: string | null;
+}
+
 export interface TierEntry {
   championId: number;
   /** 0..1 */
   winRate: number;
-  /** Percentage points vs the previous patch (0.0 = unknown). */
-  winRateDelta: number;
-  /** Estimated games this patch (0 = unknown; UI falls back to pick rate). */
-  games: number;
+  /** Percentage points vs the previous patch; missing when unavailable. */
+  winRateDelta?: number | null;
+  /** Estimated games this patch; missing when unavailable. */
+  games?: number | null;
   /** 0..1 */
   pickRate: number;
   /** 0..1 */
   banRate: number;
+  provenance: DataProvenance;
 }
 
 /** A champion that counters the queried champion; winRate is the counter's. */

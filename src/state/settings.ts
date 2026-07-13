@@ -1,7 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { createSignal } from "solid-js";
-import type { PresentationMode, Settings } from "../types";
+import type { PlayerProviderDescriptor, PresentationMode, Settings } from "../types";
 
 export type ThemeMode = "dark" | "light";
 
@@ -23,6 +23,8 @@ const [importSpells, setImportSpellsState] = createSignal(true);
 const [spellsFlipped, setSpellsFlippedState] = createSignal(false);
 const [dataSource, setDataSourceState] = createSignal("deeplol");
 const [dataSources, setDataSources] = createSignal<string[]>(["deeplol"]);
+const [playerStatsSource, setPlayerStatsSourceState] = createSignal("deeplol");
+const [playerStatsSources, setPlayerStatsSources] = createSignal<PlayerProviderDescriptor[]>([]);
 const [presentationMode, setPresentationModeState] = createSignal<PresentationMode>("overlay");
 const [themeMode, setThemeModeState] = createSignal<ThemeMode>(storedTheme());
 const [developerMode, setDeveloperModeState] = createSignal(false);
@@ -40,6 +42,8 @@ export {
   developerMode,
   importSpells,
   presentationMode,
+  playerStatsSource,
+  playerStatsSources,
   setAutoImport,
   spellsFlipped,
   themeMode,
@@ -72,6 +76,11 @@ export function setDataSource(kind: string) {
   invoke("set_data_source", { kind }).catch(() => {});
 }
 
+export function setPlayerStatsSource(source: string) {
+  setPlayerStatsSourceState(source);
+  invoke("set_player_stats_source", { source }).catch(() => {});
+}
+
 export function setDeveloperMode(enabled: boolean) {
   setDeveloperModeState(enabled);
   invoke("set_developer_mode", { enabled }).catch(() => {});
@@ -93,6 +102,7 @@ export function applySettings(s: Partial<Settings>) {
   if (s.importSpells !== undefined) setImportSpellsState(s.importSpells);
   if (s.spellsFlipped !== undefined) setSpellsFlippedState(s.spellsFlipped);
   if (s.buildDataSource !== undefined) setDataSourceState(s.buildDataSource);
+  if (s.playerStatsSource !== undefined) setPlayerStatsSourceState(s.playerStatsSource);
   if (s.presentationMode !== undefined) setPresentationModeState(s.presentationMode);
   if (s.developerMode !== undefined) setDeveloperModeState(s.developerMode);
   if (s.autoOpenChampion !== undefined) setAutoOpenDraftState(s.autoOpenChampion);
@@ -113,4 +123,17 @@ invoke<string>("get_data_source")
   .then((kind) => setDataSourceState(kind))
   .catch(() => {});
 
+invoke<PlayerProviderDescriptor[]>("list_player_stats_sources")
+  .then((sources) =>
+    setPlayerStatsSources(sources.filter((source) => source.capabilities.playerProfile)),
+  )
+  .catch(() => {});
+
+invoke<string>("get_player_stats_source")
+  .then((source) => setPlayerStatsSourceState(source))
+  .catch(() => {});
+
 listen<string>("data-source", (event) => setDataSourceState(event.payload)).catch(() => {});
+listen<string>("player-stats-source", (event) => setPlayerStatsSourceState(event.payload)).catch(
+  () => {},
+);

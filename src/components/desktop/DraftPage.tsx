@@ -46,10 +46,16 @@ function championKeyByImage(rawName: string): number {
   return allChampions().find((c) => c.imageId.toLowerCase() === needle)?.key ?? 0;
 }
 
-function ChampRow(props: { championId: number; rank?: number; children?: JSX.Element }) {
+function ChampRow(props: {
+  championId: number;
+  rank?: number;
+  title?: string;
+  children?: JSX.Element;
+}) {
   return (
     <div
       class="flex-none flex items-center gap-2 px-2 py-1 rounded-md hover:bg-hx-bg-raised"
+      title={props.title}
       onMouseEnter={() => setHoverChampId(props.championId)}
       onMouseLeave={() => setHoverChampId(0)}
     >
@@ -88,23 +94,27 @@ function ColHeader(props: { rank?: boolean; cols: { label: string; class: string
 function StrongRow(props: { entry: TierEntry; rank: number }) {
   const t = () => props.entry;
   const delta = () => {
-    const d = t().winRateDelta;
+    const d = t().winRateDelta ?? 0;
     if (Math.abs(d) < 0.5) return null;
     return `${d > 0 ? "▲" : "▼"}${Math.abs(d).toFixed(1)}`;
   };
 
   return (
-    <ChampRow championId={t().championId} rank={props.rank}>
+    <ChampRow
+      championId={t().championId}
+      rank={props.rank}
+      title={`${t().provenance.provider} · ${t().provenance.region ?? "region unknown"} · ${t().provenance.patch ?? t().provenance.sampleWindow ?? "sample unknown"}${t().provenance.fallbackFrom ? ` · fallback from ${t().provenance.fallbackFrom}` : ""}`}
+    >
       <span class="w-12 text-right font-bold text-hx-text">{fmtPct(t().winRate)}</span>
       <span
         class={`w-[38px] text-right text-[11px] ${
-          delta() ? (t().winRateDelta > 0 ? "text-hx-up" : "text-hx-red") : ""
+          delta() ? ((t().winRateDelta ?? 0) > 0 ? "text-hx-up" : "text-hx-red") : ""
         }`}
       >
         {delta()}
       </span>
       <span class="w-11 text-right text-xs text-hx-muted">
-        {t().games > 0 ? fmtCompact(t().games) : fmtPct(t().pickRate)}
+        {(t().games ?? 0) > 0 ? fmtCompact(t().games ?? 0) : fmtPct(t().pickRate)}
       </span>
     </ChampRow>
   );
@@ -113,7 +123,11 @@ function StrongRow(props: { entry: TierEntry; rank: number }) {
 function BanRow(props: { entry: TierEntry; rank: number }) {
   const t = () => props.entry;
   return (
-    <ChampRow championId={t().championId} rank={props.rank}>
+    <ChampRow
+      championId={t().championId}
+      rank={props.rank}
+      title={`${t().provenance.provider} · ${t().provenance.region ?? "region unknown"} · ${t().provenance.patch ?? t().provenance.sampleWindow ?? "sample unknown"}`}
+    >
       <span class="w-12 text-right font-bold text-hx-red">{fmtPct(t().winRate)}</span>
       <span class="w-11 text-right text-xs text-hx-muted">{fmtPct(t().pickRate)}</span>
       <span class="w-11 text-right text-xs text-hx-muted">{fmtPct(t().banRate)}</span>

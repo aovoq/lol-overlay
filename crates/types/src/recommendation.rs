@@ -1,6 +1,41 @@
 //! Provider recommendation types shared with the frontend.
 
 use serde::Serialize;
+use std::time::{SystemTime, UNIX_EPOCH};
+
+/// Describes the population and freshness behind a normalized provider result.
+/// Optional fields remain absent when the upstream source does not disclose them.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DataProvenance {
+    pub provider: String,
+    pub region: Option<String>,
+    pub patch: Option<String>,
+    pub rank: Option<String>,
+    pub sample_window: Option<String>,
+    pub fetched_at: u64,
+    pub estimated: bool,
+    pub fallback_from: Option<String>,
+}
+
+impl DataProvenance {
+    pub fn now(provider: impl Into<String>) -> Self {
+        let fetched_at = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_millis() as u64;
+        Self {
+            provider: provider.into(),
+            region: None,
+            patch: None,
+            rank: None,
+            sample_window: None,
+            fetched_at,
+            estimated: false,
+            fallback_from: None,
+        }
+    }
+}
 
 /// Damage-profile of the enemy team, derived from their champions. A real
 /// provider would compute this from champion data; it drives armor/MR choices.
@@ -53,14 +88,16 @@ pub struct TierEntry {
     pub champion_id: i64,
     /// 0..1
     pub win_rate: f64,
-    /// Win-rate change vs the previous patch, in percentage points (0.0 = unknown).
-    pub win_rate_delta: f64,
-    /// Estimated games this patch (0 = unknown; UI falls back to pick rate).
-    pub games: i64,
+    /// Win-rate change vs the previous patch, in percentage points.
+    /// `None` means the provider did not expose a comparable prior sample.
+    pub win_rate_delta: Option<f64>,
+    /// Estimated games this patch. `None` is distinct from a real zero-game sample.
+    pub games: Option<i64>,
     /// 0..1
     pub pick_rate: f64,
     /// 0..1
     pub ban_rate: f64,
+    pub provenance: DataProvenance,
 }
 
 /// A champion that counters the queried champion. `win_rate` is the COUNTER

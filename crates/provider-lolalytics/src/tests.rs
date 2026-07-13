@@ -56,8 +56,8 @@ fn tier_entries_convert_percentages_filter_fringe_and_sort() {
     assert!((rows[0].win_rate - 0.535).abs() < 1e-9);
     assert!((rows[0].pick_rate - 0.041).abs() < 1e-9);
     assert!((rows[0].ban_rate - 0.02).abs() < 1e-9);
-    assert_eq!(rows[0].games, 12000);
-    assert_eq!(rows[0].win_rate_delta, 0.0);
+    assert_eq!(rows[0].games, Some(12000));
+    assert_eq!(rows[0].win_rate_delta, None);
     assert_eq!(rows[1].champion_id, 266);
     // fringe champion filtered out
     assert!(rows.iter().all(|r| r.champion_id != 1));

@@ -299,8 +299,8 @@ fn counter_entries(rows: &[CounterRow], slug_to_id: &HashMap<String, i64>) -> Ve
 }
 
 /// Map one lane's op.gg tier rows to the shared [`TierEntry`] contract,
-/// sorted by win rate descending. `games` is left at 0 (unknown) and
-/// `win_rate_delta` at 0.0 — op.gg's tier rows carry a `rank_prev` (previous
+/// sorted by win rate descending. `games` and `win_rate_delta` are unknown:
+/// op.gg's tier rows carry a `rank_prev` (previous
 /// patch's rank) but no previous win rate to diff against, and no raw sample
 /// count at all, only percentages.
 fn tier_entries(rows: &[TierRow], slug_to_id: &HashMap<String, i64>) -> Vec<TierEntry> {
@@ -308,13 +308,17 @@ fn tier_entries(rows: &[TierRow], slug_to_id: &HashMap<String, i64>) -> Vec<Tier
         .iter()
         .filter_map(|row| {
             let champion_id = slug_to_id.get(&normalize(&row.key)).copied()?;
+            let mut provenance = overlay_types::recommendation::DataProvenance::now("opgg");
+            provenance.region = Some("global".into());
+            provenance.sample_window = Some("current-patch".into());
             Some(TierEntry {
                 champion_id,
                 win_rate: row.win_rate / 100.0,
-                win_rate_delta: 0.0,
-                games: 0,
+                win_rate_delta: None,
+                games: None,
                 pick_rate: row.pick_rate / 100.0,
                 ban_rate: row.ban_rate / 100.0,
+                provenance,
             })
         })
         .collect();

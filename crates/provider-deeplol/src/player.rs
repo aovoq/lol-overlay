@@ -93,9 +93,41 @@ async fn response_json(request: reqwest::RequestBuilder) -> Result<Value> {
         .get(reqwest::header::RETRY_AFTER)
         .and_then(|value| value.to_str().ok())
         .map(str::to_owned);
+    let content_type = response
+        .headers()
+        .get(reqwest::header::CONTENT_TYPE)
+        .and_then(|value| value.to_str().ok())
+        .map(str::to_owned);
     let body = response.text().await?;
-    if !status.is_success() {
-        let detail = serde_json::from_str::<Value>(&body)
+    response_json_body(
+        status.as_u16(),
+        content_type.as_deref(),
+        retry_after.as_deref(),
+        &body,
+    )
+}
+
+fn safe_body_fragment(body: &str) -> String {
+    body.chars()
+        .map(|character| {
+            if character.is_control() {
+                ' '
+            } else {
+                character
+            }
+        })
+        .take(240)
+        .collect::<String>()
+}
+
+fn response_json_body(
+    status: u16,
+    content_type: Option<&str>,
+    retry_after: Option<&str>,
+    body: &str,
+) -> Result<Value> {
+    if !(200..300).contains(&status) {
+        let detail = serde_json::from_str::<Value>(body)
             .ok()
             .and_then(|value| {
                 value
@@ -103,8 +135,8 @@ async fn response_json(request: reqwest::RequestBuilder) -> Result<Value> {
                     .or_else(|| value.get("detail"))
                     .map(Value::to_string)
             })
-            .unwrap_or_else(|| "response body unavailable".into());
-        return Err(match status.as_u16() {
+            .unwrap_or_else(|| safe_body_fragment(body));
+        return Err(match status {
             404 => ProviderError::PlayerNotFound,
             422 => ProviderError::InvalidPlayerRequest(detail),
             429 => ProviderError::RateLimited {
@@ -113,7 +145,19 @@ async fn response_json(request: reqwest::RequestBuilder) -> Result<Value> {
             code => ProviderError::Other(format!("player-http:{code}: {detail}")),
         });
     }
-    serde_json::from_str(&body).map_err(Into::into)
+    if content_type.is_some_and(|value| !value.to_ascii_lowercase().contains("json")) {
+        return Err(ProviderError::InvalidData(format!(
+            "DeepLoL expected JSON but received {}: {}",
+            content_type.unwrap_or("unknown content type"),
+            safe_body_fragment(body)
+        )));
+    }
+    serde_json::from_str(body).map_err(|error| {
+        ProviderError::InvalidData(format!(
+            "DeepLoL malformed JSON ({error}): {}",
+            safe_body_fragment(body)
+        ))
+    })
 }
 
 fn object<'a>(value: &'a Value, keys: &[&str]) -> Option<&'a Value> {
@@ -173,6 +217,7 @@ fn parse_profile(
     basic_response: &Value,
     realtime: Option<&Value>,
     updated: Option<&Value>,
+    tier_chart: Option<&Value>,
 ) -> Result<PlayerProfile> {
     let basic = basic_response
         .get("summoner_basic_info_dict")
@@ -231,6 +276,7 @@ fn parse_profile(
             "summonerIdAvailable": string(basic, &["summoner_id"]).is_some(),
             "updatedTimestamp": updated.and_then(|value| integer(value, &["updated_timestamp"])),
             "autoUpdate": updated.and_then(|value| boolean(value, &["auto_update"])),
+            "tierChart": tier_chart,
         })),
     })
 }
@@ -513,6 +559,38 @@ impl DeepLolProvider {
         .ok()
     }
 
+    async fn tier_chart(&self, player: &PlayerIdentity) -> Result<Value> {
+        let puuid = player
+            .puuid
+            .as_deref()
+            .ok_or_else(|| ProviderError::InvalidPlayerRequest("missing puuid".into()))?;
+        let list = response_json(self.http.get(format!("{DEEPLOL}/match/matches")).query(&[
+            ("puu_id", puuid.to_owned()),
+            ("platform_id", player.platform_id.clone()),
+            ("offset", "0".into()),
+            ("count", "20".into()),
+            ("queue_type", "ALL".into()),
+            ("champion_id", "0".into()),
+            ("only_list", "1".into()),
+            ("last_updated_at", "0".into()),
+        ]))
+        .await?;
+        let last_match_id = match_ids(&list)
+            .into_iter()
+            .next()
+            .ok_or(ProviderError::NotEnoughData)?;
+        response_json(
+            self.http
+                .get(format!("{DEEPLOL}/summoner/tier-chart"))
+                .query(&[
+                    ("puu_id", puuid),
+                    ("platform_id", player.platform_id.as_str()),
+                    ("last_match_id", last_match_id.as_str()),
+                ]),
+        )
+        .await
+    }
+
     async fn current_season(&self) -> Result<String> {
         let value = response_json(self.http.get(format!("{DEEPLOL}/common/season-list"))).await?;
         value
@@ -563,7 +641,16 @@ impl PlayerStatsProvider for DeepLolProvider {
             puuid: Some(puuid),
         };
         let updated = self.updated_time(&identity).await;
-        let profile = parse_profile(player, &basic_response, realtime.as_ref(), updated.as_ref())?;
+        // Tier chart is optional display enrichment, but its request contract is
+        // strict: derive and pass the latest match ID rather than omitting it.
+        let tier_chart = self.tier_chart(&identity).await.ok();
+        let profile = parse_profile(
+            player,
+            &basic_response,
+            realtime.as_ref(),
+            updated.as_ref(),
+            tier_chart.as_ref(),
+        )?;
         self.player_cache
             .write()
             .await
@@ -754,6 +841,42 @@ mod tests {
     }
 
     #[test]
+    fn tier_chart_contract_distinguishes_missing_id_422_and_json_200() {
+        let missing = response_json_body(
+            422,
+            Some("application/json"),
+            None,
+            r#"{"detail":"last_match_id is required"}"#,
+        );
+        assert!(matches!(
+            missing,
+            Err(ProviderError::InvalidPlayerRequest(message))
+                if message.contains("last_match_id")
+        ));
+
+        let chart = response_json_body(
+            200,
+            Some("application/json; charset=utf-8"),
+            None,
+            r#"{"solo_tier_chart":[{"match_id":"KR_1","tier":"MASTER","lp":225}]}"#,
+        )
+        .expect("tier chart fixture");
+        assert_eq!(chart["solo_tier_chart"][0]["match_id"], "KR_1");
+    }
+
+    #[test]
+    fn failure_diagnostics_preserve_status_content_type_and_safe_body() {
+        let error = response_json_body(500, Some("text/html"), None, "upstream\nfailed")
+            .expect_err("failure");
+        assert!(error.to_string().contains("player-http:500"));
+        assert!(error.to_string().contains("upstream failed"));
+
+        let error = response_json_body(200, Some("text/html"), None, "<html>oops</html>")
+            .expect_err("wrong content type");
+        assert!(matches!(error, ProviderError::InvalidData(_)));
+    }
+
+    #[test]
     fn profile_fixture_handles_empty_summoner_id_and_previous_tiers() {
         let raw = json!({"summoner_basic_info_dict": {
             "puu_id": "p", "summoner_id": "", "level": 920, "profile_id": 6,
@@ -769,12 +892,17 @@ mod tests {
             &raw,
             None,
             Some(&json!({"remain_second": 30, "auto_update": false})),
+            Some(&json!({"solo_tier_chart": [{"tier": "MASTER", "lp": 225}]})),
         )
         .unwrap();
         assert_eq!(profile.identity.puuid.as_deref(), Some("p"));
         assert_eq!(profile.previous_seasons.len(), 1);
         assert!(profile.ranks.is_empty());
         assert!(!profile.refresh.site_refresh);
+        let ProviderExtras::Deeplol(extras) = profile.extras else {
+            panic!("DeepLoL extras")
+        };
+        assert_eq!(extras["tierChart"]["solo_tier_chart"][0]["tier"], "MASTER");
     }
 
     #[test]

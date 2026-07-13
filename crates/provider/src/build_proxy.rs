@@ -11,6 +11,10 @@ use overlay_types::{
 use crate::error::Result;
 use crate::proxy::ProviderKind;
 use crate::router::ProviderRouter;
+use crate::shared::{
+    normalize_counter_entries, normalize_items, normalize_rune_build,
+    normalize_rune_recommendation, normalize_skill_order, normalize_tier_entries,
+};
 use crate::trait_def::BuildProvider;
 
 /// Thin forwarding wrapper for the active [`BuildProvider`].
@@ -50,23 +54,23 @@ impl BuildProvider for BuildProviderProxy {
     }
 
     async fn items(&self, snapshot: &GameSnapshot) -> Result<Vec<ItemRecommendation>> {
-        self.router.current().items(snapshot).await
+        normalize_items(self.router.current().items(snapshot).await?)
     }
 
     async fn skill_order(&self, snapshot: &GameSnapshot) -> Result<SkillOrder> {
-        self.router.current().skill_order(snapshot).await
+        normalize_skill_order(self.router.current().skill_order(snapshot).await?)
     }
 
     async fn runes(&self, champion_id: i64, role: Option<&str>) -> Result<RuneRecommendation> {
-        self.router.current().runes(champion_id, role).await
+        normalize_rune_recommendation(self.router.current().runes(champion_id, role).await?)
     }
 
     async fn tier_list(&self, role: &str) -> Result<Vec<TierEntry>> {
-        self.router.current().tier_list(role).await
+        normalize_tier_entries(self.router.current().tier_list(role).await?)
     }
 
     async fn counters(&self, champion_id: i64, role: &str) -> Result<Vec<CounterEntry>> {
-        self.router.current().counters(champion_id, role).await
+        normalize_counter_entries(self.router.current().counters(champion_id, role).await?)
     }
 
     async fn rune_build(
@@ -75,10 +79,12 @@ impl BuildProvider for BuildProviderProxy {
         role: Option<&str>,
         enemy_champion_id: Option<i64>,
     ) -> Result<RuneBuild> {
-        self.router
-            .current()
-            .rune_build(champion_id, role, enemy_champion_id)
-            .await
+        normalize_rune_build(
+            self.router
+                .current()
+                .rune_build(champion_id, role, enemy_champion_id)
+                .await?,
+        )
     }
 
     async fn champion_names(&self, champion_id: i64) -> Option<(String, String)> {

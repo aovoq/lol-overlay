@@ -2,6 +2,28 @@ use super::types::{MatchUp, MatchUpEntry, OtpRune, OtpSpell};
 use super::*;
 
 #[test]
+fn counter_and_rune_failures_keep_upstream_diagnostics() {
+    let counter = decode_deeplol_body::<MatchupStatsResponse>(
+        502,
+        Some("text/plain"),
+        "counter upstream\nfailed",
+    )
+    .expect_err("counter failure");
+    assert!(counter.to_string().contains("HTTP 502"));
+    assert!(counter.to_string().contains("content-type=text/plain"));
+    assert!(counter.to_string().contains("counter upstream failed"));
+
+    let rune = decode_deeplol_body::<BuildResponse>(
+        200,
+        Some("application/json"),
+        r#"{"build_by_lane":{"Middle":{"games":"not-a-number"}}}"#,
+    )
+    .expect_err("rune schema mismatch");
+    assert!(matches!(rune, ProviderError::InvalidData(_)));
+    assert!(rune.to_string().contains("schema mismatch"));
+}
+
+#[test]
 fn null_games_lane_survives_parse() {
     // Regression: an Aram lane with `"games": null` used to abort the whole
     // `/champion/build` parse, leaving the UI with no items at all.
@@ -93,13 +115,13 @@ fn rank_response_parses_and_shapes_tier_rows() {
         vec![35, 64]
     );
     // 35 is missing from the previous patch → delta unknown (0.0).
-    assert_eq!(rows[0].win_rate_delta, 0.0);
+    assert_eq!(rows[0].win_rate_delta, None);
     // 64: 0.52 vs 0.50 → +2.0 percentage points.
-    assert!((rows[1].win_rate_delta - 2.0).abs() < 1e-9);
+    assert!((rows[1].win_rate_delta.expect("previous win rate") - 2.0).abs() < 1e-9);
     assert!((rows[1].pick_rate - 0.12).abs() < 1e-9);
     assert!((rows[1].ban_rate - 0.08).abs() < 1e-9);
     // Games are calibrated separately; the pure shaping leaves them 0.
-    assert!(rows.iter().all(|r| r.games == 0));
+    assert!(rows.iter().all(|r| r.games.is_none()));
 }
 
 #[test]
@@ -353,7 +375,7 @@ fn live_openlol_tier_list() {
         println!("TIER LIST OK ({} rows):", rows.len());
         for r in rows.iter().take(8) {
             println!(
-                "  {:>4} wr={:.3} d={:+.1} pr={:.3} br={:.3} games={}",
+                "  {:>4} wr={:.3} d={:?} pr={:.3} br={:.3} games={:?}",
                 r.champion_id, r.win_rate, r.win_rate_delta, r.pick_rate, r.ban_rate, r.games
             );
         }
@@ -363,14 +385,14 @@ fn live_openlol_tier_list() {
             assert!(r.win_rate > 0.0 && r.win_rate < 1.0, "wr {}", r.win_rate);
             assert!(r.pick_rate >= 0.005 && r.pick_rate <= 1.0);
             assert!(r.ban_rate >= 0.0 && r.ban_rate <= 1.0);
-            assert!(r.games >= 0);
+            assert!(r.games.is_none_or(|games| games >= 0));
         }
         assert!(
             rows.windows(2).all(|w| w[0].win_rate >= w[1].win_rate),
             "tier list must be sorted by win rate desc"
         );
         assert!(
-            rows.iter().any(|r| r.games > 0),
+            rows.iter().any(|r| r.games.is_some_and(|games| games > 0)),
             "games calibration produced no estimates"
         );
         // Second invoke must come from the cache (and stay identical).

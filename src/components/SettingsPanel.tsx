@@ -9,6 +9,8 @@ import {
   developerMode,
   importSpells,
   presentationMode,
+  playerStatsSource,
+  playerStatsSources,
   setAutoImport,
   setAutoOpenDraft,
   setAutoOpenLive,
@@ -16,6 +18,7 @@ import {
   setDeveloperMode,
   setImportSpells,
   setPresentationMode,
+  setPlayerStatsSource,
   setThemeMode,
   type ThemeMode,
   themeMode,
@@ -154,9 +157,9 @@ export function SettingsForm() {
       </Section>
 
       <Show when={dataSources().length > 1}>
-        <Section title="DATA">
+        <Section title="BUILD DATA">
           <label class="flex flex-col gap-1 text-hx-text">
-            <span class="text-[10px] tracking-[0.08em] text-hx-muted">データソース</span>
+            <span class="text-[10px] tracking-[0.08em] text-hx-muted">ビルドデータソース</span>
             <select
               class="bg-hx-panel border border-hx-border rounded px-2 py-1.5 text-[12px]"
               value={dataSource()}
@@ -164,6 +167,23 @@ export function SettingsForm() {
             >
               {dataSources().map((src) => (
                 <option value={src}>{DATA_SOURCE_LABELS[src] ?? src}</option>
+              ))}
+            </select>
+          </label>
+        </Section>
+      </Show>
+
+      <Show when={playerStatsSources().length > 0}>
+        <Section title="PLAYER STATS">
+          <label class="flex flex-col gap-1 text-hx-text">
+            <span class="text-[10px] tracking-[0.08em] text-hx-muted">戦績データソース</span>
+            <select
+              class="bg-hx-panel border border-hx-border rounded px-2 py-1.5 text-[12px]"
+              value={playerStatsSource()}
+              onChange={(event) => setPlayerStatsSource(event.currentTarget.value)}
+            >
+              {playerStatsSources().map((source) => (
+                <option value={source.id}>{source.label}</option>
               ))}
             </select>
           </label>

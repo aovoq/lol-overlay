@@ -149,19 +149,22 @@ pub fn tier_entries_from_ranking(
             if pick_rate < MIN_TIER_PICK_RATE {
                 return None;
             }
+            let mut provenance = overlay_types::recommendation::DataProvenance::now("ugg");
+            provenance.sample_window = Some("current-patch".into());
             Some(TierEntry {
                 champion_id: r.champion_id,
                 win_rate,
                 win_rate_delta: previous
                     .get(&r.champion_id)
-                    .map_or(0.0, |prev| (win_rate - prev) * 100.0),
-                games: r.win_den,
+                    .map(|prev| (win_rate - prev) * 100.0),
+                games: Some(r.win_den),
                 pick_rate,
                 ban_rate: if ban_sum > 0 {
                     r.ban_weight as f64 / ban_sum as f64
                 } else {
                     0.0
                 },
+                provenance,
             })
         })
         .collect();
@@ -211,10 +214,10 @@ mod tests {
         assert_eq!(rows[1].champion_id, 64);
         let lee = rows.iter().find(|r| r.champion_id == 64).unwrap();
         assert!((lee.win_rate - 0.4844).abs() < 0.001);
-        assert!((lee.win_rate_delta + 1.56).abs() < 0.01);
+        assert!((lee.win_rate_delta.expect("previous win rate") + 1.56).abs() < 0.01);
         assert!((lee.pick_rate - 100.0 / 150.0).abs() < 0.001);
         assert!((lee.ban_rate - 300.0 / 450.0).abs() < 0.001);
-        assert_eq!(lee.games, 31141);
+        assert_eq!(lee.games, Some(31141));
     }
 
     #[test]
