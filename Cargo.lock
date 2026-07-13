@@ -2159,7 +2159,7 @@ checksum = "953f07c43838f8e6f9758cab68bf5bed85465e7587ebe0b823f1bcd81978ad3a"
 
 [[package]]
 name = "lol-overlay"
-version = "0.4.0"
+version = "0.4.1"
 dependencies = [
  "async-trait",
  "overlay-ddragon",
@@ -2659,7 +2659,7 @@ dependencies = [
 
 [[package]]
 name = "overlay-ddragon"
-version = "0.4.0"
+version = "0.4.1"
 dependencies = [
  "reqwest 0.12.28",
  "serde",
@@ -2670,7 +2670,7 @@ dependencies = [
 
 [[package]]
 name = "overlay-lcu"
-version = "0.4.0"
+version = "0.4.1"
 dependencies = [
  "irelia",
  "overlay-types",
@@ -2682,7 +2682,7 @@ dependencies = [
 
 [[package]]
 name = "overlay-live-client"
-version = "0.4.0"
+version = "0.4.1"
 dependencies = [
  "overlay-types",
  "reqwest 0.12.28",
@@ -2694,7 +2694,7 @@ dependencies = [
 
 [[package]]
 name = "overlay-provider"
-version = "0.4.0"
+version = "0.4.1"
 dependencies = [
  "async-trait",
  "overlay-types",
@@ -2707,7 +2707,7 @@ dependencies = [
 
 [[package]]
 name = "overlay-provider-deeplol"
-version = "0.4.0"
+version = "0.4.1"
 dependencies = [
  "async-trait",
  "futures",
@@ -2722,7 +2722,7 @@ dependencies = [
 
 [[package]]
 name = "overlay-provider-lolalytics"
-version = "0.4.0"
+version = "0.4.1"
 dependencies = [
  "async-trait",
  "overlay-ddragon",
@@ -2736,7 +2736,7 @@ dependencies = [
 
 [[package]]
 name = "overlay-provider-opgg"
-version = "0.4.0"
+version = "0.4.1"
 dependencies = [
  "async-trait",
  "chrono",
@@ -2752,7 +2752,7 @@ dependencies = [
 
 [[package]]
 name = "overlay-provider-ugg"
-version = "0.4.0"
+version = "0.4.1"
 dependencies = [
  "async-trait",
  "overlay-ddragon",
@@ -2766,7 +2766,7 @@ dependencies = [
 
 [[package]]
 name = "overlay-types"
-version = "0.4.0"
+version = "0.4.1"
 dependencies = [
  "serde",
  "serde_json",

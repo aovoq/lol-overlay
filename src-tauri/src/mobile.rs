@@ -59,6 +59,7 @@ struct RelaySession {
     public: MobilePairingState,
     sequence: Arc<AtomicU64>,
     upload_inflight: Arc<AtomicBool>,
+    command_poll_inflight: Arc<AtomicBool>,
     upload_failed: Arc<AtomicBool>,
     pending: Arc<Mutex<Option<MobileSnapshot>>>,
 }
@@ -299,6 +300,7 @@ impl MobileRelay {
             public: public.clone(),
             sequence: Arc::new(AtomicU64::new(0)),
             upload_inflight: Arc::new(AtomicBool::new(false)),
+            command_poll_inflight: Arc::new(AtomicBool::new(false)),
             upload_failed: Arc::new(AtomicBool::new(false)),
             pending: Arc::new(Mutex::new(None)),
         };
@@ -374,6 +376,7 @@ impl MobileRelay {
             public: public.clone(),
             sequence: Arc::new(AtomicU64::new(0)),
             upload_inflight: Arc::new(AtomicBool::new(false)),
+            command_poll_inflight: Arc::new(AtomicBool::new(false)),
             upload_failed: Arc::new(AtomicBool::new(false)),
             pending: Arc::new(Mutex::new(None)),
         });
@@ -558,6 +561,16 @@ impl MobileRelay {
     }
 
     async fn execute_commands(&self, app: &AppHandle, session: &RelaySession) {
+        if session.command_poll_inflight.swap(true, Ordering::AcqRel) {
+            return;
+        }
+        self.fetch_and_execute_commands(app, session).await;
+        session
+            .command_poll_inflight
+            .store(false, Ordering::Release);
+    }
+
+    async fn fetch_and_execute_commands(&self, app: &AppHandle, session: &RelaySession) {
         let response = self
             .inner
             .http
@@ -597,6 +610,15 @@ impl MobileRelay {
                 ),
             }
         }
+    }
+
+    /// Pull phone commands independently of snapshot uploads. Called at a
+    /// short interval only while a ready check is active.
+    pub async fn poll_commands(&self, app: &AppHandle) {
+        let Some(session) = self.inner.session.lock().clone() else {
+            return;
+        };
+        self.execute_commands(app, &session).await;
     }
 
     fn emit_current(

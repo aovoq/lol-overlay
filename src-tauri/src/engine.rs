@@ -264,6 +264,9 @@ pub struct Engine {
     /// auto-search. They never serve as fallback display data.
     pub current_summoner: Mutex<Option<lcu::SummonerInfo>>,
     pub current_platform_id: Mutex<Option<String>>,
+    /// Latest queue / ready-check state. The LCU WebSocket refreshes this
+    /// immediately; the main poller also updates it as a fallback.
+    pub current_matchmaking: Mutex<Option<lcu::MatchmakingInfo>>,
     /// Clickable rects reported by the frontend (`data-hit` elements), in
     /// window-relative logical px. Read by `hittest::cursor_watcher`.
     pub hit_regions: Mutex<Vec<HitRegion>>,
@@ -713,11 +716,12 @@ pub async fn poller(app: AppHandle, engine: Arc<Engine>, tx: UnboundedSender<Val
         let phase = lcu::fetch_phase().await;
         let client_up = phase.is_ok();
         let phase = phase.unwrap_or(Phase::None);
-        let matchmaking = if client_up {
+        let observed_matchmaking = if client_up {
             lcu::fetch_matchmaking().await.unwrap_or(None)
         } else {
             None
         };
+        *engine.current_matchmaking.lock() = observed_matchmaking;
 
         engine
             .phase_champselect
@@ -822,6 +826,10 @@ pub async fn poller(app: AppHandle, engine: Arc<Engine>, tx: UnboundedSender<Val
                 let _ = tx.send(session);
             }
         }
+
+        // Re-read immediately before publishing. A matchmaking WebSocket event
+        // may have updated the state while the slower profile/history work ran.
+        let matchmaking = engine.current_matchmaking.lock().clone();
 
         // In-game item recommendations (Live Client Data API — polling only).
         let mut in_game = false;

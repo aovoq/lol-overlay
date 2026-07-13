@@ -813,6 +813,7 @@ mod player_command_tests {
             last_phase: Mutex::new(None),
             current_summoner: Mutex::new(None),
             current_platform_id: Mutex::new(None),
+            current_matchmaking: Mutex::new(None),
             hit_regions: Mutex::new(vec![]),
             drag_active: AtomicBool::new(false),
             forced_interactive: AtomicBool::new(false),

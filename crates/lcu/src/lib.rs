@@ -23,4 +23,4 @@ pub use rest::{
     accept_ready_check, apply_runes, apply_spells, decline_ready_check, fetch_matchmaking,
     fetch_phase, fetch_platform_id, fetch_recent_matches, fetch_session, fetch_summoner,
 };
-pub use ws::{subscribe_champ_select, ChampSelectSubscription};
+pub use ws::{subscribe_champ_select, subscribe_matchmaking, LcuSubscription};

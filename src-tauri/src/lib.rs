@@ -106,6 +106,7 @@ pub fn run() {
         last_phase: Mutex::new(None),
         current_summoner: Mutex::new(None),
         current_platform_id: Mutex::new(None),
+        current_matchmaking: Mutex::new(None),
         hit_regions: Mutex::new(Vec::new()),
         drag_active: AtomicBool::new(false),
         forced_interactive: AtomicBool::new(false),
@@ -158,6 +159,8 @@ pub fn run() {
             let handle = app.handle().clone();
             let (tx, rx) = tokio::sync::mpsc::unbounded_channel::<Value>();
             spawn_champ_select_subscription(handle.clone(), tx.clone());
+            spawn_matchmaking_subscription(handle.clone(), engine.clone());
+            spawn_mobile_command_poller(handle.clone(), engine.clone());
 
             tauri::async_runtime::spawn(engine::rune_processor(handle.clone(), engine.clone(), rx));
             tauri::async_runtime::spawn(engine::poller(handle.clone(), engine.clone(), tx));
@@ -250,6 +253,8 @@ mod player_registration_tests {
 }
 
 const CHAMP_SELECT_WS_RETRY_DELAY: Duration = Duration::from_secs(3);
+const READY_CHECK_COMMAND_POLL_INTERVAL: Duration = Duration::from_millis(250);
+const IDLE_COMMAND_STATE_CHECK_INTERVAL: Duration = Duration::from_millis(100);
 
 fn spawn_champ_select_subscription(handle: AppHandle, tx: UnboundedSender<Value>) {
     tauri::async_runtime::spawn(async move {
@@ -289,6 +294,106 @@ fn spawn_champ_select_subscription(handle: AppHandle, tx: UnboundedSender<Value>
                 }
             }
             tokio::time::sleep(CHAMP_SELECT_WS_RETRY_DELAY).await;
+        }
+    });
+}
+
+async fn refresh_mobile_matchmaking(handle: &AppHandle, engine: &Arc<Engine>) {
+    if engine.mock.load(std::sync::atomic::Ordering::Relaxed) {
+        return;
+    }
+
+    let (phase, matchmaking) =
+        tokio::join!(overlay_lcu::fetch_phase(), overlay_lcu::fetch_matchmaking());
+    let (Ok(phase), Ok(matchmaking)) = (phase, matchmaking) else {
+        return;
+    };
+
+    let should_publish = {
+        let mut current = engine.current_matchmaking.lock();
+        let changed_matchmaking = current.is_some() || matchmaking.is_some();
+        current.clone_from(&matchmaking);
+        changed_matchmaking
+    };
+    // An initial subscription can happen while a game is already running.
+    // Only matchmaking transitions may replace the phone's current game view.
+    if should_publish {
+        engine
+            .mobile
+            .publish_idle(handle, phase.label(), true, matchmaking.as_ref());
+    }
+}
+
+fn spawn_matchmaking_subscription(handle: AppHandle, engine: Arc<Engine>) {
+    tauri::async_runtime::spawn(async move {
+        let mut logged_waiting_for_client = false;
+
+        loop {
+            let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
+            match overlay_lcu::subscribe_matchmaking(tx).await {
+                Ok(subscription) => {
+                    logged_waiting_for_client = false;
+                    events::log(&handle, "info", "Subscribed to matchmaking websocket");
+                    refresh_mobile_matchmaking(&handle, &engine).await;
+
+                    loop {
+                        tokio::select! {
+                            event = rx.recv() => {
+                                if event.is_none() {
+                                    break;
+                                }
+                                refresh_mobile_matchmaking(&handle, &engine).await;
+                            }
+                            () = tokio::time::sleep(CHAMP_SELECT_WS_RETRY_DELAY) => {
+                                if subscription.is_finished() {
+                                    break;
+                                }
+                            }
+                        }
+                    }
+
+                    events::log(
+                        &handle,
+                        "warn",
+                        format!(
+                            "Matchmaking websocket stopped; retrying in {}s",
+                            CHAMP_SELECT_WS_RETRY_DELAY.as_secs()
+                        ),
+                    );
+                }
+                Err(err) => {
+                    if !logged_waiting_for_client {
+                        events::log(
+                            &handle,
+                            "warn",
+                            format!(
+                                "Failed to subscribe to matchmaking websocket; retrying in {}s: {err}",
+                                CHAMP_SELECT_WS_RETRY_DELAY.as_secs()
+                            ),
+                        );
+                        logged_waiting_for_client = true;
+                    }
+                }
+            }
+            tokio::time::sleep(CHAMP_SELECT_WS_RETRY_DELAY).await;
+        }
+    });
+}
+
+fn spawn_mobile_command_poller(handle: AppHandle, engine: Arc<Engine>) {
+    tauri::async_runtime::spawn(async move {
+        loop {
+            let ready_check_active = engine
+                .current_matchmaking
+                .lock()
+                .as_ref()
+                .is_some_and(|state| state.state == "readyCheck");
+            if ready_check_active && !engine.mock.load(std::sync::atomic::Ordering::Relaxed) {
+                engine.mobile.poll_commands(&handle).await;
+                tokio::time::sleep(READY_CHECK_COMMAND_POLL_INTERVAL).await;
+            } else {
+                tokio::time::sleep(IDLE_COMMAND_STATE_CHECK_INTERVAL).await;
+            }
         }
     });
 }
