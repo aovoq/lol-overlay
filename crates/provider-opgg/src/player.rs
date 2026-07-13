@@ -365,6 +365,13 @@ fn action_json(body: &str) -> Result<Value> {
     })
 }
 
+fn retryable_match_error(error: &ProviderError) -> bool {
+    matches!(
+        error,
+        ProviderError::Http(_) | ProviderError::RateLimited { .. } | ProviderError::Timeout
+    ) || matches!(error, ProviderError::Other(message) if message.starts_with("player-http:5"))
+}
+
 fn player_status_error(status: reqwest::StatusCode, retry_after: Option<u64>) -> ProviderError {
     match status.as_u16() {
         404 => ProviderError::PlayerNotFound,
@@ -834,7 +841,7 @@ impl PlayerStatsProvider for OpggProvider {
                         .unwrap_or("unknown")
                         .to_owned(),
                     message: error.to_string(),
-                    retryable: true,
+                    retryable: retryable_match_error(&error),
                 }),
             }
         }
@@ -991,7 +998,7 @@ mod tests {
                     partial_failures: vec![MatchFailure {
                         match_id: "OPGG_CONTRACT_PARTIAL".into(),
                         message: "fixture action parse failure".into(),
-                        retryable: true,
+                        retryable: false,
                     }],
                     fetched_at: 2,
                 },

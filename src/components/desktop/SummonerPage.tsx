@@ -387,9 +387,13 @@ export function SummonerPage() {
               <Show when={(state.matches()?.partialFailures.length ?? 0) > 0}>
                 <div class="summoner-partial" role="status">
                   {state.matches()?.partialFailures.length ?? 0}件の詳細取得に失敗しました。
-                  <button type="button" onClick={() => void state.retryPartialFailures()}>
-                    失敗分を再試行
-                  </button>
+                  <Show
+                    when={state.matches()?.partialFailures.some((failure) => failure.retryable)}
+                  >
+                    <button type="button" onClick={() => void state.retryPartialFailures()}>
+                      失敗分を再試行
+                    </button>
+                  </Show>
                 </div>
               </Show>
               <Show when={state.matches()?.nextCursor}>

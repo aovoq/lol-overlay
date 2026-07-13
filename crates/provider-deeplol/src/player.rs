@@ -75,7 +75,7 @@ fn platform_id(raw: &str) -> Result<String> {
         "TW" | "TW2" => "TW2",
         "VN" | "VN2" => "VN2",
         _ => {
-            return Err(ProviderError::Other(format!(
+            return Err(ProviderError::InvalidPlayerRequest(format!(
                 "unsupported DeepLoL platform: {raw}"
             )))
         }
@@ -122,7 +122,13 @@ async fn response_json(request: reqwest::RequestBuilder) -> Result<Value> {
         .get(reqwest::header::CONTENT_TYPE)
         .and_then(|value| value.to_str().ok())
         .map(str::to_owned);
-    let body = response.text().await?;
+    let body = response.text().await.map_err(|error| {
+        if error.is_timeout() {
+            ProviderError::Timeout
+        } else {
+            ProviderError::Http(error)
+        }
+    })?;
     response_json_body(
         status.as_u16(),
         content_type.as_deref(),
@@ -247,7 +253,7 @@ fn parse_profile(
         .get("summoner_basic_info_dict")
         .unwrap_or(basic_response);
     let puuid = string(basic, &["puu_id", "puuid"])
-        .ok_or_else(|| ProviderError::Other("DeepLoL profile omitted puu_id".into()))?;
+        .ok_or_else(|| ProviderError::InvalidData("DeepLoL profile omitted puu_id".into()))?;
     let mut ranks = vec![];
     if let Some(tiers) = realtime.and_then(|value| value.get("season_tier_info_dict")) {
         for (key, queue) in [
@@ -464,6 +470,13 @@ fn match_ids(value: &Value) -> Vec<String> {
         .collect()
 }
 
+fn retryable_match_error(error: &ProviderError) -> bool {
+    matches!(
+        error,
+        ProviderError::Http(_) | ProviderError::RateLimited { .. } | ProviderError::Timeout
+    ) || matches!(error, ProviderError::Other(message) if message.starts_with("player-http:5"))
+}
+
 fn find_stat_rows<'a>(
     value: &'a Value,
     queue: Option<&str>,
@@ -516,22 +529,19 @@ fn parse_champion_stats(
                 return None;
             }
             let games = integer(row, &["games", "game_cnt", "play", "total_games"])?;
+            let win_rate =
+                float(row, &["win_rate"]).map(|rate| if rate > 1.0 { rate / 100.0 } else { rate });
             let wins = integer(row, &["wins", "win_cnt"])
-                .or_else(|| {
-                    float(row, &["win_rate"]).map(|rate| (rate * games as f64).round() as i64)
-                })
+                .or_else(|| win_rate.map(|rate| (rate * games as f64).round() as i64))
                 .unwrap_or_default();
             let losses = integer(row, &["losses", "loss_cnt"]).unwrap_or(games - wins);
-            let mut win_rate = float(row, &["win_rate"]).unwrap_or_else(|| {
+            let win_rate = win_rate.unwrap_or_else(|| {
                 if games == 0 {
                     0.0
                 } else {
                     wins as f64 / games as f64
                 }
             });
-            if win_rate > 1.0 {
-                win_rate /= 100.0;
-            }
             let kills = float(row, &["kill", "kills"]).unwrap_or_default();
             let deaths = float(row, &["death", "deaths"]).unwrap_or_default();
             let assists = float(row, &["assist", "assists"]).unwrap_or_default();
@@ -588,7 +598,7 @@ impl DeepLolProvider {
         let puuid = player
             .puuid
             .as_deref()
-            .ok_or_else(|| ProviderError::InvalidPlayerRequest("missing puuid".into()))?;
+            .ok_or_else(|| ProviderError::InvalidData("DeepLoL profile omitted puuid".into()))?;
         let list = response_json(
             self.http
                 .get(format!("{}/match/matches", self.player_base_url))
@@ -631,7 +641,7 @@ impl DeepLolProvider {
             .and_then(Value::as_array)
             .and_then(|seasons| seasons.iter().filter_map(Value::as_i64).max())
             .map(|season| season.to_string())
-            .ok_or_else(|| ProviderError::Other("DeepLoL returned no current season".into()))
+            .ok_or_else(|| ProviderError::InvalidData("DeepLoL returned no current season".into()))
     }
 }
 
@@ -650,7 +660,7 @@ impl PlayerStatsProvider for DeepLolProvider {
             .get("summoner_basic_info_dict")
             .unwrap_or(&basic_response);
         let puuid = string(basic, &["puu_id", "puuid"])
-            .ok_or_else(|| ProviderError::Other("DeepLoL profile omitted puu_id".into()))?;
+            .ok_or_else(|| ProviderError::InvalidData("DeepLoL profile omitted puu_id".into()))?;
         let platform = platform_id(&player.platform_id)?;
         let realtime = if let Some(summoner_id) = string(basic, &["summoner_id"]) {
             response_json(
@@ -713,11 +723,11 @@ impl PlayerStatsProvider for DeepLolProvider {
         }
         let profile = self.profile(player, false).await?;
         let puuid = profile.identity.puuid.as_deref().ok_or_else(|| {
-            ProviderError::Other("DeepLoL profile omitted player identity".into())
+            ProviderError::InvalidData("DeepLoL profile omitted player identity".into())
         })?;
-        let offset = cursor
-            .parse::<usize>()
-            .map_err(|_| ProviderError::Other(format!("invalid DeepLoL cursor: {cursor}")))?;
+        let offset = cursor.parse::<usize>().map_err(|_| {
+            ProviderError::InvalidPlayerRequest(format!("invalid DeepLoL cursor: {cursor}"))
+        })?;
         let platform = platform_id(&player.platform_id)?;
         let queue_type = queue.map_or_else(|| "ALL".into(), |value| value.to_string());
         let list = response_json(
@@ -796,7 +806,7 @@ impl PlayerStatsProvider for DeepLolProvider {
                 Some(Err(error)) => partial_failures.push(MatchFailure {
                     match_id: match_id.clone(),
                     message: error.to_string(),
-                    retryable: true,
+                    retryable: retryable_match_error(error),
                 }),
                 None => partial_failures.push(MatchFailure {
                     match_id: match_id.clone(),
@@ -847,7 +857,7 @@ impl PlayerStatsProvider for DeepLolProvider {
         }
         let profile = self.profile(player, false).await?;
         let puuid = profile.identity.puuid.as_deref().ok_or_else(|| {
-            ProviderError::Other("DeepLoL profile omitted player identity".into())
+            ProviderError::InvalidData("DeepLoL profile omitted player identity".into())
         })?;
         let response = response_json(
             self.http
@@ -1561,6 +1571,25 @@ mod tests {
         assert_eq!(stats[0].win_rate, 0.6);
         assert_eq!(stats[0].kda, Some(6.0));
         assert!(matches!(stats[0].extras, ProviderExtras::Deeplol(_)));
+    }
+
+    #[test]
+    fn champion_percentage_derives_wins_after_unit_normalization() {
+        let stats = parse_champion_stats(
+            &json!({"champion_stat_list": [{
+                "champion_id": 103,
+                "games": 31,
+                "win_rate": 58.06
+            }]}),
+            None,
+            None,
+        );
+        assert_eq!(stats.len(), 1);
+        assert_eq!(
+            (stats[0].games, stats[0].wins, stats[0].losses),
+            (31, 18, 13)
+        );
+        assert!((stats[0].win_rate - 0.5806).abs() < f64::EPSILON);
     }
 
     #[test]
