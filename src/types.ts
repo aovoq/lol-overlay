@@ -238,3 +238,143 @@ export interface UiLayout {
   controlIngameWindow?: WindowGeometry | null;
   ingameCollapsed?: boolean;
 }
+
+// ---- player stats provider contracts (crates/types/src/player.rs) ----
+
+export interface PlayerRef {
+  platformId: string;
+  gameName: string;
+  tagLine: string;
+}
+
+export interface PlayerIdentity extends PlayerRef {
+  puuid?: string | null;
+}
+
+export type ProviderExtras =
+  | { provider: "deeplol" | "ugg" | "opgg"; data: Record<string, unknown> }
+  | { provider: "none" };
+
+export interface ProviderCapabilities {
+  builds: boolean;
+  playerProfile: boolean;
+  matchHistory: boolean;
+  championStats: boolean;
+  liveGame: boolean;
+  directApi: boolean;
+  siteRefresh: boolean;
+  regions: string[];
+}
+
+export interface PlayerProviderDescriptor {
+  id: string;
+  label: string;
+  capabilities: ProviderCapabilities;
+}
+
+export interface RankedEntry {
+  queue: string;
+  tier?: string | null;
+  division?: string | null;
+  lp?: number | null;
+  wins?: number | null;
+  losses?: number | null;
+}
+
+export interface SeasonRank {
+  season: string;
+  queue: string;
+  tier?: string | null;
+  division?: string | null;
+  lp?: number | null;
+}
+
+export interface RefreshAvailability {
+  appRefresh: boolean;
+  siteRefresh: boolean;
+  cooldownUntil?: number | null;
+}
+
+export interface PlayerProfile {
+  source: string;
+  identity: PlayerIdentity;
+  level?: number | null;
+  profileIconId?: number | null;
+  ranks: RankedEntry[];
+  previousSeasons: SeasonRank[];
+  ladderRank?: number | null;
+  ladderPercentile?: number | null;
+  fetchedAt: number;
+  refresh: RefreshAvailability;
+  extras: ProviderExtras;
+}
+
+export interface MatchParticipant {
+  puuid?: string | null;
+  gameName?: string | null;
+  tagLine?: string | null;
+  championId: number;
+  teamId: number;
+  role?: string | null;
+  win: boolean;
+  kills: number;
+  deaths: number;
+  assists: number;
+  items: number[];
+  extras: ProviderExtras;
+}
+
+export interface PlayerMatch {
+  matchId: string;
+  startedAt: number;
+  durationSeconds: number;
+  queueId: number;
+  remake: boolean;
+  championId: number;
+  role?: string | null;
+  win: boolean;
+  kills: number;
+  deaths: number;
+  assists: number;
+  cs?: number | null;
+  items: number[];
+  spellIds: number[];
+  perkIds: number[];
+  participants: MatchParticipant[];
+  extras: ProviderExtras;
+}
+
+export interface MatchFailure {
+  matchId: string;
+  message: string;
+  retryable: boolean;
+}
+
+export interface MatchPage {
+  source: string;
+  matches: PlayerMatch[];
+  nextCursor?: string | null;
+  partialFailures: MatchFailure[];
+  fetchedAt: number;
+}
+
+export interface PlayerChampionStats {
+  source: string;
+  championId: number;
+  games: number;
+  wins: number;
+  losses: number;
+  winRate: number;
+  kda: number;
+  csPerMinute?: number | null;
+  role?: string | null;
+  queue: string;
+  extras: ProviderExtras;
+}
+
+export interface RefreshResult {
+  source: string;
+  cacheInvalidated: boolean;
+  mutationPerformed: boolean;
+  refreshedAt: number;
+}
