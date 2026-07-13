@@ -4,7 +4,8 @@
 //! compact constructor notation inside the MCP text content, so this module
 //! parses that notation with a small data parser instead of scraping HTML.
 
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::collections::HashMap;
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use async_trait::async_trait;
 use chrono::DateTime;
@@ -21,6 +22,13 @@ use super::OpggProvider;
 
 const MCP_URL: &str = "https://mcp-api.op.gg/mcp";
 const PAGE_SIZE: usize = 20;
+const PLAYER_CACHE_TTL: Duration = Duration::from_secs(5 * 60);
+
+#[derive(Default)]
+pub(super) struct OpggPlayerCache {
+    profiles: tokio::sync::RwLock<HashMap<PlayerRef, (Instant, CompactValue)>>,
+    request: tokio::sync::Mutex<()>,
+}
 
 const PROFILE_FIELDS: &[&str] = &[
     "data.summoner.{game_name,tagline,level,profile_image_url,puuid,updated_at}",
@@ -243,8 +251,28 @@ fn queue_id(game_type: &str) -> i64 {
     }
 }
 
-fn platform(raw: &str) -> String {
-    raw.trim_end_matches('1').to_ascii_uppercase()
+fn platform(raw: &str) -> Result<&'static str> {
+    match raw.trim().to_ascii_uppercase().as_str() {
+        "KR" | "KR1" => Ok("KR"),
+        "JP" | "JP1" => Ok("JP"),
+        "NA" | "NA1" => Ok("NA"),
+        "EUW" | "EUW1" => Ok("EUW"),
+        "EUNE" | "EUN1" => Ok("EUNE"),
+        "OCE" | "OC1" => Ok("OCE"),
+        "BR" | "BR1" => Ok("BR"),
+        "LAN" | "LA1" => Ok("LAN"),
+        "LAS" | "LA2" => Ok("LAS"),
+        "TR" | "TR1" => Ok("TR"),
+        "RU" => Ok("RU"),
+        "PH" | "PH2" => Ok("PH"),
+        "SG" | "SG2" => Ok("SG"),
+        "TH" | "TH2" => Ok("TH"),
+        "TW" | "TW2" => Ok("TW"),
+        "VN" | "VN2" => Ok("VN"),
+        _ => Err(ProviderError::InvalidPlayerRequest(format!(
+            "unsupported OP.GG platform: {raw}"
+        ))),
+    }
 }
 
 fn public_profile_url(player: &PlayerRef) -> Result<reqwest::Url> {
@@ -253,7 +281,7 @@ fn public_profile_url(player: &PlayerRef) -> Result<reqwest::Url> {
     url.path_segments_mut()
         .map_err(|()| ProviderError::Other("OP.GG profile URL cannot be a base".into()))?
         .pop_if_empty()
-        .push(&platform(&player.platform_id).to_ascii_lowercase())
+        .push(&platform(&player.platform_id)?.to_ascii_lowercase())
         .push(&format!("{}-{}", player.game_name, player.tag_line));
     Ok(url)
 }
@@ -490,16 +518,40 @@ impl OpggProvider {
             .copied()
     }
 
-    async fn profile_compact(&self, player: &PlayerRef) -> Result<CompactValue> {
-        self.mcp_call(
-            "lol_get_summoner_profile",
-            json!({
-                "game_name": player.game_name, "tag_line": player.tag_line,
-                "region": platform(&player.platform_id), "lang": "en_US",
-                "desired_output_fields": PROFILE_FIELDS
-            }),
-        )
-        .await
+    async fn profile_compact(&self, player: &PlayerRef, force: bool) -> Result<CompactValue> {
+        let request_started = Instant::now();
+        if !force {
+            if let Some((loaded, value)) = self.player_cache.profiles.read().await.get(player) {
+                if loaded.elapsed() < PLAYER_CACHE_TTL {
+                    return Ok(value.clone());
+                }
+            }
+        }
+
+        let _request = self.player_cache.request.lock().await;
+        if let Some((loaded, value)) = self.player_cache.profiles.read().await.get(player) {
+            let refreshed_by_concurrent_request = *loaded >= request_started;
+            if loaded.elapsed() < PLAYER_CACHE_TTL && (!force || refreshed_by_concurrent_request) {
+                return Ok(value.clone());
+            }
+        }
+
+        let value = self
+            .mcp_call(
+                "lol_get_summoner_profile",
+                json!({
+                    "game_name": player.game_name, "tag_line": player.tag_line,
+                    "region": platform(&player.platform_id)?, "lang": "en_US",
+                    "desired_output_fields": PROFILE_FIELDS
+                }),
+            )
+            .await?;
+        self.player_cache
+            .profiles
+            .write()
+            .await
+            .insert(player.clone(), (Instant::now(), value.clone()));
+        Ok(value)
     }
 
     async fn discover_games_action(&self, player: &PlayerRef) -> Result<String> {
@@ -566,7 +618,7 @@ impl OpggProvider {
             .body(
                 json!([{
                     "locale": "en",
-                    "region": platform(&player.platform_id).to_ascii_lowercase(),
+                    "region": platform(&player.platform_id)?.to_ascii_lowercase(),
                     "puuid": puuid,
                     "gameType": action_queue(queue),
                     "endedAt": cursor.unwrap_or_default(),
@@ -675,7 +727,7 @@ fn parse_profile(player: &PlayerRef, root: &CompactValue) -> Result<PlayerProfil
         ladder_percentile: ladder.and_then(|fields| {
             let rank = integer(fields.first())? as f64;
             let total = integer(fields.get(1))? as f64;
-            (total > 0.0).then_some(rank / total)
+            (total > 0.0).then_some(rank / total * 100.0)
         }),
         fetched_at: now_millis(),
         refresh: RefreshAvailability {
@@ -689,8 +741,8 @@ fn parse_profile(player: &PlayerRef, root: &CompactValue) -> Result<PlayerProfil
 
 #[async_trait]
 impl PlayerStatsProvider for OpggProvider {
-    async fn profile(&self, player: &PlayerRef, _force: bool) -> Result<PlayerProfile> {
-        parse_profile(player, &self.profile_compact(player).await?)
+    async fn profile(&self, player: &PlayerRef, force: bool) -> Result<PlayerProfile> {
+        parse_profile(player, &self.profile_compact(player, force).await?)
     }
 
     async fn recent_matches(
@@ -698,9 +750,9 @@ impl PlayerStatsProvider for OpggProvider {
         player: &PlayerRef,
         cursor: Option<&str>,
         queue: Option<i64>,
-        _force: bool,
+        force: bool,
     ) -> Result<MatchPage> {
-        let profile = self.profile(player, false).await?;
+        let profile = self.profile(player, force).await?;
         let puuid = profile
             .identity
             .puuid
@@ -748,9 +800,9 @@ impl PlayerStatsProvider for OpggProvider {
         _season: Option<&str>,
         queue: Option<&str>,
         role: Option<&str>,
-        _force: bool,
+        force: bool,
     ) -> Result<Vec<PlayerChampionStats>> {
-        let root = self.profile_compact(player).await?;
+        let root = self.profile_compact(player, force).await?;
         let values = summoner_node(&root)?;
         let entries = values
             .get(9)
@@ -769,9 +821,17 @@ impl PlayerStatsProvider for OpggProvider {
             let Some(champion_id) = self.player_champion_id(&name).await else {
                 continue;
             };
-            let games = integer(fields.get(1)).unwrap_or_default();
-            let wins = integer(fields.get(2)).unwrap_or_default();
-            let losses = integer(fields.get(3)).unwrap_or(games - wins);
+            let games = integer(fields.get(1)).ok_or_else(|| {
+                ProviderError::InvalidData(format!("OP.GG champion stats omitted games for {name}"))
+            })?;
+            let wins = integer(fields.get(2)).ok_or_else(|| {
+                ProviderError::InvalidData(format!("OP.GG champion stats omitted wins for {name}"))
+            })?;
+            let losses = integer(fields.get(3)).ok_or_else(|| {
+                ProviderError::InvalidData(format!(
+                    "OP.GG champion stats omitted losses for {name}"
+                ))
+            })?;
             result.push(PlayerChampionStats {
                 source: "opgg".into(),
                 champion_id,
@@ -793,7 +853,8 @@ impl PlayerStatsProvider for OpggProvider {
         Ok(result)
     }
 
-    async fn refresh(&self, _player: &PlayerRef) -> Result<RefreshResult> {
+    async fn refresh(&self, player: &PlayerRef) -> Result<RefreshResult> {
+        self.player_cache.profiles.write().await.remove(player);
         Ok(RefreshResult {
             source: "opgg".into(),
             cache_invalidated: true,
@@ -809,7 +870,9 @@ impl PlayerStatsProvider for OpggProvider {
             match_history: true,
             champion_stats: true,
             live_game: false,
-            direct_api: true,
+            // Profile data is direct MCP JSON-RPC, but match pagination discovers
+            // and invokes a first-party Flight action from the public app.
+            direct_api: false,
             site_refresh: false,
             regions: [
                 "KR", "JP1", "NA1", "EUW1", "EUN1", "OC1", "BR1", "LA1", "LA2", "TR1", "RU", "PH2",
@@ -854,6 +917,7 @@ mod tests {
         )
         .unwrap();
         assert_eq!(profile.profile_icon_id, Some(6));
+        assert_eq!(profile.ladder_percentile, Some(399.0 / 2_750_000.0 * 100.0));
         assert_eq!(profile.ranks.len(), 2);
         assert_eq!(profile.ranks[1].tier, None);
         assert_eq!(profile.previous_seasons.len(), 2);
@@ -918,6 +982,16 @@ mod tests {
         assert_eq!(action_queue(Some(1700)), "ARENA");
         assert_eq!(queue_id("ARENA"), 1700);
         assert_eq!(queue_id("ARAM"), 450);
+        assert_eq!(platform("OC1").unwrap(), "OCE");
+        assert_eq!(platform("LA1").unwrap(), "LAN");
+        assert_eq!(platform("LA2").unwrap(), "LAS");
+        assert_eq!(platform("EUN1").unwrap(), "EUNE");
+        assert_eq!(platform("PH2").unwrap(), "PH");
+        assert!(platform("PBE1").is_err());
+
+        let provider =
+            OpggProvider::new(std::sync::Arc::new(overlay_ddragon::DdragonClient::new())).unwrap();
+        assert!(!provider.capabilities().direct_api);
     }
 
     #[test]

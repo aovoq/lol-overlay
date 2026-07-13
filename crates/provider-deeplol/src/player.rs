@@ -367,8 +367,9 @@ fn parse_match(value: &Value, puuid: &str, fallback_match_id: &str) -> Result<Pl
     let mine = raw_participants
         .iter()
         .find(|entry| string(entry, &["puu_id", "puuid"]).as_deref() == Some(puuid))
-        .or_else(|| raw_participants.first())
-        .ok_or_else(|| ProviderError::Other("DeepLoL match omitted participants".into()))?;
+        .ok_or_else(|| {
+            ProviderError::InvalidData("DeepLoL match omitted the searched player's PUUID".into())
+        })?;
     let stats = object(mine, &["final_stat_dict", "stats"]).unwrap_or(mine);
     let duration_seconds =
         integer(basic, &["game_duration", "duration", "duration_seconds"]).unwrap_or_default();
@@ -973,6 +974,21 @@ mod tests {
         assert_eq!(parsed.champion_id, 103);
         assert_eq!(parsed.participants.len(), 2);
         assert!(!parsed.remake);
+    }
+
+    #[test]
+    fn match_fixture_never_substitutes_another_participant_for_the_target() {
+        let raw = json!({
+            "match_basic_dict": {"match_id": "KR_1", "game_duration": 1200},
+            "summoner_info_list": [
+                {"puu_id": "someone-else", "champion_id": 103, "win": 1}
+            ]
+        });
+        assert!(matches!(
+            parse_match(&raw, "missing-target", "KR_1"),
+            Err(ProviderError::InvalidData(message))
+                if message.contains("searched player's PUUID")
+        ));
     }
 
     #[test]

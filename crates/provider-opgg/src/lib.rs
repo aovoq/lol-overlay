@@ -65,6 +65,7 @@ pub struct OpggProvider {
     ddragon: Arc<DdragonClient>,
     api: OpggApi,
     games_action: tokio::sync::RwLock<Option<String>>,
+    player_cache: player::OpggPlayerCache,
 }
 
 impl OpggProvider {
@@ -73,6 +74,7 @@ impl OpggProvider {
             ddragon,
             api: OpggApi::new()?,
             games_action: tokio::sync::RwLock::new(None),
+            player_cache: player::OpggPlayerCache::default(),
         })
     }
 

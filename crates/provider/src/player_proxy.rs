@@ -7,6 +7,7 @@ use std::time::{Duration, Instant};
 use async_trait::async_trait;
 use overlay_types::{MatchPage, PlayerChampionStats, PlayerProfile, PlayerRef, RefreshResult};
 
+use crate::error::ProviderError;
 use crate::error::Result;
 use crate::player_trait::{PlayerStatsProvider, ProviderCapabilities, ProviderDescriptor};
 use crate::proxy::ProviderKind;
@@ -43,6 +44,114 @@ fn player_key(kind: ProviderKind, player: &PlayerRef) -> String {
         player.game_name,
         player.tag_line
     )
+}
+
+fn invalid(message: impl Into<String>) -> ProviderError {
+    ProviderError::InvalidData(message.into())
+}
+
+fn validate_profile(kind: ProviderKind, profile: &PlayerProfile) -> Result<()> {
+    if profile.source != kind.as_str() {
+        return Err(invalid(format!(
+            "{} profile claimed source {}",
+            kind.as_str(),
+            profile.source
+        )));
+    }
+    if profile.identity.platform_id.is_empty()
+        || profile.identity.game_name.is_empty()
+        || profile.identity.tag_line.is_empty()
+    {
+        return Err(invalid("player profile contained an empty identity field"));
+    }
+    if profile
+        .ladder_percentile
+        .is_some_and(|value| !value.is_finite() || !(0.0..=100.0).contains(&value))
+    {
+        return Err(invalid(
+            "player profile contained an invalid ladder percentile",
+        ));
+    }
+    Ok(())
+}
+
+fn validate_match_page(kind: ProviderKind, page: &MatchPage) -> Result<()> {
+    if page.source != kind.as_str() {
+        return Err(invalid(format!(
+            "{} match page claimed source {}",
+            kind.as_str(),
+            page.source
+        )));
+    }
+    let mut ids = std::collections::HashSet::new();
+    for game in &page.matches {
+        if game.match_id.is_empty() || !ids.insert(game.match_id.as_str()) {
+            return Err(invalid(
+                "match page contained an empty or duplicate match ID",
+            ));
+        }
+        if game.duration_seconds < 0
+            || game.champion_id <= 0
+            || game.kills < 0
+            || game.deaths < 0
+            || game.assists < 0
+        {
+            return Err(invalid(format!(
+                "match {} contained invalid player statistics",
+                game.match_id
+            )));
+        }
+    }
+    for failure in &page.partial_failures {
+        if failure.match_id.is_empty() || !ids.insert(failure.match_id.as_str()) {
+            return Err(invalid(
+                "match page contained an empty or duplicate failure match ID",
+            ));
+        }
+    }
+    Ok(())
+}
+
+fn validate_champions(kind: ProviderKind, champions: &[PlayerChampionStats]) -> Result<()> {
+    let mut keys = std::collections::HashSet::new();
+    for entry in champions {
+        if entry.source != kind.as_str() {
+            return Err(invalid(format!(
+                "{} champion row claimed source {}",
+                kind.as_str(),
+                entry.source
+            )));
+        }
+        let key = (
+            entry.champion_id,
+            entry.role.as_deref(),
+            entry.queue.as_str(),
+        );
+        if entry.champion_id <= 0 || !keys.insert(key) {
+            return Err(invalid(
+                "champion stats contained an invalid or duplicate row",
+            ));
+        }
+        if entry.games < 0
+            || entry.wins < 0
+            || entry.losses < 0
+            || entry.wins.saturating_add(entry.losses) > entry.games
+            || !entry.win_rate.is_finite()
+            || !(0.0..=1.0).contains(&entry.win_rate)
+            || entry
+                .kda
+                .is_some_and(|value| !value.is_finite() || value < 0.0)
+            || entry
+                .cs_per_minute
+                .is_some_and(|value| !value.is_finite() || value < 0.0)
+        {
+            return Err(invalid(format!(
+                "champion {} contained invalid statistics",
+                entry.champion_id
+            )));
+        }
+    }
+    Ok(())
 }
 
 impl PlayerStatsProxy {
@@ -124,6 +233,7 @@ impl PlayerStatsProvider for PlayerStatsProxy {
             }
         }
         let value = self.provider(kind).profile(player, force).await?;
+        validate_profile(kind, &value)?;
         self.cache
             .lock()
             .unwrap()
@@ -158,6 +268,7 @@ impl PlayerStatsProvider for PlayerStatsProxy {
             .provider(kind)
             .recent_matches(player, cursor, queue, force)
             .await?;
+        validate_match_page(kind, &value)?;
         self.cache
             .lock()
             .unwrap()
@@ -198,6 +309,7 @@ impl PlayerStatsProvider for PlayerStatsProxy {
             .provider(kind)
             .champion_stats(player, season, queue, role, force)
             .await?;
+        validate_champions(kind, &value)?;
         self.cache
             .lock()
             .unwrap()
@@ -210,6 +322,12 @@ impl PlayerStatsProvider for PlayerStatsProxy {
         let kind = self.active();
         let prefix = player_key(kind, player);
         let result = self.provider(kind).refresh(player).await?;
+        if result.source != kind.as_str() || !result.cache_invalidated {
+            return Err(invalid(format!(
+                "{} refresh returned an invalid result",
+                kind.as_str()
+            )));
+        }
         let mut cache = self.cache.lock().unwrap();
         cache.profiles.retain(|key, _| !key.starts_with(&prefix));
         cache.matches.retain(|key, _| !key.starts_with(&prefix));
@@ -380,6 +498,50 @@ mod tests {
         assert!(fresh(Some(&(expired_at, profile))).is_none());
     }
 
+    #[test]
+    fn player_contract_validation_rejects_wrong_sources_and_invalid_statistics() {
+        let invalid_profile = PlayerProfile {
+            source: "opgg".into(),
+            identity: PlayerIdentity {
+                platform_id: "KR".into(),
+                game_name: "Player".into(),
+                tag_line: "KR1".into(),
+                puuid: None,
+            },
+            level: None,
+            profile_icon_id: None,
+            ranks: vec![],
+            previous_seasons: vec![],
+            ladder_rank: None,
+            ladder_percentile: None,
+            fetched_at: 1,
+            refresh: RefreshAvailability::default(),
+            extras: ProviderExtras::None,
+        };
+        assert!(matches!(
+            validate_profile(ProviderKind::Deeplol, &invalid_profile),
+            Err(ProviderError::InvalidData(_))
+        ));
+
+        let invalid_champion = PlayerChampionStats {
+            source: "deeplol".into(),
+            champion_id: 103,
+            games: 2,
+            wins: 3,
+            losses: 0,
+            win_rate: 1.5,
+            kda: Some(f64::NAN),
+            cs_per_minute: None,
+            role: Some("Middle".into()),
+            queue: "RANKED_SOLO_5x5".into(),
+            extras: ProviderExtras::None,
+        };
+        assert!(matches!(
+            validate_champions(ProviderKind::Deeplol, &[invalid_champion]),
+            Err(ProviderError::InvalidData(_))
+        ));
+    }
+
     #[tokio::test]
     async fn switching_is_independent_and_errors_do_not_fallback() {
         let proxy = PlayerStatsProxy::new(
@@ -418,7 +580,7 @@ mod tests {
 
     #[tokio::test]
     async fn coalesces_duplicates_and_keeps_provider_caches_separate() {
-        let deep = Arc::new(CountingStub::new("deep"));
+        let deep = Arc::new(CountingStub::new("deeplol"));
         let ugg = Arc::new(CountingStub::new("ugg"));
         let proxy = PlayerStatsProxy::new(
             ProviderKind::Deeplol,
@@ -440,8 +602,8 @@ mod tests {
             proxy.profile(&identity, false),
             proxy.profile(&identity, false)
         );
-        assert_eq!(first.unwrap().source, "deep");
-        assert_eq!(second.unwrap().source, "deep");
+        assert_eq!(first.unwrap().source, "deeplol");
+        assert_eq!(second.unwrap().source, "deeplol");
         assert_eq!(deep.profiles.load(Ordering::SeqCst), 1);
 
         proxy.set_active(ProviderKind::Ugg).unwrap();
