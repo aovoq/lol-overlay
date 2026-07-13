@@ -18,9 +18,16 @@ an authenticated, cooldown-aware contract is deliberately implemented.
 ## OP.GG pagination
 
 The official MCP match-history method returns at most 20 matches and exposes no continuation token.
-The adapter treats a cursor as unsupported. Returning the same matches with a synthetic cursor
-would corrupt pagination semantics, so load-more remains unavailable for OP.GG until the official
-surface adds continuation support.
+The public OP.GG app, however, uses a first-party React server action named `getGames`. Its
+structured Flight result contains 20 complete games, participant details, and
+`meta.last_game_created_at`; the app sends that timestamp back as `endedAt` for the next page.
+
+The adapter keeps profile/rank/champion aggregation on the official MCP and uses this anonymous,
+read-only server action for match pages. It discovers the current action identifier from the
+JavaScript bundles referenced by the public profile page and caches it, rather than pinning a
+deployment hash. It does not parse rendered labels or DOM structure, and it requires no browser
+cookies. If the action or structured result disappears, the adapter fails with `InvalidData`
+instead of replaying page one or synthesizing a cursor.
 
 ## U.GG player provider
 
@@ -29,4 +36,3 @@ a managed Cloudflare challenge in the live environment, and stable anonymous pro
 not documented. The project will not parse rendered HTML, automate Turnstile, borrow user cookies,
 or evade bot protection. Consequently U.GG player support remains unregistered and the overall
 three-provider acceptance goal remains open.
-

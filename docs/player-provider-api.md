@@ -23,13 +23,20 @@ CAPTCHA, authentication, and bot mitigations are not bypassed.
 
 ## OP.GG
 
-- Host: `https://mcp-api.op.gg/mcp`; anonymous JSON-RPC 2.0 `POST` with JSON content type.
-- Methods used: official OP.GG MCP summoner profile, match-history, match-detail, and champion
-  analysis tools. Responses are compact structured JSON constructors, not rendered HTML.
+- Profile/champion host: `https://mcp-api.op.gg/mcp`; anonymous JSON-RPC 2.0 `POST` with JSON
+  content type. The official summoner profile response is compact structured JSON constructors,
+  not rendered HTML.
 - Identity: Riot ID plus region; PUUID from the profile result is used for participant selection.
-- Pagination: the official tool currently exposes a maximum of 20 matches and no cursor. A cursor
-  request returns an explicit unsupported error; the adapter does not replay page one or invent an
-  offset.
+- Matches: anonymous `POST` to the public profile route with `Accept: text/x-component`,
+  `Content-Type: text/plain;charset=UTF-8`, and the current `Next-Action` identifier for
+  `getGames`. The JSON argument contains locale, lowercase region, PUUID, game type, `endedAt`, and
+  nullable champion. No cookie or login header is required.
+- Action discovery: fetch the public profile HTML, follow its first-party `c-lol-web.op.gg`
+  JavaScript bundle references, locate the `getGames` server reference, and cache its deployment
+  identifier. This avoids a hard-coded build hash.
+- Pagination: each action result contains up to 20 structured games and
+  `meta.last_game_created_at`. That timestamp becomes the next `endedAt` cursor; live acceptance
+  returned 20 + 20 distinct chronological records.
 - Refresh: application cache invalidation/read only. The official MCP surface exposes no safe site
   mutation.
 - Rate-limit hypothesis: HTTP 429 and `Retry-After` are honored; no stable published quota was
@@ -50,4 +57,3 @@ CAPTCHA, authentication, and bot mitigations are not bypassed.
 - Re-evaluate when U.GG publishes an anonymous player JSON contract, or the challenge is removed
   for normal direct clients. Record query variables, IDs, pagination, and 429 behavior before
   enabling it.
-

@@ -64,6 +64,7 @@ fn skill_letter_id(letter: &str) -> Option<i64> {
 pub struct OpggProvider {
     ddragon: Arc<DdragonClient>,
     api: OpggApi,
+    games_action: tokio::sync::RwLock<Option<String>>,
 }
 
 impl OpggProvider {
@@ -71,6 +72,7 @@ impl OpggProvider {
         Ok(Self {
             ddragon,
             api: OpggApi::new()?,
+            games_action: tokio::sync::RwLock::new(None),
         })
     }
 

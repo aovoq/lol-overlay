@@ -1,4 +1,4 @@
-//! Player statistics from OP.GG's official, read-only MCP JSON-RPC endpoint.
+//! Player statistics from OP.GG's official MCP and public app data surfaces.
 //!
 //! The transport is JSON. OP.GG intentionally returns selected data in a
 //! compact constructor notation inside the MCP text content, so this module
@@ -8,7 +8,6 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use async_trait::async_trait;
 use chrono::DateTime;
-use futures::{stream, StreamExt};
 use overlay_ddragon::normalize;
 use overlay_provider::{PlayerStatsProvider, ProviderCapabilities, ProviderError, Result};
 use overlay_types::{
@@ -22,7 +21,6 @@ use super::OpggProvider;
 
 const MCP_URL: &str = "https://mcp-api.op.gg/mcp";
 const PAGE_SIZE: usize = 20;
-const DETAIL_CONCURRENCY: usize = 5;
 
 const PROFILE_FIELDS: &[&str] = &[
     "data.summoner.{game_name,tagline,level,profile_image_url,puuid,updated_at}",
@@ -33,20 +31,6 @@ const PROFILE_FIELDS: &[&str] = &[
     "data.summoner.previous_season_tiers[].rank_entries[].game_type",
     "data.summoner.previous_season_tiers[].rank_entries[].rank_info.{division,lp,tier,win,lose}",
     "data.summoner.ranked_most_champions.my_champion_stats[].{champion_name,play,win,lose}",
-];
-
-const MATCH_FIELDS: &[&str] = &[
-    "data.game_history[].{id,created_at,game_length_second,game_type}",
-    "data.game_history[].participants[].{champion_id,champion_name,position,team_key,items[],spells[]}",
-    "data.game_history[].participants[].summoner.{game_name,tagline,puuid}",
-    "data.game_history[].participants[].stats.{kill,death,assist,minion_kill,neutral_minion_kill,result,op_score}",
-];
-
-const DETAIL_FIELDS: &[&str] = &[
-    "data.game_detail.{id,created_at,game_length_second,game_type}",
-    "data.game_detail.teams[].participants[].{champion_id,champion_name,position,team_key,items[],spells[]}",
-    "data.game_detail.teams[].participants[].summoner.{game_name,tagline,puuid}",
-    "data.game_detail.teams[].participants[].stats.{kill,death,assist,minion_kill,neutral_minion_kill,result,op_score}",
 ];
 
 #[derive(Debug, Clone, PartialEq)]
@@ -241,25 +225,11 @@ fn integer(value: Option<&CompactValue>) -> Option<i64> {
     }
 }
 
-fn decimal(value: Option<&CompactValue>) -> Option<f64> {
-    match value? {
-        CompactValue::Number(value) if value.is_finite() => Some(*value),
-        _ => None,
-    }
-}
-
 fn now_millis() -> i64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .unwrap_or_default()
         .as_millis() as i64
-}
-
-fn rfc3339_millis(value: Option<&CompactValue>) -> i64 {
-    text(value)
-        .and_then(|value| DateTime::parse_from_rfc3339(&value).ok())
-        .map(|value| value.timestamp_millis())
-        .unwrap_or_default()
 }
 
 fn queue_id(game_type: &str) -> i64 {
@@ -275,6 +245,187 @@ fn queue_id(game_type: &str) -> i64 {
 
 fn platform(raw: &str) -> String {
     raw.trim_end_matches('1').to_ascii_uppercase()
+}
+
+fn public_profile_url(player: &PlayerRef) -> Result<reqwest::Url> {
+    let mut url = reqwest::Url::parse("https://op.gg/lol/summoners/")
+        .map_err(|error| ProviderError::Other(error.to_string()))?;
+    url.path_segments_mut()
+        .map_err(|()| ProviderError::Other("OP.GG profile URL cannot be a base".into()))?
+        .push(&platform(&player.platform_id).to_ascii_lowercase())
+        .push(&format!("{}-{}", player.game_name, player.tag_line));
+    Ok(url)
+}
+
+fn games_action_id(bundle: &str) -> Option<String> {
+    let end = bundle.find("\"getGames\"")?;
+    let prefix = &bundle[end.saturating_sub(240)..end];
+    prefix
+        .split(|character: char| !character.is_ascii_hexdigit())
+        .rev()
+        .find(|candidate| candidate.len() == 42)
+        .map(str::to_owned)
+}
+
+fn action_json(body: &str) -> Result<Value> {
+    let payload = body
+        .lines()
+        .find_map(|line| line.strip_prefix("1:"))
+        .ok_or_else(|| ProviderError::InvalidData("OP.GG action omitted Flight value 1".into()))?;
+    serde_json::from_str(payload).map_err(|error| {
+        ProviderError::InvalidData(format!(
+            "OP.GG action returned malformed Flight JSON: {error}"
+        ))
+    })
+}
+
+fn action_queue(queue: Option<i64>) -> &'static str {
+    match queue {
+        Some(420) => "SOLORANKED",
+        Some(440) => "FLEXRANKED",
+        Some(450) => "ARAM",
+        Some(1700) => "ARENA",
+        _ => "TOTAL",
+    }
+}
+
+fn value_integer(value: Option<&Value>) -> i64 {
+    value
+        .and_then(|value| {
+            value
+                .as_i64()
+                .or_else(|| value.as_u64().map(|raw| raw as i64))
+        })
+        .unwrap_or_default()
+}
+
+fn action_participant(value: &Value) -> Option<MatchParticipant> {
+    let summoner = value.get("summoner")?;
+    let stats = value.get("stats")?;
+    let team = value.get("team_key").and_then(Value::as_str);
+    Some(MatchParticipant {
+        puuid: summoner
+            .get("puuid")
+            .and_then(Value::as_str)
+            .map(str::to_owned),
+        game_name: summoner
+            .get("game_name")
+            .and_then(Value::as_str)
+            .map(str::to_owned),
+        tag_line: summoner
+            .get("tagline")
+            .and_then(Value::as_str)
+            .map(str::to_owned),
+        champion_id: value_integer(value.get("champion_id")),
+        team_id: match team {
+            Some("BLUE") => 100,
+            Some("RED") => 200,
+            _ => 0,
+        },
+        role: value
+            .get("position")
+            .or_else(|| value.get("role"))
+            .and_then(Value::as_str)
+            .map(str::to_owned),
+        win: stats.get("result").and_then(Value::as_str) == Some("WIN"),
+        kills: value_integer(stats.get("kill")),
+        deaths: value_integer(stats.get("death")),
+        assists: value_integer(stats.get("assist")),
+        items: value
+            .get("items")
+            .and_then(Value::as_array)
+            .into_iter()
+            .flatten()
+            .filter_map(Value::as_i64)
+            .collect(),
+        extras: ProviderExtras::Opgg(json!({"opScore": stats.get("op_score")})),
+    })
+}
+
+fn collect_action_participants(value: &Value, output: &mut Vec<MatchParticipant>) {
+    if let Some(participant) = action_participant(value) {
+        output.push(participant);
+        return;
+    }
+    match value {
+        Value::Array(values) => {
+            for value in values {
+                collect_action_participants(value, output);
+            }
+        }
+        Value::Object(values) => {
+            for value in values.values() {
+                collect_action_participants(value, output);
+            }
+        }
+        _ => {}
+    }
+}
+
+fn parse_action_match(value: &Value, puuid: &str) -> Result<PlayerMatch> {
+    let mut participants = vec![];
+    for key in ["team_blue", "team_red", "team_arena"] {
+        if let Some(team) = value.get(key) {
+            collect_action_participants(team, &mut participants);
+        }
+    }
+    let mine = participants
+        .iter()
+        .find(|participant| participant.puuid.as_deref() == Some(puuid))
+        .cloned()
+        .ok_or_else(|| ProviderError::InvalidData("OP.GG game omitted searched player".into()))?;
+    let stats = value.get("stats").unwrap_or(&Value::Null);
+    let game_type = value
+        .pointer("/game_type/game_type")
+        .and_then(Value::as_str)
+        .unwrap_or_default();
+    let started_at = value
+        .get("created_at")
+        .and_then(Value::as_str)
+        .and_then(|raw| DateTime::parse_from_rfc3339(raw).ok())
+        .map(|date| date.timestamp_millis())
+        .unwrap_or_default();
+    let duration_seconds = value_integer(value.get("game_length"));
+    Ok(PlayerMatch {
+        match_id: value
+            .get("id")
+            .and_then(Value::as_str)
+            .unwrap_or_default()
+            .to_owned(),
+        started_at,
+        duration_seconds,
+        queue_id: queue_id(game_type),
+        remake: duration_seconds < 300,
+        champion_id: mine.champion_id,
+        role: mine.role.clone(),
+        win: mine.win,
+        kills: mine.kills,
+        deaths: mine.deaths,
+        assists: mine.assists,
+        cs: stats
+            .pointer("/cs/totalCs")
+            .map(|value| value_integer(Some(value))),
+        items: mine.items.clone(),
+        spell_ids: value
+            .get("spells")
+            .and_then(Value::as_array)
+            .into_iter()
+            .flatten()
+            .filter_map(|spell| spell.get("id").and_then(Value::as_i64))
+            .collect(),
+        perk_ids: value
+            .get("runes")
+            .and_then(Value::as_array)
+            .into_iter()
+            .flatten()
+            .filter_map(|rune| rune.get("id").and_then(Value::as_i64))
+            .collect(),
+        participants,
+        extras: ProviderExtras::Opgg(json!({
+            "opScore": stats.get("op_score"),
+            "opBadge": value.get("opBadge"),
+        })),
+    })
 }
 
 impl OpggProvider {
@@ -350,20 +501,98 @@ impl OpggProvider {
         .await
     }
 
-    async fn detail_compact(
+    async fn discover_games_action(&self, player: &PlayerRef) -> Result<String> {
+        if let Some(action) = self.games_action.read().await.clone() {
+            return Ok(action);
+        }
+        let response = self
+            .api
+            .http()
+            .get(public_profile_url(player)?)
+            .send()
+            .await?;
+        if response.status() == reqwest::StatusCode::NOT_FOUND {
+            return Err(ProviderError::PlayerNotFound);
+        }
+        let html = response.error_for_status()?.text().await?;
+        let mut bundles = html
+            .split('"')
+            .filter(|part| {
+                part.starts_with("https://c-lol-web.op.gg/")
+                    && std::path::Path::new(part)
+                        .extension()
+                        .is_some_and(|extension| extension.eq_ignore_ascii_case("js"))
+            })
+            .map(str::to_owned)
+            .collect::<Vec<_>>();
+        bundles.sort_by_key(|url| !url.contains("/7716-"));
+        bundles.dedup();
+        for url in bundles {
+            let Ok(response) = self.api.http().get(url).send().await else {
+                continue;
+            };
+            let Ok(response) = response.error_for_status() else {
+                continue;
+            };
+            let Ok(bundle) = response.text().await else {
+                continue;
+            };
+            if let Some(action) = games_action_id(&bundle) {
+                *self.games_action.write().await = Some(action.clone());
+                return Ok(action);
+            }
+        }
+        Err(ProviderError::InvalidData(
+            "OP.GG public app omitted the getGames server action".into(),
+        ))
+    }
+
+    async fn action_matches(
         &self,
-        region: &str,
-        id: &str,
-        created_at: &str,
-    ) -> Result<CompactValue> {
-        self.mcp_call(
-            "lol_get_summoner_game_detail",
-            json!({
-                "region": platform(region), "lang": "en_US", "game_id": id,
-                "created_at": created_at, "desired_output_fields": DETAIL_FIELDS
-            }),
-        )
-        .await
+        player: &PlayerRef,
+        puuid: &str,
+        cursor: Option<&str>,
+        queue: Option<i64>,
+    ) -> Result<Value> {
+        let action = self.discover_games_action(player).await?;
+        let response = self
+            .api
+            .http()
+            .post(public_profile_url(player)?)
+            .header("accept", "text/x-component")
+            .header("content-type", "text/plain;charset=UTF-8")
+            .header("next-action", action)
+            .body(
+                json!([{
+                    "locale": "en",
+                    "region": platform(&player.platform_id).to_ascii_lowercase(),
+                    "puuid": puuid,
+                    "gameType": action_queue(queue),
+                    "endedAt": cursor.unwrap_or_default(),
+                    "champion": Value::Null,
+                }])
+                .to_string(),
+            )
+            .send()
+            .await
+            .map_err(|error| {
+                if error.is_timeout() {
+                    ProviderError::Timeout
+                } else {
+                    ProviderError::Http(error)
+                }
+            })?;
+        let status = response.status();
+        let retry_after = response
+            .headers()
+            .get(reqwest::header::RETRY_AFTER)
+            .and_then(|value| value.to_str().ok())
+            .and_then(|value| value.parse().ok());
+        if status == reqwest::StatusCode::TOO_MANY_REQUESTS {
+            return Err(ProviderError::RateLimited { retry_after });
+        }
+        let body = response.error_for_status()?.text().await?;
+        action_json(&body)
     }
 }
 
@@ -457,95 +686,6 @@ fn parse_profile(player: &PlayerRef, root: &CompactValue) -> Result<PlayerProfil
     })
 }
 
-fn participant(fields: &[CompactValue]) -> Result<MatchParticipant> {
-    let summoner = fields.get(6).and_then(|value| args(value, "Summoner").ok());
-    let stats = fields
-        .get(7)
-        .and_then(|value| args(value, "Stats").ok())
-        .ok_or_else(|| ProviderError::Other("OP.GG participant omitted stats".into()))?;
-    let team = text(fields.get(3));
-    Ok(MatchParticipant {
-        puuid: summoner.and_then(|fields| text(fields.get(2))),
-        game_name: summoner.and_then(|fields| text(fields.first())),
-        tag_line: summoner.and_then(|fields| text(fields.get(1))),
-        champion_id: integer(fields.first()).unwrap_or_default(),
-        team_id: match team.as_deref() {
-            Some("BLUE") => 100,
-            Some("RED") => 200,
-            _ => 0,
-        },
-        role: text(fields.get(2)),
-        win: text(stats.get(5)).as_deref() == Some("WIN"),
-        kills: integer(stats.first()).unwrap_or_default(),
-        deaths: integer(stats.get(1)).unwrap_or_default(),
-        assists: integer(stats.get(2)).unwrap_or_default(),
-        items: fields
-            .get(4)
-            .and_then(|value| array(value).ok())
-            .into_iter()
-            .flatten()
-            .filter_map(|value| integer(Some(value)))
-            .collect(),
-        extras: ProviderExtras::Opgg(json!({"opScore": decimal(stats.get(6))})),
-    })
-}
-
-fn game_fields(root: &CompactValue, detail: bool) -> Result<&[CompactValue]> {
-    let root_name = if detail {
-        "LolGetSummonerGameDetail"
-    } else {
-        "LolListSummonerMatches"
-    };
-    let data = args(root, root_name)?
-        .first()
-        .ok_or_else(|| ProviderError::Other("OP.GG match response omitted data".into()))?;
-    let value = args(data, "Data")?
-        .first()
-        .ok_or_else(|| ProviderError::Other("OP.GG match response omitted game".into()))?;
-    args(value, if detail { "GameDetail" } else { "GameHistory" })
-}
-
-fn parse_detail(root: &CompactValue, puuid: &str) -> Result<PlayerMatch> {
-    let fields = game_fields(root, true)?;
-    let mut participants = vec![];
-    if let Some(CompactValue::Array(teams)) = fields.get(4) {
-        for team in teams {
-            let entries = args(team, "Team")?
-                .first()
-                .ok_or_else(|| ProviderError::Other("OP.GG team omitted participants".into()))?;
-            for entry in array(entries)? {
-                participants.push(participant(args(entry, "Participant")?)?);
-            }
-        }
-    }
-    let mine = participants
-        .iter()
-        .find(|entry| entry.puuid.as_deref() == Some(puuid))
-        .or_else(|| participants.first())
-        .ok_or_else(|| ProviderError::Other("OP.GG detail omitted participants".into()))?
-        .clone();
-    let game_type = text(fields.get(3)).unwrap_or_default();
-    Ok(PlayerMatch {
-        match_id: text(fields.first()).unwrap_or_default(),
-        started_at: rfc3339_millis(fields.get(1)),
-        duration_seconds: integer(fields.get(2)).unwrap_or_default(),
-        queue_id: queue_id(&game_type),
-        remake: integer(fields.get(2)).is_some_and(|value| value < 300),
-        champion_id: mine.champion_id,
-        role: mine.role.clone(),
-        win: mine.win,
-        kills: mine.kills,
-        deaths: mine.deaths,
-        assists: mine.assists,
-        cs: None,
-        items: mine.items.clone(),
-        spell_ids: vec![],
-        perk_ids: vec![],
-        participants,
-        extras: mine.extras,
-    })
-}
-
 #[async_trait]
 impl PlayerStatsProvider for OpggProvider {
     async fn profile(&self, player: &PlayerRef, _force: bool) -> Result<PlayerProfile> {
@@ -559,63 +699,27 @@ impl PlayerStatsProvider for OpggProvider {
         queue: Option<i64>,
         _force: bool,
     ) -> Result<MatchPage> {
-        if cursor.is_some() {
-            return Err(ProviderError::Other(
-                "OP.GG official MCP match API does not expose pagination".into(),
-            ));
-        }
         let profile = self.profile(player, false).await?;
         let puuid = profile
             .identity
             .puuid
             .ok_or_else(|| ProviderError::Other("OP.GG profile omitted puuid".into()))?;
-        let root = self
-            .mcp_call(
-                "lol_list_summoner_matches",
-                json!({
-                    "game_name": player.game_name, "tag_line": player.tag_line,
-                    "region": platform(&player.platform_id), "lang": "en_US",
-                    "limit": PAGE_SIZE, "desired_output_fields": MATCH_FIELDS
-                }),
-            )
-            .await?;
-        let data = args(&root, "LolListSummonerMatches")?
-            .first()
-            .ok_or_else(|| ProviderError::Other("OP.GG matches omitted data".into()))?;
-        let games = args(data, "Data")?
-            .first()
-            .and_then(|value| array(value).ok())
-            .ok_or_else(|| ProviderError::Other("OP.GG matches omitted history".into()))?;
-        let summaries = games
-            .iter()
-            .filter_map(|game| {
-                let fields = args(game, "GameHistory").ok()?;
-                Some((text(fields.first())?, text(fields.get(1))?))
-            })
-            .collect::<Vec<_>>();
-        let hydrated = stream::iter(summaries.into_iter().map(|(id, created)| {
-            let puuid = puuid.clone();
-            async move {
-                let result = self
-                    .detail_compact(&player.platform_id, &id, &created)
-                    .await
-                    .and_then(|root| parse_detail(&root, &puuid));
-                (id, result)
-            }
-        }))
-        .buffer_unordered(DETAIL_CONCURRENCY)
-        .collect::<Vec<_>>()
-        .await;
+        let root = self.action_matches(player, &puuid, cursor, queue).await?;
+        let games = root
+            .get("data")
+            .and_then(Value::as_array)
+            .ok_or_else(|| ProviderError::InvalidData("OP.GG action omitted games".into()))?;
         let mut matches = vec![];
         let mut partial_failures = vec![];
-        for (id, result) in hydrated {
-            match result {
-                Ok(value) if queue.is_none_or(|queue| value.queue_id == queue) => {
-                    matches.push(value);
-                }
-                Ok(_) => {}
+        for game in games {
+            match parse_action_match(game, &puuid) {
+                Ok(value) => matches.push(value),
                 Err(error) => partial_failures.push(MatchFailure {
-                    match_id: id,
+                    match_id: game
+                        .get("id")
+                        .and_then(Value::as_str)
+                        .unwrap_or("unknown")
+                        .to_owned(),
                     message: error.to_string(),
                     retryable: true,
                 }),
@@ -625,7 +729,13 @@ impl PlayerStatsProvider for OpggProvider {
         Ok(MatchPage {
             source: "opgg".into(),
             matches,
-            next_cursor: None,
+            next_cursor: (games.len() == PAGE_SIZE)
+                .then(|| {
+                    root.pointer("/meta/last_game_created_at")
+                        .and_then(Value::as_str)
+                        .map(str::to_owned)
+                })
+                .flatten(),
             partial_failures,
             fetched_at: now_millis(),
         })
@@ -752,18 +862,44 @@ mod tests {
     }
 
     #[test]
-    fn detail_fixture_extracts_all_participants_and_op_score_extra() {
-        let root = CompactParser::new(
-            r#"LolGetSummonerGameDetail(Data(GameDetail("game","2026-07-11T23:55:58+09:00",2064,"SOLORANKED",[Team([Participant(777,"Yone","MID","BLUE",[6673,3153],[12,4],Summoner("Hide on bush","KR1","mine"),Stats(3,2,11,323,35,"WIN",5.39))]),Team([Participant(2,"Olaf","TOP","RED",[3073],[3,4],Summoner("Other","KR1","other"),Stats(7,6,6,288,4,"LOSE",4.45))])])))"#,
-        )
-        .parse()
-        .unwrap();
-        let parsed = parse_detail(&root, "mine").unwrap();
+    fn action_fixture_extracts_all_participants_and_op_score_extra() {
+        let root = json!({
+            "id": "game", "created_at": "2026-07-11T23:55:58+09:00",
+            "game_length": 2064, "game_type": {"game_type": "SOLORANKED"},
+            "stats": {"op_score": 5.39, "cs": {"totalCs": 358}},
+            "spells": [{"id": 12}, {"id": 4}], "runes": [{"id": 8021}, {"id": 8400}],
+            "team_blue": [{
+                "champion_id": 777, "position": "MID", "team_key": "BLUE",
+                "items": [6673, 3153], "summoner": {"game_name": "Hide on bush", "tagline": "KR1", "puuid": "mine"},
+                "stats": {"kill": 3, "death": 2, "assist": 11, "result": "WIN", "op_score": 5.39}
+            }],
+            "team_red": [{
+                "champion_id": 2, "position": "TOP", "team_key": "RED",
+                "items": [3073], "summoner": {"game_name": "Other", "tagline": "KR1", "puuid": "other"},
+                "stats": {"kill": 7, "death": 6, "assist": 6, "result": "LOSE", "op_score": 4.45}
+            }]
+        });
+        let parsed = parse_action_match(&root, "mine").unwrap();
         assert_eq!(parsed.queue_id, 420);
         assert_eq!(parsed.participants.len(), 2);
         assert_eq!(parsed.champion_id, 777);
+        assert_eq!(parsed.cs, Some(358));
+        assert_eq!(parsed.spell_ids, vec![12, 4]);
         assert!(parsed.win);
         assert!(matches!(parsed.extras, ProviderExtras::Opgg(_)));
+    }
+
+    #[test]
+    fn server_action_and_flight_value_parsers_reject_malformed_contracts() {
+        let bundle = r#"let c=(0,d.createServerReference)("409a2b9ca50d15e50a4dace93552e3a40113dc2753",d.callServer,void 0,d.findSourceMapURL,"getGames");"#;
+        assert_eq!(
+            games_action_id(bundle).as_deref(),
+            Some("409a2b9ca50d15e50a4dace93552e3a40113dc2753")
+        );
+        let parsed = action_json("0:{\"a\":\"$@1\"}\n1:{\"data\":[],\"meta\":{}}")
+            .expect("Flight action value");
+        assert!(parsed["data"].as_array().unwrap().is_empty());
+        assert!(action_json("0:{}").is_err());
     }
 
     #[test]
@@ -807,11 +943,21 @@ mod tests {
                 .iter()
                 .filter(|entry| matches!(entry.queue_id, 400 | 420 | 440 | 450))
                 .all(|entry| entry.participants.len() == 10));
+            let cursor = matches.next_cursor.as_deref().expect("second-page cursor");
+            let second = provider
+                .recent_matches(&player, Some(cursor), None, true)
+                .await
+                .expect("second match page");
+            assert_eq!(
+                second.matches.len() + second.partial_failures.len(),
+                PAGE_SIZE
+            );
             println!(
-                "OPGG PLAYER LIVE OK: profile={} ranks={} matches={} champions={}",
+                "OPGG PLAYER LIVE OK: profile={} ranks={} first={} second={} champions={}",
                 profile.identity.game_name,
                 profile.ranks.len(),
                 matches.matches.len(),
+                second.matches.len(),
                 champions.len()
             );
         });
