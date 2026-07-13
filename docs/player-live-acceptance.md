@@ -2,6 +2,9 @@
 
 Execution date: 2026-07-13 JST. Representative account: `KR / Hide on bush#KR1`.
 
+Fresh revalidation: 2026-07-14 01:59 JST on macOS. The same representative account and anonymous
+transports passed again. This is provider-network evidence only; it is not Windows/LCU UI evidence.
+
 | Provider | Direct transport | Profile/rank | Matches | Champion stats | Read refresh | Result |
 | --- | --- | --- | --- | --- | --- | --- |
 | DeepLoL | Anonymous JSON GET, `b2c-api-cdn.deeplol.gg` | Pass; tier chart also returned using derived `last_match_id` | Pass, 20 + 20 | Pass, 76 rows | Pass; app cache/read only | Pass |
@@ -59,3 +62,20 @@ client GraphQL request received HTML instead of JSON. Details are in
 DeepLoL and OP.GG to pass plus a contract assertion that U.GG is not registered for Player Stats.
 Site mutation is unavailable on both implemented transports; their explicit refresh action is a
 cache invalidation plus forced read, as documented in the provider-boundary ADR.
+
+## 2026-07-14 completion revalidation
+
+```text
+cargo test -p overlay-provider-deeplol --lib player::tests::live_player_stats_acceptance -- --ignored --nocapture
+DEEPLOL PLAYER LIVE OK: profile=Hide on bush first=20 second=20 champions=76
+
+cargo test -p overlay-provider-opgg --lib player::tests::live_player_stats_acceptance -- --ignored --nocapture
+OPGG PLAYER LIVE OK: profile=Hide on bush ranks=3 first=20 second=20 champions=10
+
+cargo test -p overlay-provider-ugg --lib -- --ignored --nocapture
+2 passed; both are Build-statistics tests. No U.GG Player adapter or Player live test exists.
+```
+
+Production registration and Tauri/frontend/E2E contracts also assert that the Player source list is
+exactly `deeplol`, `opgg`. The independent Windows/LCU manual gate is prepared in
+`docs/player-windows-lcu-acceptance.md` and is explicitly not executed on this macOS host.

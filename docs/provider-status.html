@@ -44,7 +44,7 @@
         <div class="metric"><div class="n">4</div><div class="label">登録済みプロバイダ</div></div>
         <div class="metric good"><div class="n">3</div><div class="label">構造化JSON取得</div></div>
         <div class="metric warn"><div class="n">1</div><div class="label">HTML埋め込みデータ解析</div></div>
-        <div class="metric good"><div class="n">14/18</div><div class="label">ライブテスト成功（2026-07-13）</div></div>
+        <div class="metric good"><div class="n">2/2</div><div class="label">Player live成功（2026-07-14）</div></div>
       </div>
     </div>
   </header>
@@ -136,7 +136,7 @@ fn capabilities(&amp;self) -&gt; ProviderCapabilities;</code></pre></div>
     <section id="tests-spec"><div class="wrap">
       <h2>テスト戦略と完了判定</h2><p class="sub">offline testは開発中に毎回、外部live testは最終完了時に必ず実行。live testをskipした状態ではGoalをcompleteにしない。</p>
       <div class="test-matrix"><div class="test-block"><h3>Rust offline</h3><ul><li>raw parser fixture: success / nullable / malformed</li><li>DeepLoL・OP.GG共通Player contract suite</li><li>U.GG Player未登録contract</li><li>Router / Proxy / capabilities / settings migration</li><li>TTL / single-flight / force / timeout / 429</li><li>pagination / N+1 / partial failure / refresh safety</li><li>serde camelCase snapshot</li></ul></div><div class="test-block"><h3>Frontend offline</h3><ul><li>GameName#Tag parserと履歴上限</li><li>Provider切替と永続化</li><li>queue/role/champion filterとremake集計除外</li><li>load moreとpartial retry</li><li>全UI stateのcomponent test</li><li>既存navigation regression</li></ul></div><div class="test-block"><h3>Frontend E2E</h3><ul><li>mock gateway付きVite test modeを用意</li><li>自分の自動検索、任意検索、404、429</li><li>Provider切替、追加読込、詳細開閉</li><li>再読み込み、履歴削除、再起動相当復元</li><li>desktop responsive layout</li></ul></div><div class="test-block"><h3>最終live</h3><ul><li>DeepLoL / OP.GG各1件以上</li><li>Profile、Rank、20 matches、load more</li><li>Champion Stats、read refresh</li><li>U.GGがPlayer一覧に存在しないこと</li><li>実行日時・Riot ID・結果をdocsへ記録</li></ul></div></div>
-      <div class="callout"><strong>Windows / LCU manual gate：</strong> Macで実行する自動完了ゲートとは分離する。WindowsでLeague Clientへログインした状態のidentity自動検索、既存Home event非退行、Tauri UI操作を手順書どおり確認する。Coding Agentは実行不能を隠さず、再現可能な手順・期待結果・失敗時ログ箇所を完成させる。</div>
+      <div class="callout"><strong>Windows / LCU manual gate：</strong> Macで実行する自動完了ゲートとは分離する。WindowsでLeague Clientへログインした状態のidentity自動検索、既存Home event非退行、Tauri UI操作を手順書どおり確認する。Coding Agentは実行不能を隠さず、再現可能な手順・期待結果・失敗時ログ箇所を完成させる。<br><b>2026-07-14 status:</b> <code>docs/player-windows-lcu-acceptance.md</code>とread-only ignored harnessを完成。macOSでは実行せず、Windows/LCU実機結果は未実施と明記。</div>
       <div class="code-card"><h3>必須コマンド</h3><pre><code>bun run format
 bun run check
 # 新設するPlayer Provider live tests（正確なpackage/commandは実装に合わせてdocsへ確定記載）
@@ -285,8 +285,8 @@ tests / *.test.*                            contract, parser, UI, E2E</div>
 
     <section id="tasks"><div class="wrap">
       <h2>実装タスク</h2><p class="sub">チェック状態はこのブラウザのlocalStorageへ保存されます。Coding Agentは上のPhase順と各完了条件を優先し、32タスクすべてを完了してから最終Done Definitionを監査します。</p>
-      <div class="task-summary"><b id="task-count">0 / 32</b><span>完了</span></div>
-      <div class="callout"><strong>2026-07-14 方針確定：</strong> Player StatsはDeepLoL・OP.GGの2 Providerで完成させる。U.GGはChrome調査でGraphQL契約とApollo Stateを確認したが、匿名HTTPとMatch HistoryがCloudflareに遮断されるためBuild専用とし、Player未登録を正しい完成状態とする。独立監査で指摘されたfixture・command・state test不足はすべて解消する。</div>
+      <div class="task-summary"><b id="task-count">32 / 32</b><span>ローカル完了</span></div>
+      <div class="callout"><strong>2026-07-14 完了証跡：</strong> Player StatsはDeepLoL・OP.GGの2 Providerで完成。U.GGはBuild専用で、production registry・Tauri command・frontend settings/state・E2Eの全境界からPlayer未登録を検証した。独立監査のfixture・mock HTTP・raw schema・command・state/race・settings event・cross-provider contract不足は解消。<code>bun run check</code>、4 Playwright、3 offline provider suite、DeepLoL/OP.GG Player live、U.GG Build liveが成功。Windows/LCU manual gateだけはmacOSで実行せず、再現手順を準備済み。</div>
       <div class="task-list">
         <label class="task" data-task="router-extract"><input type="checkbox"><span><h3>ProviderProxyからgeneric ProviderRouterを抽出</h3><p>Provider登録、active保持、<code>set_active</code>、<code>available</code>、<code>current</code>だけを型に依存しないRouterへ移す。値の正規化やfallbackは入れない。</p><p class="done-when"><b>完了条件:</b> 現在の切替・一覧・未登録Provider拒否テストがgeneric Routerに移り、外部動作が変わらない。</p></span><span class="tag">P0 / REFACTOR</span></label>
         <label class="task" data-task="build-proxy-rename"><input type="checkbox"><span><h3>既存ProviderProxyをBuildProviderProxyへ明確化</h3><p>BuildProviderの転送責務だけを持つwrapperへ改名し、generic Routerを内包する。</p><p class="done-when"><b>完了条件:</b> items / skills / runes / tier / countersの全転送テストとTauri commandが名称変更後も通る。</p></span><span class="tag">P0 / REFACTOR</span></label>
@@ -328,7 +328,7 @@ tests / *.test.*                            contract, parser, UI, E2E</div>
     document.querySelectorAll('.filter').forEach(btn=>btn.addEventListener('click',()=>{document.querySelectorAll('.filter').forEach(x=>x.classList.remove('active'));btn.classList.add('active');const f=btn.dataset.filter;document.querySelectorAll('.provider').forEach(card=>card.classList.toggle('hidden',f!=='all'&&card.dataset.kind!==f));}));
     document.querySelectorAll('.details-toggle').forEach(btn=>btn.addEventListener('click',()=>{const card=btn.closest('.provider');card.classList.toggle('open');btn.textContent=card.classList.contains('open')?'根拠と注意点を隠す −':'根拠と注意点を表示 ＋';}));
     const taskKey='lol-overlay.provider-report.tasks.v2';
-    const implementationBlockers=new Set(['player-deeplol','deep-match-history','deep-champion-stat','deep-contract-fixtures','deep-platform-map','player-commands','player-frontend-state','player-settings-ui','contract-tests']);
+    const implementationBlockers=new Set([]);
     let taskState={};try{taskState=JSON.parse(localStorage.getItem(taskKey)||'{}');}catch{localStorage.removeItem(taskKey);}
     const updateTasks=()=>{const tasks=[...document.querySelectorAll('.task')];tasks.forEach(task=>task.classList.toggle('done',task.querySelector('input').checked));document.querySelector('#task-count').textContent=`${tasks.filter(task=>task.querySelector('input').checked).length} / ${tasks.length}`;localStorage.setItem(taskKey,JSON.stringify(Object.fromEntries(tasks.map(task=>[task.dataset.task,task.querySelector('input').checked]))));};
     document.querySelectorAll('.task').forEach(task=>{const input=task.querySelector('input');input.checked=task.dataset.task in taskState?Boolean(taskState[task.dataset.task]):!implementationBlockers.has(task.dataset.task);input.addEventListener('change',updateTasks);});updateTasks();
