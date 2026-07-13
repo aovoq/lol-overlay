@@ -339,23 +339,25 @@
 
   .desktop-shell {
     display: grid;
-    grid-template-columns: 190px minmax(0, 1fr);
+    grid-template-rows: 52px minmax(0, 1fr);
     height: 100%;
     min-height: 0;
     background: var(--hx-bg);
   }
 
-  .desktop-sidebar {
+  .desktop-topbar {
     display: flex;
-    min-height: 0;
-    flex-direction: column;
-    padding: 24px 14px 18px;
-    border-right: 1px solid var(--hx-border);
+    min-width: 0;
+    align-items: stretch;
+    padding: 0 18px;
+    border-bottom: 1px solid var(--hx-border);
     background: var(--hx-panel);
   }
 
   .desktop-brand {
-    padding: 0 12px 24px;
+    display: flex;
+    align-items: center;
+    padding-right: 26px;
     color: var(--hx-accent);
     font-family: var(--font-hx-display);
     font-size: 14px;
@@ -365,17 +367,18 @@
 
   .desktop-nav {
     display: flex;
-    flex-direction: column;
-    gap: 4px;
+    min-width: 0;
+    align-items: stretch;
+    gap: 2px;
   }
 
   .desktop-nav-link {
     display: flex;
     align-items: center;
-    justify-content: space-between;
-    padding: 10px 12px;
-    border-left: 2px solid transparent;
-    border-radius: 3px;
+    justify-content: center;
+    gap: 8px;
+    padding: 0 14px;
+    border-bottom: 2px solid transparent;
     color: var(--hx-muted);
     font-size: 11px;
     font-weight: 700;
@@ -385,7 +388,7 @@
 
   .desktop-nav-link:hover,
   .desktop-nav-link--active {
-    border-left-color: var(--hx-accent);
+    border-bottom-color: var(--hx-accent);
     background: var(--hx-accent-wash);
     color: var(--hx-accent);
   }
@@ -408,8 +411,8 @@
     display: flex;
     align-items: center;
     gap: 8px;
-    margin-top: auto;
-    padding: 12px;
+    margin-left: auto;
+    padding: 0 4px 0 18px;
     color: var(--hx-muted);
     font-size: 9px;
     font-weight: 700;

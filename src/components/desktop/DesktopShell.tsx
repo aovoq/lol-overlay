@@ -41,7 +41,7 @@ export function DesktopShell(props: { children?: JSX.Element }) {
 
   return (
     <div class="desktop-shell">
-      <aside class="desktop-sidebar">
+      <header class="desktop-topbar">
         <div class="desktop-brand">OPENLOL</div>
         <nav class="desktop-nav" aria-label="メインナビゲーション">
           {links.map((link) => (
@@ -60,7 +60,7 @@ export function DesktopShell(props: { children?: JSX.Element }) {
           <span class={`desktop-state-dot ${phase()?.clientUp ? "is-online" : ""}`} />
           {phase()?.clientUp ? phase()?.phase || "CONNECTED" : "CLIENT OFFLINE"}
         </div>
-      </aside>
+      </header>
       <main class="desktop-content">{props.children}</main>
     </div>
   );
