@@ -137,4 +137,49 @@ describe("player stats state", () => {
     await limited.search(player);
     expect(limited.error()).toMatchObject({ kind: "rateLimited", retryAfter: 12 });
   });
+
+  it("uses typed command errors and clears data from the previous player", async () => {
+    const state = createPlayerStatsState(
+      gateway({
+        profile: async (target) => {
+          if (target.gameName === "Invalid") {
+            throw { kind: "validation", message: "invalid Riot ID" };
+          }
+          return profile("deeplol");
+        },
+      }),
+    );
+    await state.search(player);
+    expect(state.profile()).toBeDefined();
+    await state.search({ ...player, gameName: "Invalid" });
+    expect(state.error()).toEqual({
+      kind: "validation",
+      message: "invalid Riot ID",
+      retryAfter: undefined,
+    });
+    expect(state.profile()).toBeUndefined();
+  });
+
+  it("surfaces load-more and refresh failures instead of silently keeping ready state", async () => {
+    const loadFailure = createPlayerStatsState(
+      gateway({
+        matches: async (_player, cursor) => {
+          if (cursor) throw { kind: "rateLimited", message: "slow down", retryAfter: 5 };
+          return page("deeplol", ["a"], "20");
+        },
+      }),
+    );
+    await loadFailure.search(player);
+    await loadFailure.loadMore();
+    expect(loadFailure.status()).toBe("error");
+    expect(loadFailure.error()?.kind).toBe("rateLimited");
+
+    const refreshFailure = createPlayerStatsState(
+      gateway({ refresh: async () => Promise.reject(new Error("refresh unavailable")) }),
+    );
+    await refreshFailure.search(player);
+    await refreshFailure.refresh();
+    expect(refreshFailure.status()).toBe("error");
+    expect(refreshFailure.error()?.message).toContain("refresh unavailable");
+  });
 });

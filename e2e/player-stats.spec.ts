@@ -49,6 +49,9 @@ test("renders not-found and rate-limit states", async ({ page }) => {
 
   await search(page, "Limited#JP1");
   await expect(page.getByRole("alert")).toContainText("再試行まで約 30 秒です。");
+
+  await search(page, "Invalid#JP1");
+  await expect(page.getByRole("alert")).toContainText("入力またはAPI契約を確認してください");
 });
 
 test("restores the last search and preserves usable responsive controls", async ({ page }) => {
@@ -63,4 +66,6 @@ test("restores the last search and preserves usable responsive controls", async 
   await expect(page.getByRole("heading", { name: "Restored#NA1" })).toBeVisible();
   await expect(page.getByLabel("Riot ID")).toHaveCSS("font-size", "16px");
   await expect(page.getByRole("button", { name: "検索", exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "すべて削除" }).click();
+  await expect(page.getByRole("region", { name: "検索履歴" })).toHaveCount(0);
 });

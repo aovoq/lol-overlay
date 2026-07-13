@@ -54,6 +54,9 @@ export function createMockPlayerStatsGateway(): PlayerStatsGateway {
   };
   const maybeError = (player: PlayerRef) => {
     if (player.gameName.toLowerCase() === "missing") throw new Error("player-http:404");
+    if (player.gameName.toLowerCase() === "invalid") {
+      throw { kind: "validation", message: "invalid Riot ID" } satisfies PlayerViewError;
+    }
     if (player.gameName.toLowerCase() === "limited") {
       throw new Error("player-http:429 retry-after=30");
     }
@@ -205,12 +208,27 @@ function defaultPlayerStatsGateway() {
 export type PlayerViewStatus = "idle" | "loading" | "ready" | "empty" | "error" | "partial";
 
 export interface PlayerViewError {
-  kind: "notFound" | "validation" | "rateLimited" | "unknown";
+  kind: "notFound" | "validation" | "rateLimited" | "timeout" | "invalidData" | "unknown";
   message: string;
   retryAfter?: number;
 }
 
 function classifyError(error: unknown): PlayerViewError {
+  if (error && typeof error === "object") {
+    const candidate = error as Partial<PlayerViewError>;
+    if (
+      typeof candidate.kind === "string" &&
+      ["notFound", "validation", "rateLimited", "timeout", "invalidData", "unknown"].includes(
+        candidate.kind,
+      )
+    ) {
+      return {
+        kind: candidate.kind as PlayerViewError["kind"],
+        message: typeof candidate.message === "string" ? candidate.message : String(error),
+        retryAfter: typeof candidate.retryAfter === "number" ? candidate.retryAfter : undefined,
+      };
+    }
+  }
   const message = error instanceof Error ? error.message : String(error);
   if (/player-http:404|\b404\b/i.test(message)) return { kind: "notFound", message };
   if (/player-http:422|\b422\b/i.test(message)) return { kind: "validation", message };
@@ -246,6 +264,7 @@ export function createPlayerStatsState(gateway: PlayerStatsGateway = defaultPlay
     setPlayer(nextPlayer);
     setStatus("loading");
     setError(undefined);
+    setProfile(undefined);
     setMatches(undefined);
     setChampionStats([]);
     try {
@@ -272,11 +291,18 @@ export function createPlayerStatsState(gateway: PlayerStatsGateway = defaultPlay
     if (nextSource === source()) return;
     const descriptor = sources().find((entry) => entry.id === nextSource);
     if (!descriptor?.capabilities.playerProfile) throw new Error("Unsupported player provider");
-    ++generation;
-    await gateway.setSource(nextSource);
-    setSourceState(nextSource);
-    const current = player();
-    if (current) await search(current);
+    const request = ++generation;
+    try {
+      await gateway.setSource(nextSource);
+      if (request !== generation) return;
+      setSourceState(nextSource);
+      const current = player();
+      if (current) await search(current);
+    } catch (cause) {
+      if (request !== generation) return;
+      setError(classifyError(cause));
+      setStatus("error");
+    }
   }
 
   async function loadMore() {
@@ -295,7 +321,10 @@ export function createPlayerStatsState(gateway: PlayerStatsGateway = defaultPlay
       });
       setStatus(next.partialFailures.length > 0 ? "partial" : "ready");
     } catch (cause) {
-      if (request === generation) setError(classifyError(cause));
+      if (request === generation) {
+        setError(classifyError(cause));
+        setStatus("error");
+      }
     } finally {
       if (request === generation) setLoadingMore(false);
     }
@@ -310,8 +339,13 @@ export function createPlayerStatsState(gateway: PlayerStatsGateway = defaultPlay
   async function refresh() {
     const current = player();
     if (!current) return;
-    await gateway.refresh(current);
-    await search(current, true);
+    try {
+      await gateway.refresh(current);
+      await search(current, true);
+    } catch (cause) {
+      setError(classifyError(cause));
+      setStatus("error");
+    }
   }
 
   async function setQueueFilter(queue?: number) {

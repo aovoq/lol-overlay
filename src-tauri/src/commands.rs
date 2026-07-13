@@ -491,9 +491,12 @@ pub fn set_player_stats_source(
     app: AppHandle,
     engine: State<'_, Arc<Engine>>,
     source: String,
-) -> error::Result<()> {
-    let parsed = ProviderKind::parse(&source)
-        .ok_or_else(|| error::Error::Other(format!("unknown player stats source: {source}")))?;
+) -> error::PlayerResult<()> {
+    let parsed = ProviderKind::parse(&source).ok_or_else(|| {
+        overlay_provider::ProviderError::InvalidPlayerRequest(format!(
+            "unknown player stats source: {source}"
+        ))
+    })?;
     engine.player_provider.set_active(parsed)?;
     engine.settings.lock().player_stats_source = parsed;
     engine.persist()?;
@@ -506,7 +509,7 @@ pub async fn get_player_profile(
     engine: State<'_, Arc<Engine>>,
     player: PlayerRef,
     force_refresh: bool,
-) -> error::Result<PlayerProfile> {
+) -> error::PlayerResult<PlayerProfile> {
     engine
         .player_provider
         .profile(&player, force_refresh)
@@ -521,7 +524,7 @@ pub async fn get_player_matches(
     cursor: Option<String>,
     queue: Option<i64>,
     force_refresh: bool,
-) -> error::Result<MatchPage> {
+) -> error::PlayerResult<MatchPage> {
     engine
         .player_provider
         .recent_matches(&player, cursor.as_deref(), queue, force_refresh)
@@ -537,7 +540,7 @@ pub async fn get_player_champion_stats(
     queue: Option<String>,
     role: Option<String>,
     force_refresh: bool,
-) -> error::Result<Vec<PlayerChampionStats>> {
+) -> error::PlayerResult<Vec<PlayerChampionStats>> {
     engine
         .player_provider
         .champion_stats(
@@ -555,7 +558,7 @@ pub async fn get_player_champion_stats(
 pub async fn refresh_player_data(
     engine: State<'_, Arc<Engine>>,
     player: PlayerRef,
-) -> error::Result<overlay_types::RefreshResult> {
+) -> error::PlayerResult<overlay_types::RefreshResult> {
     engine
         .player_provider
         .refresh(&player)

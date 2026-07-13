@@ -15,7 +15,24 @@ import type { PlayerRef } from "../../types";
 import { Icon } from "../Icon";
 import { ScrollArea } from "../ScrollArea";
 
-const REGIONS = ["KR", "JP1", "NA1", "EUW1", "EUN1", "OC1", "BR1", "LA1", "LA2"];
+const REGIONS = [
+  "KR",
+  "JP1",
+  "NA1",
+  "EUW1",
+  "EUN1",
+  "OC1",
+  "BR1",
+  "LA1",
+  "LA2",
+  "TR1",
+  "RU",
+  "PH2",
+  "SG2",
+  "TH2",
+  "TW2",
+  "VN2",
+];
 
 function rankLabel(tier?: string | null, division?: string | null) {
   if (!tier) return "Unranked";

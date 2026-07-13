@@ -56,6 +56,46 @@ impl From<overlay_live_client::LiveClientError> for Error {
 
 pub type Result<T> = std::result::Result<T, Error>;
 
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PlayerCommandError {
+    kind: &'static str,
+    message: String,
+    retry_after: Option<u64>,
+}
+
+impl From<overlay_provider::ProviderError> for PlayerCommandError {
+    fn from(error: overlay_provider::ProviderError) -> Self {
+        let (kind, retry_after) = match &error {
+            overlay_provider::ProviderError::PlayerNotFound => ("notFound", None),
+            overlay_provider::ProviderError::InvalidPlayerRequest(_) => ("validation", None),
+            overlay_provider::ProviderError::RateLimited { retry_after } => {
+                ("rateLimited", *retry_after)
+            }
+            overlay_provider::ProviderError::Timeout => ("timeout", None),
+            overlay_provider::ProviderError::InvalidData(_) => ("invalidData", None),
+            _ => ("unknown", None),
+        };
+        Self {
+            kind,
+            message: error.to_string(),
+            retry_after,
+        }
+    }
+}
+
+impl From<Error> for PlayerCommandError {
+    fn from(error: Error) -> Self {
+        Self {
+            kind: "unknown",
+            message: error.to_string(),
+            retry_after: None,
+        }
+    }
+}
+
+pub type PlayerResult<T> = std::result::Result<T, PlayerCommandError>;
+
 // Errors must be serializable to cross the Tauri command boundary.
 impl Serialize for Error {
     fn serialize<S>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error>
@@ -63,5 +103,25 @@ impl Serialize for Error {
         S: serde::Serializer,
     {
         serializer.serialize_str(&self.to_string())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn player_errors_serialize_as_typed_camel_case_payloads() {
+        let error = PlayerCommandError::from(overlay_provider::ProviderError::RateLimited {
+            retry_after: Some(17),
+        });
+        assert_eq!(
+            serde_json::to_value(error).unwrap(),
+            serde_json::json!({
+                "kind": "rateLimited",
+                "message": "player-http:429 retry-after=Some(17)",
+                "retryAfter": 17
+            })
+        );
     }
 }
