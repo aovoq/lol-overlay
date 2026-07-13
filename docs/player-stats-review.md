@@ -7,15 +7,29 @@ acceptance.
 
 ## Verdict
 
-**All locally actionable Player Stats requirements pass.** The original independent review's
-fixture, command, state, settings, and cross-provider evidence gaps were independently reproduced
-and closed in `c1c530e`, `faf8d02`, `919da32`, and `f6ff92d`. Fresh offline, E2E, and anonymous live
+**No locally actionable Player Stats findings remain after final independent remediation.** The
+prior 32/32 claim was not accepted at face value. A fresh commit-by-commit and end-to-end audit
+found production boundary, OP.GG mapping, settings transaction, provider-mixing, pagination,
+single-flight, refresh-race, typed-error, and DeepLoL normalization defects. They were fixed in five
+focused commits and covered by new regression tests. Fresh offline, E2E, and anonymous live
 acceptance passed on 2026-07-14.
 
 The Windows/LCU target-platform gate is **prepared but not executed**. This work ran on macOS and
 does not claim a Windows, League Client, or real Tauri UI result. The read-only ignored harness,
 prerequisites, exact commands, UI steps, expected events/results, and evidence procedure are in
 `docs/player-windows-lcu-acceptance.md`.
+
+## Final independent findings fixed
+
+| Severity | Confirmed issue | Remediation |
+| --- | --- | --- |
+| Medium | The generic Player proxy still accepted and switched to fake U.GG adapters in tests, and Player extras still exposed an U.GG variant. | Core construction/selection now rejects every kind except DeepLoL and OP.GG; Rust/TypeScript Player extras no longer admit U.GG; test mode rejects unsupported source writes. |
+| Medium | OP.GG emitted `SOLORANKED`/`FLEXRANKED`, so the Summoners UI could not find its rank rows; numeric divisions were discarded. | Queue IDs normalize to the shared Riot names and numeric divisions map to Roman values with parser regression coverage. |
+| Medium | Provider changes could complete out of order, mixed-source responses were publishable, overlapping pages duplicated rows, and a repeated cursor could loop. | Source writes are ordered, all surfaces are source-validated before publication, pagination deduplicates matches/failures, and non-progressing cursors terminate. |
+| Medium | A request completing after refresh could repopulate stale cache; forced concurrent reads duplicated upstream work; per-request single-flight locks were never removed. | Per-player invalidation epochs reject stale writes, force-aware single-flight coalesces concurrent reads, and lock entries are released with race regression coverage. |
+| Medium | A failed settings write left the active backend source changed while the frontend rolled back; saved U.GG/LoLalytics Player settings survived in persisted state. | Player source changes now roll back routing and settings on persistence failure; unsupported stored Player sources migrate to DeepLoL without changing Build selection. |
+| Medium | DeepLoL derived wins from percentage `win_rate` before converting percent to ratio, producing impossible totals when explicit wins were absent. | Unit normalization now precedes wins/losses derivation and is covered by a 58.06% fixture. |
+| Low | OP.GG parser/schema failures and some DeepLoL validation failures crossed commands as generic errors; non-retryable parse failures advertised retry controls. | Malformed data now maps to typed `invalidData`, invalid cursors/platforms map to validation, and retryability/UI controls reflect transport-vs-schema failures. |
 
 ## Closed independent findings
 
@@ -84,7 +98,7 @@ Under the authoritative `b1f2b67` two-provider contract:
 
 ## Fresh verification evidence
 
-Execution window: 2026-07-14 01:56–02:00 JST on macOS.
+Final execution window: 2026-07-14 02:09–02:22 JST on macOS.
 
 ```text
 bun run format
@@ -92,13 +106,13 @@ bun run format
 
 bun run check
 # pass: format check, Biome, Clippy -D warnings, TypeScript/workspaces,
-# 56 Vitest tests, all workspace Rust unit tests
+# 59 Vitest tests, all workspace Rust unit tests
 
 bun run test:e2e
 # 4 passed, Chromium, 2.6s; provider switch is OP.GG and U.GG option absence is asserted
 
 cargo test -p overlay-provider-deeplol --lib
-# 28 passed, 10 ignored
+# 29 passed, 10 ignored
 
 cargo test -p overlay-provider-opgg --lib
 # 23 passed, 5 ignored
@@ -123,6 +137,14 @@ cargo test -p overlay-provider-ugg --lib -- --ignored --nocapture
 3. DeepLoL current rank is unknown when its resolver omits `summoner_id`.
 4. Neither Player provider exposes a compliant anonymous site mutation; refresh is app cache/read only.
 5. External provider contracts can change after this dated live evidence.
+
+## Final remediation commits
+
+- `a001114 fix(player): enforce two-provider boundary`
+- `8718680 fix(opgg): normalize player response contracts`
+- `f8cd967 fix(player): prevent source and pagination races`
+- `10071ce fix(player): harden refresh single-flight`
+- `668414e fix(player): normalize stats and retry errors`
 
 Pre-existing untracked `apps/mobile/docs/` was preserved. No Mobile file, GitHub operation, push,
 PR, release, challenge bypass, authenticated cookie, or paid service was used.

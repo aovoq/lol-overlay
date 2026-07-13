@@ -79,3 +79,18 @@ cargo test -p overlay-provider-ugg --lib -- --ignored --nocapture
 Production registration and Tauri/frontend/E2E contracts also assert that the Player source list is
 exactly `deeplol`, `opgg`. The independent Windows/LCU manual gate is prepared in
 `docs/player-windows-lcu-acceptance.md` and is explicitly not executed on this macOS host.
+
+## 2026-07-14 final independent revalidation
+
+Execution completed at 02:22 JST after the final correctness fixes. The same anonymous transports
+and representative account passed:
+
+```text
+DEEPLOL PLAYER LIVE OK: profile=Hide on bush first=20 second=20 champions=76
+OPGG PLAYER LIVE OK: profile=Hide on bush ranks=3 first=20 second=20 champions=10
+U.GG Build-only ignored tests: 2 passed
+```
+
+The U.GG command ran only the crate's existing Build-statistics live tests. No U.GG Player request,
+Cloudflare challenge request, cookie reuse, authentication, or bypass was attempted. The separate
+Windows/LCU manual gate remains not executed.
