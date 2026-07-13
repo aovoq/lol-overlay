@@ -100,7 +100,7 @@ export function createMockPlayerStatsGateway(): PlayerStatsGateway {
         extras: { provider: source as "deeplol" | "ugg" | "opgg", data: {} },
       };
     },
-    matches: async (player, cursor) => {
+    matches: async (player, cursor, _queue, forceRefresh) => {
       maybeError(player);
       const start = cursor ? Number(cursor) : 0;
       const count = 20;
@@ -144,7 +144,7 @@ export function createMockPlayerStatsGateway(): PlayerStatsGateway {
         }),
         nextCursor: start === 0 ? "20" : undefined,
         partialFailures:
-          player.gameName.toLowerCase() === "partial"
+          player.gameName.toLowerCase() === "partial" && !forceRefresh
             ? [{ matchId: `${source}-failed`, message: "mock timeout", retryable: true }]
             : [],
         fetchedAt: Date.now(),

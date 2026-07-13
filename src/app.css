@@ -1334,11 +1334,6 @@
     margin: 0 8px 0 0;
   }
 
-  .summoner-profile-actions .is-secondary {
-    background: transparent;
-    color: var(--hx-accent);
-  }
-
   .summoner-rank-grid {
     display: grid;
     grid-column: 1 / -1;
@@ -1667,6 +1662,12 @@
     .summoner-profile-actions,
     .summoner-stat-filters {
       justify-content: start;
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .summoner-skeleton i {
+      animation: none;
     }
   }
 }

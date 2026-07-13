@@ -273,11 +273,6 @@ export function SummonerPage() {
                 <button type="button" onClick={() => void state.refresh()}>
                   再読み込み
                 </button>
-                <Show when={profile().refresh.siteRefresh}>
-                  <button type="button" class="is-secondary">
-                    サイト側更新
-                  </button>
-                </Show>
               </div>
               <div class="summoner-rank-grid">
                 <For

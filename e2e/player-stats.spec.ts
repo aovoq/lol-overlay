@@ -33,7 +33,8 @@ test("handles arbitrary search, queue filters, partial retry, and history deleti
   await page.goto(mockUrl());
   await search(page, "Partial#JP1");
   await expect(page.getByText("1件の詳細取得に失敗しました。")).toBeVisible();
-  await expect(page.getByRole("button", { name: "失敗分を再試行" })).toBeVisible();
+  await page.getByRole("button", { name: "失敗分を再試行" }).click();
+  await expect(page.getByText("1件の詳細取得に失敗しました。")).toHaveCount(0);
 
   await page.getByLabel("キューで試合を絞り込む").selectOption("440");
   await expect(page.locator(".summoner-match")).toHaveCount(5);
