@@ -2,11 +2,17 @@
 
 pub mod champ_select;
 pub mod lcu;
+mod player;
 pub mod recommendation;
 pub mod snapshot;
 
 pub use champ_select::ChampSelectEvent;
 pub use lcu::{MatchmakingInfo, MyPick, Phase, RecentGame, RunePagePayload, SummonerInfo};
+pub use player::{
+    MatchFailure, MatchPage, MatchParticipant, PlayerChampionStats, PlayerIdentity, PlayerMatch,
+    PlayerProfile, PlayerRef, ProviderExtras, RankedEntry, RefreshAvailability, RefreshResult,
+    SeasonRank,
+};
 pub use recommendation::{
     CounterEntry, ItemRecommendation, RuneBuild, RuneRecommendation, SkillOrder, ThreatProfile,
     TierEntry,

@@ -461,7 +461,7 @@ pub fn set_data_source(
         .ok_or_else(|| error::Error::Other(format!("unknown data source: {kind}")))?;
     engine.provider.set_active(parsed)?;
     {
-        engine.settings.lock().data_source = parsed;
+        engine.settings.lock().build_data_source = parsed;
     }
     engine.persist()?;
     let _ = app.emit("data-source", kind);

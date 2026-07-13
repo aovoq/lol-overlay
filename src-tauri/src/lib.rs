@@ -31,7 +31,7 @@ use tauri::{AppHandle, Manager, WindowEvent};
 use tokio::sync::mpsc::UnboundedSender;
 
 use overlay_ddragon::DdragonClient;
-use overlay_provider::{BuildProvider, ProviderKind, ProviderProxy};
+use overlay_provider::{BuildProvider, BuildProviderProxy, ProviderKind};
 use overlay_provider_deeplol::DeepLolProvider;
 use overlay_provider_lolalytics::LolalyticsProvider;
 use overlay_provider_opgg::OpggProvider;
@@ -52,7 +52,7 @@ pub fn run() {
     );
     let opgg: Arc<dyn BuildProvider> =
         Arc::new(OpggProvider::new(ddragon.clone()).expect("failed to build op.gg provider"));
-    let proxy = ProviderProxy::new(
+    let proxy = BuildProviderProxy::new(
         ProviderKind::Deeplol,
         [
             (ProviderKind::Deeplol, deeplol),

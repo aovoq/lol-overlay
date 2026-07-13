@@ -92,7 +92,7 @@ export function applySettings(s: Partial<Settings>) {
   if (s.autoImportRunes !== undefined) setAutoImport(s.autoImportRunes);
   if (s.importSpells !== undefined) setImportSpellsState(s.importSpells);
   if (s.spellsFlipped !== undefined) setSpellsFlippedState(s.spellsFlipped);
-  if (s.dataSource !== undefined) setDataSourceState(s.dataSource);
+  if (s.buildDataSource !== undefined) setDataSourceState(s.buildDataSource);
   if (s.presentationMode !== undefined) setPresentationModeState(s.presentationMode);
   if (s.developerMode !== undefined) setDeveloperModeState(s.developerMode);
   if (s.autoOpenChampion !== undefined) setAutoOpenDraftState(s.autoOpenChampion);

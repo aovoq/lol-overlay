@@ -188,8 +188,10 @@ export interface Settings {
   autoImportRunes: boolean;
   importSpells: boolean;
   spellsFlipped: boolean;
-  /** "deeplol" | "ugg" */
-  dataSource?: string;
+  /** Champion build provider; migrated from the historical dataSource key. */
+  buildDataSource?: string;
+  /** Independent player-stat provider. */
+  playerStatsSource?: string;
   presentationMode?: PresentationMode;
   developerMode?: boolean;
   autoOpenChampion?: boolean;

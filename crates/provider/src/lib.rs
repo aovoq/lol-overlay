@@ -1,19 +1,27 @@
 //! Pluggable build/rune data providers and shared threat heuristics.
 
+mod build_proxy;
 mod error;
 mod hardcoded;
+mod player_proxy;
+mod player_trait;
 mod proxy;
+mod router;
 mod shared;
 mod threat;
 mod trait_def;
 
+pub use build_proxy::BuildProviderProxy;
 pub use error::{ProviderError, Result};
 pub use hardcoded::{champion_damage_type, DamageType, HardcodedProvider};
 pub use overlay_types::{
     CounterEntry, ItemRecommendation, RuneBuild, RuneRecommendation, SkillOrder, ThreatProfile,
     TierEntry,
 };
-pub use proxy::{ProviderKind, ProviderProxy};
+pub use player_proxy::PlayerStatsProxy;
+pub use player_trait::{PlayerStatsProvider, ProviderCapabilities, ProviderDescriptor};
+pub use proxy::ProviderKind;
+pub use router::ProviderRouter;
 pub use shared::{
     counter_entries_from_subject_losses, item_recommendations, rune_recommendation,
     split_primary_secondary_runes, MIN_MATCHUP_GAMES,

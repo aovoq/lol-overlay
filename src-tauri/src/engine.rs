@@ -27,7 +27,7 @@ use crate::hittest::HitRegion;
 use crate::mobile::MobileRelay;
 use overlay_lcu::{self as lcu, Phase, RunePagePayload};
 use overlay_live_client::{GamePlayer, LiveClient};
-use overlay_provider::{classify_threats, BuildProvider, ProviderKind, ProviderProxy};
+use overlay_provider::{classify_threats, BuildProvider, BuildProviderProxy, ProviderKind};
 
 /// How often the poller checks phase / in-game state.
 const POLL_INTERVAL: Duration = Duration::from_secs(2);
@@ -45,8 +45,13 @@ pub struct Settings {
     /// Swap the two spells (D/F order) on import.
     #[serde(default)]
     pub spells_flipped: bool,
+    /// Build recommendation provider. `dataSource` is the pre-split persisted
+    /// key and remains a deserialize-only alias for migration.
+    #[serde(default, alias = "dataSource")]
+    pub build_data_source: ProviderKind,
+    /// Player stats are selected independently and default to DeepLoL.
     #[serde(default)]
-    pub data_source: ProviderKind,
+    pub player_stats_source: ProviderKind,
     #[serde(default)]
     pub presentation_mode: PresentationMode,
     /// Developer mode: shows the debug panel (mock scenarios + event log)
@@ -89,7 +94,8 @@ impl Default for Settings {
             auto_import_runes: true,
             import_spells: true,
             spells_flipped: false,
-            data_source: ProviderKind::default(),
+            build_data_source: ProviderKind::default(),
+            player_stats_source: ProviderKind::Deeplol,
             presentation_mode: PresentationMode::default(),
             developer_mode: false,
             auto_open_champion: true,
@@ -213,7 +219,7 @@ impl MockStage {
 
 /// Shared application state, held in Tauri's managed state.
 pub struct Engine {
-    pub provider: Arc<ProviderProxy>,
+    pub provider: Arc<BuildProviderProxy>,
     pub live: LiveClient,
     pub settings: Mutex<Settings>,
     pub ui_layout: Mutex<UiLayout>,
@@ -272,7 +278,7 @@ impl Engine {
         if path.exists() {
             let bytes = fs::read(&path)?;
             let stored = serde_json::from_slice::<StoredState>(&bytes)?;
-            let data_source = stored.settings.data_source;
+            let data_source = stored.settings.build_data_source;
             *self.settings.lock() = stored.settings;
             *self.ui_layout.lock() = stored.ui_layout;
             if let Err(e) = self.provider.set_active(data_source) {
@@ -914,7 +920,19 @@ mod tests {
         assert!(settings.import_spells);
         assert!(settings.auto_open_champion);
         assert!(settings.auto_open_live);
-        assert_eq!(settings.data_source, ProviderKind::Deeplol);
+        assert_eq!(settings.build_data_source, ProviderKind::Deeplol);
+        assert_eq!(settings.player_stats_source, ProviderKind::Deeplol);
         assert_eq!(settings.presentation_mode, PresentationMode::Overlay);
+    }
+
+    #[test]
+    fn settings_migrate_legacy_data_source_without_coupling_player_stats() {
+        let settings: Settings =
+            serde_json::from_value(json!({"dataSource": "ugg"})).expect("legacy settings");
+        assert_eq!(settings.build_data_source, ProviderKind::Ugg);
+        assert_eq!(settings.player_stats_source, ProviderKind::Deeplol);
+        let serialized = serde_json::to_value(settings).expect("serialize");
+        assert_eq!(serialized["buildDataSource"], "ugg");
+        assert!(serialized.get("dataSource").is_none());
     }
 }
