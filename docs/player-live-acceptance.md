@@ -31,6 +31,26 @@ Cloudflare challenge-only content security policy. Public first-party search res
 rendered profile summaries, but endpoint discovery found no separate anonymous JSON contract. This
 does not authorize using indexed HTML as provider data under the direct-JSON-only task.
 
+Independently revalidated at `2026-07-14T00:20:48+09:00`. Anonymous `GET /api`, a minimal
+anonymous GraphQL `POST /api`, and the public profile route all returned HTTP 403 with
+`content-type: text/html`, `cf-mitigated: challenge`, and a challenge-only Cloudflare content
+security policy. The GraphQL probe used only `Accept`, `Content-Type`, `Origin`, and `Referer`;
+it sent no cookies or authentication. Search of U.GG's current first-party indexed pages found
+profiles and product descriptions, but no separately callable anonymous player JSON contract.
+
+The same review reran the live provider gates after remediation:
+
+```text
+cargo test -p overlay-provider-deeplol --lib player::tests::live_player_stats_acceptance -- --ignored --nocapture
+DEEPLOL PLAYER LIVE OK: profile=Hide on bush first=20 second=20 champions=76
+
+cargo test -p overlay-provider-opgg --lib player::tests::live_player_stats_acceptance -- --ignored --nocapture
+OPGG PLAYER LIVE OK: profile=Hide on bush ranks=3 first=20 second=20 champions=10
+
+cargo test -p overlay-provider-ugg --lib -- --ignored --nocapture
+2 build-statistics live tests passed; this crate still has no player-stat adapter or player acceptance test.
+```
+
 The final three-provider gate is therefore **not complete** because U.GG still lacks an executable
 direct JSON contract. OP.GG continuation is now verified. Site mutation is unavailable on both
 implemented transports; their explicit refresh action is a cache invalidation plus forced read, as
