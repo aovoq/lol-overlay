@@ -331,7 +331,7 @@ fn parse_participant(value: &Value) -> MatchParticipant {
         game_name: string(value, &["riot_id_name", "game_name"]),
         tag_line: string(value, &["riot_id_tag_line", "tag_line"]),
         champion_id: integer(value, &["champion_id"]).unwrap_or_default(),
-        team_id: integer(value, &["team_id"]).unwrap_or_else(|| match side.as_deref() {
+        team_id: integer(value, &["team_id"]).unwrap_or(match side.as_deref() {
             Some("BLUE") => 100,
             Some("RED") => 200,
             _ => 0,
@@ -943,7 +943,7 @@ mod tests {
     fn live_schema_match_fixture_maps_final_stats_and_provider_extras() {
         let raw = json!({
             "match_basic_dict": {
-                "match_id": "KR_8294576001", "creation_timestamp": 1783779694,
+                "match_id": "KR_8294576001", "creation_timestamp": 1_783_779_694,
                 "game_duration": 2094, "queue_id": 420, "is_remake": false
             },
             "participants_list": [{
@@ -1006,6 +1006,13 @@ mod tests {
             let profile = provider.profile(&player, true).await.expect("profile");
             assert_eq!(profile.identity.game_name, "Hide on bush");
             assert!(profile.identity.puuid.is_some());
+            let ProviderExtras::Deeplol(profile_extras) = &profile.extras else {
+                panic!("DeepLoL profile extras")
+            };
+            assert!(
+                !profile_extras["tierChart"].is_null(),
+                "live tier chart must use the latest match ID"
+            );
 
             let first = provider
                 .recent_matches(&player, None, None, true)

@@ -403,9 +403,8 @@ fn parse_profile(player: &PlayerRef, root: &CompactValue) -> Result<PlayerProfil
                 continue;
             };
             for entry in entries {
-                let fields = match entry {
-                    CompactValue::Call(_, fields) => fields,
-                    _ => continue,
+                let CompactValue::Call(_, fields) = entry else {
+                    continue;
                 };
                 let rank = fields.get(1).and_then(|value| match value {
                     CompactValue::Call(_, fields) => Some(fields.as_slice()),
@@ -612,7 +611,7 @@ impl PlayerStatsProvider for OpggProvider {
         for (id, result) in hydrated {
             match result {
                 Ok(value) if queue.is_none_or(|queue| value.queue_id == queue) => {
-                    matches.push(value)
+                    matches.push(value);
                 }
                 Ok(_) => {}
                 Err(error) => partial_failures.push(MatchFailure {
