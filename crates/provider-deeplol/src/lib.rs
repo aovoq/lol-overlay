@@ -107,6 +107,7 @@ async fn decode_deeplol<T: DeserializeOwned>(response: reqwest::Response) -> Res
 
 pub struct DeepLolProvider {
     http: reqwest::Client,
+    player_base_url: String,
     ddragon: Arc<DdragonClient>,
     /// Region for the stat queries. DeepLoL wants a *numbered* platform id
     /// (`JP1`, `NA1`, `EUW1`, …); `KR` is the one exception. The build numbers
@@ -162,6 +163,7 @@ impl DeepLolProvider {
             .build()?;
         Ok(Self {
             http,
+            player_base_url: DEEPLOL.into(),
             ddragon,
             platform_id: std::sync::RwLock::new("KR".into()),
             tier: "Emerald+".into(),

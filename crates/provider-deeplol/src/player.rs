@@ -13,7 +13,7 @@ use overlay_types::{
 };
 use serde_json::{json, Value};
 
-use super::{DeepLolProvider, DEEPLOL};
+use super::DeepLolProvider;
 
 const PLAYER_CACHE_TTL: Duration = Duration::from_secs(5 * 60);
 const MATCH_CONCURRENCY: usize = 5;
@@ -560,7 +560,7 @@ impl DeepLolProvider {
     async fn resolve_player(&self, player: &PlayerRef) -> Result<Value> {
         response_json(
             self.http
-                .get(format!("{DEEPLOL}/summoner/summoner"))
+                .get(format!("{}/summoner/summoner", self.player_base_url))
                 .query(&[
                     ("platform_id", platform_id(&player.platform_id)?),
                     ("riot_id_name", player.game_name.clone()),
@@ -574,7 +574,7 @@ impl DeepLolProvider {
         let puuid = player.puuid.as_deref()?;
         response_json(
             self.http
-                .get(format!("{DEEPLOL}/summoner/updated-time"))
+                .get(format!("{}/summoner/updated-time", self.player_base_url))
                 .query(&[
                     ("puu_id", puuid),
                     ("platform_id", player.platform_id.as_str()),
@@ -589,16 +589,20 @@ impl DeepLolProvider {
             .puuid
             .as_deref()
             .ok_or_else(|| ProviderError::InvalidPlayerRequest("missing puuid".into()))?;
-        let list = response_json(self.http.get(format!("{DEEPLOL}/match/matches")).query(&[
-            ("puu_id", puuid.to_owned()),
-            ("platform_id", player.platform_id.clone()),
-            ("offset", "0".into()),
-            ("count", "20".into()),
-            ("queue_type", "ALL".into()),
-            ("champion_id", "0".into()),
-            ("only_list", "1".into()),
-            ("last_updated_at", "0".into()),
-        ]))
+        let list = response_json(
+            self.http
+                .get(format!("{}/match/matches", self.player_base_url))
+                .query(&[
+                    ("puu_id", puuid.to_owned()),
+                    ("platform_id", player.platform_id.clone()),
+                    ("offset", "0".into()),
+                    ("count", "20".into()),
+                    ("queue_type", "ALL".into()),
+                    ("champion_id", "0".into()),
+                    ("only_list", "1".into()),
+                    ("last_updated_at", "0".into()),
+                ]),
+        )
         .await?;
         let last_match_id = match_ids(&list)
             .into_iter()
@@ -606,7 +610,7 @@ impl DeepLolProvider {
             .ok_or(ProviderError::NotEnoughData)?;
         response_json(
             self.http
-                .get(format!("{DEEPLOL}/summoner/tier-chart"))
+                .get(format!("{}/summoner/tier-chart", self.player_base_url))
                 .query(&[
                     ("puu_id", puuid),
                     ("platform_id", player.platform_id.as_str()),
@@ -617,7 +621,11 @@ impl DeepLolProvider {
     }
 
     async fn current_season(&self) -> Result<String> {
-        let value = response_json(self.http.get(format!("{DEEPLOL}/common/season-list"))).await?;
+        let value = response_json(
+            self.http
+                .get(format!("{}/common/season-list", self.player_base_url)),
+        )
+        .await?;
         value
             .get("season_list")
             .and_then(Value::as_array)
@@ -647,7 +655,10 @@ impl PlayerStatsProvider for DeepLolProvider {
         let realtime = if let Some(summoner_id) = string(basic, &["summoner_id"]) {
             response_json(
                 self.http
-                    .get(format!("{DEEPLOL}/summoner/summoner-realtime"))
+                    .get(format!(
+                        "{}/summoner/summoner-realtime",
+                        self.player_base_url
+                    ))
                     .query(&[
                         ("platform_id", platform.as_str()),
                         ("summoner_id", summoner_id.as_str()),
@@ -709,16 +720,20 @@ impl PlayerStatsProvider for DeepLolProvider {
             .map_err(|_| ProviderError::Other(format!("invalid DeepLoL cursor: {cursor}")))?;
         let platform = platform_id(&player.platform_id)?;
         let queue_type = queue.map_or_else(|| "ALL".into(), |value| value.to_string());
-        let list = response_json(self.http.get(format!("{DEEPLOL}/match/matches")).query(&[
-            ("puu_id", puuid.to_owned()),
-            ("platform_id", platform.clone()),
-            ("offset", offset.to_string()),
-            ("count", MATCH_PAGE_SIZE.to_string()),
-            ("queue_type", queue_type),
-            ("champion_id", "0".into()),
-            ("only_list", "1".into()),
-            ("last_updated_at", "0".into()),
-        ]))
+        let list = response_json(
+            self.http
+                .get(format!("{}/match/matches", self.player_base_url))
+                .query(&[
+                    ("puu_id", puuid.to_owned()),
+                    ("platform_id", platform.clone()),
+                    ("offset", offset.to_string()),
+                    ("count", MATCH_PAGE_SIZE.to_string()),
+                    ("queue_type", queue_type),
+                    ("champion_id", "0".into()),
+                    ("only_list", "1".into()),
+                    ("last_updated_at", "0".into()),
+                ]),
+        )
         .await?;
         let ids = match_ids(&list);
         let mut hydrated = Vec::new();
@@ -746,7 +761,7 @@ impl PlayerStatsProvider for DeepLolProvider {
             async move {
                 let result = response_json(
                     self.http
-                        .get(format!("{DEEPLOL}/match/match-cached"))
+                        .get(format!("{}/match/match-cached", self.player_base_url))
                         .query(&[
                             ("match_id", match_id.as_str()),
                             ("platform_id", platform.as_str()),
@@ -836,7 +851,7 @@ impl PlayerStatsProvider for DeepLolProvider {
         })?;
         let response = response_json(
             self.http
-                .get(format!("{DEEPLOL}/summoner/champion-stat"))
+                .get(format!("{}/summoner/champion-stat", self.player_base_url))
                 .query(&[
                     ("puu_id", puuid),
                     ("platform_id", profile.identity.platform_id.as_str()),
@@ -888,12 +903,484 @@ impl PlayerStatsProvider for DeepLolProvider {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::io::{Read, Write};
+    use std::net::{SocketAddr, TcpListener, TcpStream};
+    use std::sync::atomic::{AtomicBool, Ordering};
+    use std::sync::{Arc, Mutex};
+    use std::thread::JoinHandle;
+
+    struct MockResponse {
+        status: u16,
+        content_type: Option<&'static str>,
+        retry_after: Option<&'static str>,
+        body: String,
+        delay: Duration,
+    }
+
+    impl MockResponse {
+        fn json(body: impl Into<String>) -> Self {
+            Self {
+                status: 200,
+                content_type: Some("application/json; charset=utf-8"),
+                retry_after: None,
+                body: body.into(),
+                delay: Duration::ZERO,
+            }
+        }
+    }
+
+    struct MockHttpServer {
+        address: SocketAddr,
+        requests: Arc<Mutex<Vec<String>>>,
+        stopping: Arc<AtomicBool>,
+        thread: Option<JoinHandle<()>>,
+    }
+
+    impl MockHttpServer {
+        fn start(
+            handler: impl Fn(&str) -> MockResponse + Send + Sync + 'static,
+        ) -> std::io::Result<Self> {
+            let listener = TcpListener::bind("127.0.0.1:0")?;
+            listener.set_nonblocking(true)?;
+            let address = listener.local_addr()?;
+            let requests = Arc::new(Mutex::new(Vec::new()));
+            let thread_requests = requests.clone();
+            let stopping = Arc::new(AtomicBool::new(false));
+            let thread_stopping = stopping.clone();
+            let handler = Arc::new(handler);
+            let thread = std::thread::spawn(move || {
+                while !thread_stopping.load(Ordering::SeqCst) {
+                    match listener.accept() {
+                        Ok((stream, _)) => {
+                            let requests = thread_requests.clone();
+                            let handler = handler.clone();
+                            std::thread::spawn(move || {
+                                handle_connection(stream, &requests, handler.as_ref());
+                            });
+                        }
+                        Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
+                            std::thread::sleep(Duration::from_millis(1));
+                        }
+                        Err(_) => break,
+                    }
+                }
+            });
+            Ok(Self {
+                address,
+                requests,
+                stopping,
+                thread: Some(thread),
+            })
+        }
+
+        fn url(&self) -> String {
+            format!("http://{}", self.address)
+        }
+
+        fn requests(&self) -> Vec<String> {
+            self.requests.lock().unwrap().clone()
+        }
+    }
+
+    impl Drop for MockHttpServer {
+        fn drop(&mut self) {
+            self.stopping.store(true, Ordering::SeqCst);
+            let _ = TcpStream::connect(self.address);
+            if let Some(thread) = self.thread.take() {
+                let _ = thread.join();
+            }
+        }
+    }
+
+    fn handle_connection(
+        mut stream: TcpStream,
+        requests: &Mutex<Vec<String>>,
+        handler: &dyn Fn(&str) -> MockResponse,
+    ) {
+        let _ = stream.set_read_timeout(Some(Duration::from_secs(1)));
+        let mut buffer = [0_u8; 16 * 1024];
+        let Ok(read) = stream.read(&mut buffer) else {
+            return;
+        };
+        let request = String::from_utf8_lossy(&buffer[..read]);
+        let target = request
+            .lines()
+            .next()
+            .and_then(|line| line.split_whitespace().nth(1))
+            .unwrap_or("/")
+            .to_owned();
+        requests.lock().unwrap().push(target.clone());
+        let response = handler(&target);
+        std::thread::sleep(response.delay);
+        let reason = match response.status {
+            200 => "OK",
+            404 => "Not Found",
+            422 => "Unprocessable Content",
+            429 => "Too Many Requests",
+            _ => "Upstream Error",
+        };
+        let mut headers = format!(
+            "HTTP/1.1 {} {}\r\nContent-Length: {}\r\nConnection: close\r\n",
+            response.status,
+            reason,
+            response.body.len()
+        );
+        if let Some(content_type) = response.content_type {
+            headers.push_str(&format!("Content-Type: {content_type}\r\n"));
+        }
+        if let Some(retry_after) = response.retry_after {
+            headers.push_str(&format!("Retry-After: {retry_after}\r\n"));
+        }
+        headers.push_str("\r\n");
+        let _ = stream.write_all(headers.as_bytes());
+        let _ = stream.write_all(response.body.as_bytes());
+    }
+
+    fn mock_provider(server: &MockHttpServer, timeout: Duration) -> DeepLolProvider {
+        let mut provider = DeepLolProvider::new(Arc::new(overlay_ddragon::DdragonClient::new()))
+            .expect("DeepLoL provider");
+        provider.player_base_url = server.url();
+        provider.http = reqwest::Client::builder()
+            .timeout(timeout)
+            .user_agent("lol-overlay-contract-test")
+            .build()
+            .expect("mock HTTP client");
+        provider
+    }
+
+    fn contract_fixture() -> overlay_provider::PlayerProviderContractFixture {
+        let player = PlayerRef {
+            platform_id: "KR".into(),
+            game_name: "Contract Player".into(),
+            tag_line: "KR1".into(),
+        };
+        let profile = parse_profile(
+            &player,
+            &json!({"summoner_basic_info_dict": {
+                "puu_id": "contract-puuid", "summoner_id": "contract-summoner",
+                "riot_id_name": "Contract Player", "riot_id_tag_line": "KR1"
+            }}),
+            None,
+            None,
+            None,
+        )
+        .expect("profile fixture");
+        let parsed_match = |match_id: &str, started_at: i64| {
+            parse_match(
+                &json!({
+                    "match_basic_dict": {
+                        "match_id": match_id, "creation_timestamp": started_at,
+                        "game_duration": 1800, "queue_id": 420
+                    },
+                    "participants_list": [{
+                        "puu_id": "contract-puuid", "champion_id": 103,
+                        "is_win": true, "final_stat_dict": {"kills": 5, "deaths": 2, "assists": 7}
+                    }]
+                }),
+                "contract-puuid",
+                match_id,
+            )
+            .expect("match fixture")
+        };
+        let raw_champions: Value = serde_json::from_str(include_str!(
+            "../fixtures/player_champion_stats_raw_sample.json"
+        ))
+        .expect("checked-in raw champion fixture");
+        overlay_provider::PlayerProviderContractFixture {
+            profile,
+            pages: vec![
+                MatchPage {
+                    source: "deeplol".into(),
+                    matches: vec![parsed_match("KR_CONTRACT_2", 2)],
+                    next_cursor: Some("20".into()),
+                    partial_failures: vec![MatchFailure {
+                        match_id: "KR_CONTRACT_PARTIAL".into(),
+                        message: "fixture hydration failure".into(),
+                        retryable: true,
+                    }],
+                    fetched_at: 2,
+                },
+                MatchPage {
+                    source: "deeplol".into(),
+                    matches: vec![parsed_match("KR_CONTRACT_1", 1)],
+                    next_cursor: None,
+                    partial_failures: vec![],
+                    fetched_at: 3,
+                },
+            ],
+            champions: parse_champion_stats(
+                &raw_champions,
+                Some("RANKED_SOLO_5X5"),
+                Some("Middle"),
+            ),
+            refresh: RefreshResult {
+                source: "deeplol".into(),
+                cache_invalidated: true,
+                mutation_performed: false,
+                refreshed_at: 4,
+            },
+            capabilities: ProviderCapabilities {
+                player_profile: true,
+                match_history: true,
+                champion_stats: true,
+                direct_api: true,
+                regions: vec!["KR".into(), "JP1".into()],
+                ..ProviderCapabilities::default()
+            },
+        }
+    }
+
+    overlay_provider::player_provider_contract_suite!(
+        deeplol_player_contract,
+        "deeplol",
+        contract_fixture()
+    );
 
     #[test]
     fn platform_mapping_never_sends_unnumbered_jp() {
-        assert_eq!(platform_id("JP").unwrap(), "JP1");
-        assert_eq!(platform_id("kr1").unwrap(), "KR");
+        for (input, expected) in [
+            ("KR1", "KR"),
+            ("JP", "JP1"),
+            ("NA", "NA1"),
+            ("EUW", "EUW1"),
+            ("EUNE", "EUN1"),
+            ("OCE", "OC1"),
+            ("BR", "BR1"),
+            ("LAN", "LA1"),
+            ("LAS", "LA2"),
+            ("TR", "TR1"),
+            ("RU", "RU"),
+            ("PH", "PH2"),
+            ("SG", "SG2"),
+            ("TH", "TH2"),
+            ("TW", "TW2"),
+            ("VN", "VN2"),
+        ] {
+            assert_eq!(platform_id(input).unwrap(), expected, "mapping for {input}");
+        }
         assert!(platform_id("PBE").is_err());
+    }
+
+    #[test]
+    fn response_failure_queue_and_content_type_fixture_matrix() {
+        for (status, content_type, body, expected) in [
+            (200, Some("application/json"), r#"{"ok":true}"#, "ok"),
+            (
+                200,
+                Some("application/problem+json; charset=utf-8"),
+                r#"{"ok":true}"#,
+                "ok",
+            ),
+            (200, None, r#"{"ok":true}"#, "ok"),
+            (200, Some("text/html"), "<html>challenge</html>", "invalid"),
+            (200, Some("application/json"), "", "invalid"),
+            (200, Some("application/json"), "{", "invalid"),
+            (
+                404,
+                Some("application/json"),
+                r#"{"detail":"missing"}"#,
+                "404",
+            ),
+            (
+                422,
+                Some("application/json"),
+                r#"{"detail":"bad id"}"#,
+                "422",
+            ),
+            (429, Some("application/json"), r#"{"detail":"slow"}"#, "429"),
+            (
+                500,
+                Some("application/json"),
+                r#"{"detail":"upstream"}"#,
+                "500",
+            ),
+            (502, Some("text/plain"), "bad gateway", "502"),
+        ] {
+            let result = response_json_body(status, content_type, Some("11"), body);
+            match expected {
+                "ok" => assert_eq!(result.expect("JSON success")["ok"], true),
+                "404" => assert!(matches!(result, Err(ProviderError::PlayerNotFound))),
+                "422" => assert!(matches!(
+                    result,
+                    Err(ProviderError::InvalidPlayerRequest(_))
+                )),
+                "429" => assert!(matches!(
+                    result,
+                    Err(ProviderError::RateLimited {
+                        retry_after: Some(11)
+                    })
+                )),
+                "invalid" => assert!(matches!(result, Err(ProviderError::InvalidData(_)))),
+                code => assert!(result.unwrap_err().to_string().contains(code)),
+            }
+        }
+
+        for queue_id in [0, 420, 440, 450, 490, 700, 900, 1700, 1710] {
+            let parsed = parse_match(
+                &json!({
+                    "match_basic_dict": {
+                        "match_id": format!("QUEUE_{queue_id}"),
+                        "game_duration": 1200,
+                        "queue_id": queue_id
+                    },
+                    "participants": [{"puuid": "mine", "champion_id": 1}]
+                }),
+                "mine",
+                "fallback",
+            )
+            .expect("queue fixture");
+            assert_eq!(parsed.queue_id, queue_id);
+        }
+    }
+
+    #[test]
+    fn resolver_mock_http_encodes_riot_id_and_maps_json_404() {
+        let server = MockHttpServer::start(|_| MockResponse {
+            status: 404,
+            content_type: Some("application/json"),
+            retry_after: None,
+            body: r#"{"detail":"summoner not found"}"#.into(),
+            delay: Duration::ZERO,
+        })
+        .expect("mock server");
+        let provider = mock_provider(&server, Duration::from_secs(1));
+        let error = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .unwrap()
+            .block_on(provider.resolve_player(&PlayerRef {
+                platform_id: "JP".into(),
+                game_name: "Game Name/雪".into(),
+                tag_line: "JP #1".into(),
+            }))
+            .expect_err("404 fixture");
+        assert!(matches!(error, ProviderError::PlayerNotFound));
+        let request = server.requests().pop().expect("recorded resolver request");
+        assert!(request.starts_with("/summoner/summoner?"));
+        assert!(request.contains("platform_id=JP1"));
+        assert!(request.contains("riot_id_name=Game+Name%2F%E9%9B%AA"));
+        assert!(request.contains("riot_id_tag_line=JP+%231"));
+        assert!(!request.contains(' '));
+    }
+
+    #[test]
+    fn mock_http_retries_then_returns_typed_timeout() {
+        let server = MockHttpServer::start(|_| MockResponse {
+            status: 200,
+            content_type: Some("application/json"),
+            retry_after: None,
+            body: r#"{"ok":true}"#.into(),
+            delay: Duration::from_millis(75),
+        })
+        .expect("mock server");
+        let client = reqwest::Client::builder()
+            .timeout(Duration::from_millis(20))
+            .build()
+            .unwrap();
+        let error = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .unwrap()
+            .block_on(response_json(client.get(format!("{}/slow", server.url()))))
+            .expect_err("timeout fixture");
+        assert!(matches!(error, ProviderError::Timeout));
+        assert_eq!(server.requests().len(), RETRY_ATTEMPTS);
+    }
+
+    #[test]
+    fn mock_http_covers_partial_hydration_and_offset_pagination() {
+        let server = MockHttpServer::start(|target| {
+            if target.starts_with("/summoner/summoner?") {
+                return MockResponse::json(
+                    json!({"summoner_basic_info_dict": {
+                        "puu_id": "mock-puuid", "summoner_id": "",
+                        "riot_id_name": "Mock Player", "riot_id_tag_line": "KR1"
+                    }})
+                    .to_string(),
+                );
+            }
+            if target.starts_with("/summoner/updated-time?") {
+                return MockResponse::json(r#"{"remain_second":0,"auto_update":false}"#);
+            }
+            if target.starts_with("/summoner/tier-chart?") {
+                return MockResponse::json(r#"{"solo_tier_chart":[]}"#);
+            }
+            if target.starts_with("/match/matches?") {
+                let ids = if target.contains("offset=20") {
+                    vec!["KR_PAGE_2_A".to_string(), "KR_PAGE_2_B".to_string()]
+                } else {
+                    (0..19)
+                        .map(|index| format!("KR_PAGE_1_{index}"))
+                        .chain(std::iter::once("KR_BAD".into()))
+                        .collect()
+                };
+                return MockResponse::json(
+                    json!({"match_id_list": ids.into_iter().map(|match_id| json!({"match_id": match_id})).collect::<Vec<_>>()}).to_string(),
+                );
+            }
+            if target.starts_with("/match/match-cached?") {
+                let match_id = target
+                    .split("match_id=")
+                    .nth(1)
+                    .and_then(|value| value.split('&').next())
+                    .unwrap_or("unknown");
+                let puuid = if match_id == "KR_BAD" {
+                    "somebody-else"
+                } else {
+                    "mock-puuid"
+                };
+                return MockResponse::json(
+                    json!({
+                        "match_basic_dict": {
+                            "match_id": match_id, "game_duration": 1800, "queue_id": 1700
+                        },
+                        "participants": [{"puuid": puuid, "champion_id": 103}]
+                    })
+                    .to_string(),
+                );
+            }
+            MockResponse {
+                status: 500,
+                content_type: Some("application/json"),
+                retry_after: None,
+                body: r#"{"detail":"unexpected fixture route"}"#.into(),
+                delay: Duration::ZERO,
+            }
+        })
+        .expect("mock server");
+        let provider = mock_provider(&server, Duration::from_secs(1));
+        let player = PlayerRef {
+            platform_id: "KR1".into(),
+            game_name: "Mock Player".into(),
+            tag_line: "KR1".into(),
+        };
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .unwrap();
+        let first = runtime
+            .block_on(provider.recent_matches(&player, None, Some(1700), false))
+            .expect("first mock page");
+        assert_eq!(first.matches.len(), 19);
+        assert_eq!(first.partial_failures.len(), 1);
+        assert_eq!(first.partial_failures[0].match_id, "KR_BAD");
+        assert_eq!(first.next_cursor.as_deref(), Some("20"));
+        assert!(first.matches.iter().all(|game| game.queue_id == 1700));
+
+        let second = runtime
+            .block_on(provider.recent_matches(&player, Some("20"), Some(1700), false))
+            .expect("second mock page");
+        assert_eq!(second.matches.len(), 2);
+        assert!(second.partial_failures.is_empty());
+        assert_eq!(second.next_cursor, None);
+
+        let requests = server.requests();
+        assert!(requests.iter().any(|request| {
+            request.contains("/match/matches?")
+                && request.contains("platform_id=KR")
+                && request.contains("queue_type=1700")
+                && request.contains("offset=20")
+        }));
     }
 
     #[test]
@@ -1106,17 +1593,10 @@ mod tests {
 
     #[test]
     fn live_schema_champion_fixture_selects_queue_and_role_without_aggregate_row() {
-        let raw = json!({"counter_champion_stats": {
-            "total": {"enemy_champion_stats": {"All": [
-                {"champion_id": 0, "games": 546, "wins": 298, "losses": 248},
-                {"champion_id": 13, "games": 31, "wins": 18, "losses": 13,
-                 "win_rate": 58.06, "kda": 2.97, "cs_per_min": 9.02, "ai_score": 54.65}
-            ]}},
-            "ranked_solo_5x5": {"enemy_champion_stats": {"Middle": [
-                {"champion_id": 103, "games": 29, "wins": 12, "losses": 17,
-                 "win_rate": 41.38, "kda": 2.36, "cs_per_min": 8.63}
-            ]}}
-        }});
+        let raw: Value = serde_json::from_str(include_str!(
+            "../fixtures/player_champion_stats_raw_sample.json"
+        ))
+        .expect("checked-in raw champion fixture");
         let stats = parse_champion_stats(&raw, Some("RANKED_SOLO_5X5"), Some("Middle"));
         assert_eq!(stats.len(), 1);
         assert_eq!(stats[0].champion_id, 103);

@@ -19,7 +19,10 @@ pub use overlay_types::{
     TierEntry,
 };
 pub use player_proxy::PlayerStatsProxy;
-pub use player_trait::{PlayerStatsProvider, ProviderCapabilities, ProviderDescriptor};
+pub use player_trait::{
+    validate_player_provider_contract, PlayerProviderContractFixture, PlayerStatsProvider,
+    ProviderCapabilities, ProviderDescriptor,
+};
 pub use proxy::ProviderKind;
 pub use router::ProviderRouter;
 pub use shared::{

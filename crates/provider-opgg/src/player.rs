@@ -907,6 +907,94 @@ impl PlayerStatsProvider for OpggProvider {
 mod tests {
     use super::*;
 
+    fn contract_fixture() -> overlay_provider::PlayerProviderContractFixture {
+        let player = PlayerRef {
+            platform_id: "KR".into(),
+            game_name: "Contract Player".into(),
+            tag_line: "KR1".into(),
+        };
+        let compact = CompactParser::new(
+            r#"LolGetSummonerProfile(Data(Summoner("Contract Player","KR1",100,"https://x/profileIcon6.jpg","contract-puuid","2026-07-14T00:00:00+09:00",LadderRank(10,1000),[LeagueStat("SOLORANKED",6,4,null,TierInfo(1,50,"GOLD"))],[],RankedMostChampions([]))))"#,
+        )
+        .parse()
+        .expect("profile compact fixture");
+        let profile = parse_profile(&player, &compact).expect("profile fixture");
+        let parsed_match = |match_id: &str, created_at: &str| {
+            parse_action_match(
+                &json!({
+                    "id": match_id,
+                    "created_at": created_at,
+                    "game_length": 1800,
+                    "game_type": {"game_type": "SOLORANKED"},
+                    "team_blue": [{
+                        "champion_id": 103, "position": "MID", "team_key": "BLUE",
+                        "summoner": {"puuid": "contract-puuid"},
+                        "stats": {"kill": 5, "death": 2, "assist": 7, "result": "WIN", "op_score": 7.1}
+                    }],
+                    "team_red": []
+                }),
+                "contract-puuid",
+            )
+            .expect("match action fixture")
+        };
+        overlay_provider::PlayerProviderContractFixture {
+            profile,
+            pages: vec![
+                MatchPage {
+                    source: "opgg".into(),
+                    matches: vec![parsed_match("OPGG_CONTRACT_2", "2026-07-14T00:00:00+09:00")],
+                    next_cursor: Some("2026-07-14T00:00:00+09:00".into()),
+                    partial_failures: vec![MatchFailure {
+                        match_id: "OPGG_CONTRACT_PARTIAL".into(),
+                        message: "fixture action parse failure".into(),
+                        retryable: true,
+                    }],
+                    fetched_at: 2,
+                },
+                MatchPage {
+                    source: "opgg".into(),
+                    matches: vec![parsed_match("OPGG_CONTRACT_1", "2026-07-13T00:00:00+09:00")],
+                    next_cursor: None,
+                    partial_failures: vec![],
+                    fetched_at: 3,
+                },
+            ],
+            champions: vec![PlayerChampionStats {
+                source: "opgg".into(),
+                champion_id: 103,
+                games: 10,
+                wins: 6,
+                losses: 4,
+                win_rate: 0.6,
+                kda: None,
+                cs_per_minute: None,
+                role: None,
+                queue: "RANKED".into(),
+                extras: ProviderExtras::Opgg(json!({})),
+            }],
+            refresh: RefreshResult {
+                source: "opgg".into(),
+                cache_invalidated: true,
+                mutation_performed: false,
+                refreshed_at: 4,
+            },
+            capabilities: ProviderCapabilities {
+                player_profile: true,
+                match_history: true,
+                champion_stats: true,
+                direct_api: false,
+                regions: vec!["KR".into(), "JP1".into()],
+                ..ProviderCapabilities::default()
+            },
+        }
+    }
+
+    overlay_provider::player_provider_contract_suite!(
+        opgg_player_contract,
+        "opgg",
+        contract_fixture()
+    );
+
     #[test]
     fn compact_parser_handles_nested_calls_arrays_escapes_and_nulls() {
         let parsed = CompactParser::new(

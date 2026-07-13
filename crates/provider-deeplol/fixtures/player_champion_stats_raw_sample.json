@@ -1,0 +1,67 @@
+{
+  "counter_champion_stats": {
+    "total": {
+      "enemy_champion_stats": {
+        "All": [
+          {
+            "champion_id": 0,
+            "games": 546,
+            "wins": 298,
+            "losses": 248
+          },
+          {
+            "champion_id": 13,
+            "games": 31,
+            "wins": 18,
+            "losses": 13,
+            "win_rate": 58.06,
+            "kill": 6.1,
+            "death": 4.0,
+            "assist": 5.8,
+            "kda": 2.97,
+            "cs_per_min": 9.02,
+            "ai_score": 54.65
+          }
+        ]
+      }
+    },
+    "ranked_solo_5x5": {
+      "enemy_champion_stats": {
+        "Middle": [
+          {
+            "champion_id": 103,
+            "games": 29,
+            "wins": 12,
+            "losses": 17,
+            "win_rate": 41.38,
+            "kill": 5.2,
+            "death": 4.5,
+            "assist": 5.4,
+            "kda": 2.36,
+            "cs_per_min": 8.63,
+            "ai_score": null
+          }
+        ]
+      }
+    }
+  },
+  "counter_champion_stats_reverse": {
+    "total": {
+      "enemy_champion_stats": {
+        "All": []
+      }
+    }
+  },
+  "synergy_champion_stats": {
+    "total": {
+      "team_champion_stats": {
+        "All": []
+      }
+    }
+  },
+  "schema_sample": {
+    "captured_at": "2026-07-14T00:00:00+09:00",
+    "redacted": true,
+    "purpose": "Representative DeepLoL champion-stat top-level and row shapes"
+  }
+}
