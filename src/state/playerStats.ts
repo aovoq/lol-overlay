@@ -6,6 +6,7 @@ import type {
   PlayerProfile,
   PlayerProviderDescriptor,
   PlayerRef,
+  PlayerStatsSource,
   RefreshResult,
 } from "../types";
 
@@ -41,7 +42,7 @@ export const tauriPlayerStatsGateway: PlayerStatsGateway = {
 };
 
 export function createMockPlayerStatsGateway(): PlayerStatsGateway {
-  let source = "deeplol";
+  let source: PlayerStatsSource = "deeplol";
   const capabilities = {
     builds: true,
     playerProfile: true,
@@ -68,6 +69,7 @@ export function createMockPlayerStatsGateway(): PlayerStatsGateway {
     ],
     getSource: async () => source,
     setSource: async (next) => {
+      if (next !== "deeplol" && next !== "opgg") throw new Error("Unsupported player provider");
       source = next;
     },
     profile: async (player) => {
@@ -96,7 +98,7 @@ export function createMockPlayerStatsGateway(): PlayerStatsGateway {
         ladderPercentile: 0.01,
         fetchedAt: Date.now(),
         refresh: { appRefresh: true, siteRefresh: false },
-        extras: { provider: source as "deeplol" | "ugg" | "opgg", data: {} },
+        extras: { provider: source, data: {} },
       };
     },
     matches: async (player, cursor, _queue, forceRefresh) => {

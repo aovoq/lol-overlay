@@ -159,6 +159,16 @@ impl PlayerStatsProxy {
         initial: ProviderKind,
         providers: impl IntoIterator<Item = (ProviderKind, Arc<dyn PlayerStatsProvider>)>,
     ) -> Result<Self> {
+        let providers = providers.into_iter().collect::<Vec<_>>();
+        if !is_player_provider_kind(initial)
+            || providers
+                .iter()
+                .any(|(kind, _)| !is_player_provider_kind(*kind))
+        {
+            return Err(ProviderError::InvalidPlayerRequest(
+                "Player Stats supports only DeepLoL and OP.GG".into(),
+            ));
+        }
         Ok(Self {
             router: ProviderRouter::new(initial, providers)?,
             cache: Mutex::new(PlayerCache::default()),
@@ -167,6 +177,12 @@ impl PlayerStatsProxy {
     }
 
     pub fn set_active(&self, kind: ProviderKind) -> Result<()> {
+        if !is_player_provider_kind(kind) {
+            return Err(ProviderError::InvalidPlayerRequest(format!(
+                "{} is not a Player Stats provider",
+                kind.as_str()
+            )));
+        }
         self.router.set_active(kind)
     }
 
@@ -188,9 +204,10 @@ impl PlayerStatsProxy {
                     id: kind.as_str().into(),
                     label: match kind {
                         ProviderKind::Deeplol => "DeepLoL",
-                        ProviderKind::Ugg => "U.GG",
                         ProviderKind::Opgg => "OP.GG",
-                        ProviderKind::Lolalytics => "LoLalytics",
+                        ProviderKind::Ugg | ProviderKind::Lolalytics => {
+                            unreachable!("non-player provider passed constructor validation")
+                        }
                     }
                     .into(),
                     capabilities,
@@ -213,6 +230,10 @@ impl PlayerStatsProxy {
             .get(kind)
             .expect("active provider must be registered")
     }
+}
+
+fn is_player_provider_kind(kind: ProviderKind) -> bool {
+    matches!(kind, ProviderKind::Deeplol | ProviderKind::Opgg)
 }
 
 #[async_trait]
@@ -552,8 +573,8 @@ mod tests {
                     Arc::new(Stub("deep")) as Arc<dyn PlayerStatsProvider>,
                 ),
                 (
-                    ProviderKind::Ugg,
-                    Arc::new(Stub("ugg")) as Arc<dyn PlayerStatsProvider>,
+                    ProviderKind::Opgg,
+                    Arc::new(Stub("opgg")) as Arc<dyn PlayerStatsProvider>,
                 ),
             ],
         )
@@ -566,14 +587,14 @@ mod tests {
                 .to_string(),
             "deep"
         );
-        proxy.set_active(ProviderKind::Ugg).expect("switch");
+        proxy.set_active(ProviderKind::Opgg).expect("switch");
         assert_eq!(
             proxy
                 .profile(&player(), false)
                 .await
                 .unwrap_err()
                 .to_string(),
-            "ugg"
+            "opgg"
         );
         assert_eq!(proxy.available().len(), 2);
     }
@@ -581,7 +602,7 @@ mod tests {
     #[tokio::test]
     async fn coalesces_duplicates_and_keeps_provider_caches_separate() {
         let deep = Arc::new(CountingStub::new("deeplol"));
-        let ugg = Arc::new(CountingStub::new("ugg"));
+        let opgg = Arc::new(CountingStub::new("opgg"));
         let proxy = PlayerStatsProxy::new(
             ProviderKind::Deeplol,
             [
@@ -590,8 +611,8 @@ mod tests {
                     deep.clone() as Arc<dyn PlayerStatsProvider>,
                 ),
                 (
-                    ProviderKind::Ugg,
-                    ugg.clone() as Arc<dyn PlayerStatsProvider>,
+                    ProviderKind::Opgg,
+                    opgg.clone() as Arc<dyn PlayerStatsProvider>,
                 ),
             ],
         )
@@ -606,14 +627,38 @@ mod tests {
         assert_eq!(second.unwrap().source, "deeplol");
         assert_eq!(deep.profiles.load(Ordering::SeqCst), 1);
 
-        proxy.set_active(ProviderKind::Ugg).unwrap();
-        assert_eq!(proxy.profile(&identity, false).await.unwrap().source, "ugg");
-        assert_eq!(ugg.profiles.load(Ordering::SeqCst), 1);
+        proxy.set_active(ProviderKind::Opgg).unwrap();
+        assert_eq!(
+            proxy.profile(&identity, false).await.unwrap().source,
+            "opgg"
+        );
+        assert_eq!(opgg.profiles.load(Ordering::SeqCst), 1);
 
         proxy.profile(&identity, true).await.unwrap();
-        assert_eq!(ugg.profiles.load(Ordering::SeqCst), 2);
+        assert_eq!(opgg.profiles.load(Ordering::SeqCst), 2);
         proxy.refresh(&identity).await.unwrap();
         proxy.profile(&identity, false).await.unwrap();
-        assert_eq!(ugg.profiles.load(Ordering::SeqCst), 3);
+        assert_eq!(opgg.profiles.load(Ordering::SeqCst), 3);
+    }
+
+    #[test]
+    fn rejects_build_only_player_registration_even_with_a_trait_stub() {
+        let result = PlayerStatsProxy::new(
+            ProviderKind::Deeplol,
+            [
+                (
+                    ProviderKind::Deeplol,
+                    Arc::new(Stub("deep")) as Arc<dyn PlayerStatsProvider>,
+                ),
+                (
+                    ProviderKind::Ugg,
+                    Arc::new(Stub("ugg")) as Arc<dyn PlayerStatsProvider>,
+                ),
+            ],
+        );
+        assert!(matches!(
+            result,
+            Err(ProviderError::InvalidPlayerRequest(_))
+        ));
     }
 }

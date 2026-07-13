@@ -263,8 +263,10 @@ export interface PlayerIdentity extends PlayerRef {
   puuid?: string | null;
 }
 
+export type PlayerStatsSource = "deeplol" | "opgg";
+
 export type ProviderExtras =
-  | { provider: "deeplol" | "ugg" | "opgg"; data: Record<string, unknown> }
+  | { provider: PlayerStatsSource; data: Record<string, unknown> }
   | { provider: "none" };
 
 export interface ProviderCapabilities {

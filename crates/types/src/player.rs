@@ -24,7 +24,6 @@ pub struct PlayerIdentity {
 #[serde(tag = "provider", content = "data", rename_all = "lowercase")]
 pub enum ProviderExtras {
     Deeplol(Value),
-    Ugg(Value),
     Opgg(Value),
     #[default]
     None,
