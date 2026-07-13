@@ -402,4 +402,35 @@ mod tests {
         page.selected_perk_ids.pop();
         assert!(validate_rune_page(&page).is_err());
     }
+
+    #[test]
+    #[ignore = "manual Windows gate: requires a running, logged-in League Client"]
+    fn windows_lcu_player_identity_manual_harness() {
+        assert!(
+            cfg!(target_os = "windows"),
+            "this manual acceptance harness must only be executed on Windows"
+        );
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .expect("Tokio runtime");
+        let (summoner, platform, recent) = runtime.block_on(async {
+            let summoner = fetch_summoner().await.expect("current-summoner LCU read");
+            let platform = fetch_platform_id().await.expect("region-locale LCU read");
+            let recent = fetch_recent_matches(5)
+                .await
+                .expect("match-history LCU read");
+            (summoner, platform, recent)
+        });
+        assert!(!summoner.game_name.is_empty(), "LCU gameName is empty");
+        assert!(!summoner.tag_line.is_empty(), "LCU tagLine is empty");
+        assert!(!platform.is_empty(), "LCU platform is empty");
+        println!(
+            "WINDOWS LCU IDENTITY OK: platform={} riot_id={}#{} recent_matches={}",
+            platform,
+            summoner.game_name,
+            summoner.tag_line,
+            recent.len()
+        );
+    }
 }

@@ -44,6 +44,7 @@ const MIRRORED_EVENTS = [
   "interactive",
   "log",
   "data-source",
+  "player-stats-source",
   "mock-stage",
 ];
 const MAX_LOG_ENTRIES = 200;
