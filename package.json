@@ -23,6 +23,7 @@
     "build:relay": "bun run --filter @lol-overlay/relay deploy -- --dry-run",
     "preview": "vite preview",
     "test:frontend": "vitest run",
+    "test:e2e": "playwright test",
     "typecheck": "tsc --noEmit && bun run --filter './packages/**' --filter './apps/**' typecheck",
     "format": "bun run format:frontend && bun run format:rust && bun run format:toml",
     "format:check": "bun run format:frontend:check && bun run format:rust:check && bun run format:toml:check",
@@ -50,6 +51,7 @@
   },
   "devDependencies": {
     "@biomejs/biome": "2.5.1",
+    "@playwright/test": "^1.61.1",
     "@tailwindcss/vite": "^4.3.0",
     "@taplo/cli": "0.7.0",
     "@tauri-apps/cli": "^2",

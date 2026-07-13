@@ -10,6 +10,7 @@ import {
   NotFoundPage,
   SettingsPage,
 } from "./components/desktop/Pages";
+import { SummonerPage } from "./components/desktop/SummonerPage";
 import { InGamePanel } from "./components/ingame/InGamePanel";
 import { LpBanner } from "./components/LpBanner";
 import { RuneBanner } from "./components/RuneBanner";
@@ -45,6 +46,7 @@ export function ControlApp() {
       <HashRouter root={DesktopShell}>
         <Route path="/" component={HomePage} />
         <Route path="/draft" component={DraftPage} />
+        <Route path="/summoners" component={SummonerPage} />
         <Route path="/champions" component={ChampionsPage} />
         <Route path="/champions/:id" component={ChampionPage} />
         <Route path="/live" component={LivePage} />

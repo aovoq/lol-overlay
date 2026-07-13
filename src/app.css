@@ -1056,6 +1056,619 @@
   .hx-scrollbar-thumb:hover {
     background: var(--color-hx-accent);
   }
+
+  .summoner-page {
+    max-width: 1320px;
+    margin: 0 auto;
+  }
+
+  .summoner-heading,
+  .summoner-section-heading {
+    display: flex;
+    align-items: end;
+    justify-content: space-between;
+    gap: 18px;
+  }
+
+  .summoner-heading h1,
+  .summoner-heading p {
+    text-wrap: balance;
+  }
+
+  .summoner-provider-field,
+  .summoner-search label {
+    display: grid;
+    gap: 6px;
+    color: var(--hx-muted);
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+
+  .summoner-provider-field select,
+  .summoner-search select,
+  .summoner-search input,
+  .summoner-section-heading select,
+  .summoner-stat-filters select {
+    min-height: 40px;
+    padding: 0 12px;
+    border: 1px solid var(--hx-border);
+    border-radius: 4px;
+    outline: none;
+    background: var(--hx-bg-raised);
+    color: var(--hx-text-strong);
+    font-size: 14px;
+    letter-spacing: 0;
+    text-transform: none;
+    transition-property: border-color, box-shadow;
+    transition-duration: 140ms;
+  }
+
+  .summoner-provider-field select:focus-visible,
+  .summoner-search select:focus-visible,
+  .summoner-search input:focus-visible,
+  .summoner-section-heading select:focus-visible,
+  .summoner-stat-filters select:focus-visible {
+    border-color: var(--hx-accent);
+    box-shadow: 0 0 0 3px var(--hx-accent-wash);
+  }
+
+  .summoner-provider-field select {
+    min-width: 150px;
+  }
+
+  .summoner-search {
+    display: grid;
+    grid-template-columns: 110px minmax(240px, 1fr) auto;
+    align-items: end;
+    gap: 12px;
+  }
+
+  .summoner-search button,
+  .summoner-profile-actions button,
+  .summoner-state button,
+  .summoner-partial button,
+  .summoner-load-more {
+    min-height: 40px;
+    padding: 0 18px;
+    border: 1px solid var(--hx-accent);
+    border-radius: 4px;
+    background: var(--hx-accent);
+    color: var(--hx-bg);
+    font-size: 12px;
+    font-weight: 800;
+    user-select: none;
+    transition-property: transform, opacity, background-color;
+    transition-duration: 140ms;
+  }
+
+  .summoner-search button:active,
+  .summoner-profile-actions button:active,
+  .summoner-state button:active,
+  .summoner-partial button:active,
+  .summoner-load-more:active,
+  .summoner-history button:active {
+    transform: scale(0.96);
+  }
+
+  .summoner-search button:disabled,
+  .summoner-load-more:disabled {
+    cursor: wait;
+    opacity: 0.55;
+  }
+
+  .summoner-inline-error {
+    grid-column: 1 / -1;
+    margin: 0;
+    color: var(--hx-red);
+    font-size: 13px;
+    line-height: 1.5;
+    text-transform: none;
+  }
+
+  .summoner-history .desktop-section-heading button {
+    min-height: 40px;
+    border: 0;
+    background: transparent;
+    color: var(--hx-muted);
+    font-size: 12px;
+  }
+
+  .summoner-history-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .summoner-history-chip {
+    display: flex;
+    overflow: hidden;
+    border: 1px solid var(--hx-border);
+    border-radius: 5px;
+    background: var(--hx-panel-bg);
+  }
+
+  .summoner-history-chip button {
+    min-height: 40px;
+    padding: 0 12px;
+    border: 0;
+    background: transparent;
+    color: var(--hx-text);
+    transition-property: transform, background-color;
+    transition-duration: 140ms;
+  }
+
+  .summoner-history-chip button:first-child:hover {
+    background: var(--hx-accent-wash);
+  }
+
+  .summoner-history-chip small {
+    margin-inline-end: 7px;
+    color: var(--hx-accent);
+    font-size: 10px;
+    font-weight: 800;
+  }
+
+  .summoner-history-chip .summoner-history-remove {
+    width: 40px;
+    padding: 0;
+    border-inline-start: 1px solid var(--hx-border);
+    color: var(--hx-muted);
+    font-size: 18px;
+  }
+
+  .summoner-skeleton {
+    display: flex;
+    align-items: center;
+    gap: 18px;
+  }
+
+  .summoner-skeleton i {
+    display: block;
+    width: 72px;
+    height: 72px;
+    border-radius: 5px;
+    background: linear-gradient(
+      90deg,
+      var(--hx-bg-raised),
+      var(--hx-accent-wash),
+      var(--hx-bg-raised)
+    );
+    background-size: 200% 100%;
+    animation: hx-shimmer 1.4s linear infinite;
+  }
+
+  .summoner-skeleton div {
+    display: grid;
+    flex: 1;
+    gap: 10px;
+  }
+
+  .summoner-skeleton div i {
+    width: min(420px, 80%);
+    height: 16px;
+  }
+
+  .summoner-skeleton div i:last-child {
+    width: min(260px, 55%);
+  }
+
+  .summoner-state {
+    display: grid;
+    justify-items: start;
+    gap: 8px;
+    color: var(--hx-muted);
+    line-height: 1.55;
+  }
+
+  .summoner-state strong {
+    color: var(--hx-text-strong);
+    font-size: 17px;
+  }
+
+  .summoner-state p {
+    max-width: 65ch;
+    margin: 0;
+    overflow-wrap: break-word;
+    text-wrap: pretty;
+  }
+
+  .summoner-profile {
+    display: grid;
+    grid-template-columns: auto minmax(210px, 1fr) auto;
+    align-items: center;
+    gap: 18px;
+    box-shadow: 0 14px 40px color-mix(in srgb, var(--hx-text) 6%, transparent);
+  }
+
+  .summoner-profile-icon {
+    width: 72px;
+    height: 72px;
+    border-radius: 5px;
+    outline: 1px solid oklch(0 0 0 / 0.1);
+    object-fit: cover;
+  }
+
+  .summoner-profile-identity > span,
+  .summoner-rank-card > span {
+    color: var(--hx-accent);
+    font-size: 10px;
+    font-weight: 800;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+  }
+
+  .summoner-profile-identity h2 {
+    margin: 4px 0 0;
+    color: var(--hx-text-strong);
+    font-size: clamp(20px, 3vw, 28px);
+    line-height: 1.1;
+    letter-spacing: -0.02em;
+    overflow-wrap: break-word;
+    text-wrap: balance;
+  }
+
+  .summoner-profile-identity h2 small {
+    margin-inline-start: 5px;
+    color: var(--hx-muted);
+    font-size: 0.62em;
+    font-weight: 400;
+  }
+
+  .summoner-profile-identity p,
+  .summoner-profile-actions span {
+    margin: 6px 0 0;
+    color: var(--hx-muted);
+    font-size: 12px;
+  }
+
+  .summoner-profile-actions {
+    display: flex;
+    align-items: center;
+    justify-content: end;
+    gap: 8px;
+  }
+
+  .summoner-profile-actions span {
+    margin: 0 8px 0 0;
+  }
+
+  .summoner-profile-actions .is-secondary {
+    background: transparent;
+    color: var(--hx-accent);
+  }
+
+  .summoner-rank-grid {
+    display: grid;
+    grid-column: 1 / -1;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 10px;
+  }
+
+  .summoner-rank-card {
+    min-width: 0;
+    padding: 15px;
+    border-radius: 4px;
+    background: var(--hx-bg-raised);
+  }
+
+  .summoner-rank-card strong {
+    display: block;
+    margin-top: 7px;
+    color: var(--hx-text-strong);
+    font-size: 18px;
+  }
+
+  .summoner-rank-card p,
+  .summoner-rank-card small {
+    margin: 3px 0 0;
+    color: var(--hx-muted);
+    font-size: 12px;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .summoner-season-list {
+    display: flex;
+    grid-column: 1 / -1;
+    flex-wrap: wrap;
+    gap: 7px;
+  }
+
+  .summoner-season-list span {
+    padding: 5px 8px;
+    border: 1px solid var(--hx-border);
+    border-radius: 3px;
+    color: var(--hx-muted);
+    font-size: 11px;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+  }
+
+  .summoner-section {
+    display: grid;
+    gap: 12px;
+  }
+
+  .summoner-section-title {
+    display: grid;
+    gap: 4px;
+  }
+
+  .summoner-section-heading h2 {
+    margin: 0;
+    color: var(--hx-text-strong);
+    font-size: 17px;
+  }
+
+  .summoner-section-heading span,
+  .summoner-record {
+    color: var(--hx-muted);
+    font-size: 11px;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .summoner-match-list {
+    display: grid;
+    gap: 8px;
+  }
+
+  .summoner-match {
+    padding: 0;
+    overflow: hidden;
+    border-inline-start: 3px solid var(--hx-red);
+  }
+
+  .summoner-match.is-win {
+    border-inline-start-color: var(--hx-up);
+  }
+
+  .summoner-match summary {
+    display: grid;
+    min-height: 70px;
+    grid-template-columns: auto minmax(130px, 1fr) auto minmax(70px, auto) minmax(125px, auto);
+    align-items: center;
+    gap: 14px;
+    padding: 12px 16px;
+    cursor: pointer;
+    list-style: none;
+    transition-property: background-color;
+    transition-duration: 140ms;
+  }
+
+  .summoner-match summary:hover {
+    background: var(--hx-accent-wash);
+  }
+
+  .summoner-match summary::-webkit-details-marker {
+    display: none;
+  }
+
+  .summoner-match-icon {
+    width: 44px;
+    height: 44px;
+    border-radius: 4px;
+    outline: 1px solid oklch(0 0 0 / 0.1);
+  }
+
+  .summoner-match summary div {
+    display: grid;
+    gap: 2px;
+  }
+
+  .summoner-match summary strong {
+    color: var(--hx-text-strong);
+    font-size: 14px;
+  }
+
+  .summoner-match summary span,
+  .summoner-match summary time {
+    color: var(--hx-muted);
+    font-size: 12px;
+  }
+
+  .summoner-match .summoner-match-kda {
+    color: var(--hx-text-strong);
+    font-size: 14px;
+    font-weight: 800;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .summoner-participants {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 1px;
+    padding: 1px;
+    border-top: 1px solid var(--hx-border);
+    background: var(--hx-border);
+  }
+
+  .summoner-participants > div {
+    display: grid;
+    min-width: 0;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 10px;
+    background: var(--hx-panel-bg);
+  }
+
+  .summoner-participants img,
+  .summoner-stats-table img {
+    width: 28px;
+    height: 28px;
+    border-radius: 3px;
+    outline: 1px solid oklch(0 0 0 / 0.1);
+  }
+
+  [data-theme="dark"] .summoner-profile-icon,
+  [data-theme="dark"] .summoner-match-icon,
+  [data-theme="dark"] .summoner-participants img,
+  [data-theme="dark"] .summoner-stats-table img {
+    outline-color: oklch(1 0 0 / 0.1);
+  }
+
+  .summoner-participants span {
+    overflow: hidden;
+    color: var(--hx-text);
+    font-size: 12px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .summoner-participants b {
+    color: var(--hx-muted);
+    font-size: 11px;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .summoner-partial {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 12px 14px;
+    border-inline-start: 3px solid var(--hx-accent);
+    background: var(--hx-accent-wash);
+    color: var(--hx-text);
+    font-size: 13px;
+  }
+
+  .summoner-load-more {
+    justify-self: center;
+    min-width: 210px;
+  }
+
+  .summoner-stat-filters {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: end;
+    gap: 8px;
+  }
+
+  .summoner-stats-table-wrap {
+    padding: 0;
+    overflow-x: auto;
+  }
+
+  .summoner-stats-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .summoner-stats-table th,
+  .summoner-stats-table td {
+    padding: 11px 14px;
+    border-bottom: 1px solid var(--hx-border);
+    text-align: end;
+    white-space: nowrap;
+  }
+
+  .summoner-stats-table th {
+    color: var(--hx-muted);
+    font-size: 10px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+
+  .summoner-stats-table th:first-child,
+  .summoner-stats-table td:first-child,
+  .summoner-stats-table th:nth-child(2),
+  .summoner-stats-table td:nth-child(2) {
+    text-align: start;
+  }
+
+  .summoner-stats-table td:first-child {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    color: var(--hx-text-strong);
+  }
+
+  .summoner-stats-table tbody tr:last-child td {
+    border-bottom: 0;
+  }
+
+  @media (max-width: 880px) {
+    .desktop-topbar {
+      overflow-x: auto;
+    }
+
+    .desktop-brand {
+      padding-right: 12px;
+    }
+
+    .desktop-nav-link {
+      padding: 0 9px;
+    }
+
+    .desktop-client-state {
+      display: none;
+    }
+
+    .summoner-page {
+      padding: 24px 20px;
+    }
+
+    .summoner-profile {
+      grid-template-columns: auto 1fr;
+    }
+
+    .summoner-profile-actions {
+      grid-column: 1 / -1;
+      justify-content: start;
+    }
+
+    .summoner-match summary {
+      grid-template-columns: auto minmax(120px, 1fr) auto;
+    }
+
+    .summoner-match summary > span:not(.summoner-match-kda),
+    .summoner-match summary time {
+      display: none;
+    }
+  }
+
+  @media (max-width: 620px) {
+    .summoner-heading,
+    .summoner-section-heading {
+      align-items: stretch;
+      flex-direction: column;
+    }
+
+    .summoner-search {
+      grid-template-columns: 1fr;
+    }
+
+    .summoner-search input,
+    .summoner-search select,
+    .summoner-section-heading select,
+    .summoner-stat-filters select {
+      font-size: 16px;
+    }
+
+    .summoner-profile {
+      grid-template-columns: 1fr;
+    }
+
+    .summoner-profile-actions,
+    .summoner-rank-grid,
+    .summoner-season-list {
+      grid-column: 1;
+    }
+
+    .summoner-rank-grid,
+    .summoner-participants {
+      grid-template-columns: 1fr;
+    }
+
+    .summoner-profile-actions,
+    .summoner-stat-filters {
+      justify-content: start;
+    }
+  }
 }
 
 body.interactive::after {

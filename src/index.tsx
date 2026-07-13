@@ -14,7 +14,9 @@ import { windowMode } from "./state/backend";
 import "./state/settings";
 
 const windowLabel = getCurrentWindow().label;
-const isControl = windowLabel === "control";
+// Vite-only desktop shell for browser E2E; Tauri windows continue to route by label.
+const isControl =
+  windowLabel === "control" || new URLSearchParams(window.location.search).has("desktop-test");
 
 document.body.classList.toggle("control-window", isControl);
 document.body.classList.toggle("overlay-window", !isControl);

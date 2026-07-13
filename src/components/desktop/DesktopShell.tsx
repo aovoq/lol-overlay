@@ -7,6 +7,7 @@ import { autoOpenDraft, autoOpenLive } from "../../state/settings";
 const links = [
   { href: "/", label: "HOME", end: true },
   { href: "/draft", label: "DRAFT" },
+  { href: "/summoners", label: "SUMMONERS" },
   { href: "/champions", label: "CHAMPIONS" },
   { href: "/live", label: "LIVE" },
   { href: "/settings", label: "SETTINGS" },
