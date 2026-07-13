@@ -1,11 +1,12 @@
-import { A, useNavigate } from "@solidjs/router";
+import { A, useLocation, useNavigate } from "@solidjs/router";
 import { createEffect, type JSX } from "solid-js";
 import { automaticRoute } from "../../lib/navigation";
-import { champSelect, phase, setSelectedRole } from "../../state/backend";
-import { autoOpenChampion, autoOpenLive } from "../../state/settings";
+import { champSelect, phase } from "../../state/backend";
+import { autoOpenDraft, autoOpenLive } from "../../state/settings";
 
 const links = [
   { href: "/", label: "HOME", end: true },
+  { href: "/draft", label: "DRAFT" },
   { href: "/champions", label: "CHAMPIONS" },
   { href: "/live", label: "LIVE" },
   { href: "/settings", label: "SETTINGS" },
@@ -13,31 +14,37 @@ const links = [
 
 export function DesktopShell(props: { children?: JSX.Element }) {
   const navigate = useNavigate();
-  let routedChampion = 0;
+  const location = useLocation();
+  let routedDraft = false;
   let routedInGame = false;
 
   createEffect(() => {
-    const draft = champSelect();
+    const active = champSelect()?.active ?? false;
     const inGame = phase()?.inGame ?? false;
     const route = automaticRoute({
-      championId: draft?.myChampionId ?? 0,
-      championLocked: draft?.myLocked ?? false,
+      champSelectActive: active,
       inGame,
-      routedChampion,
+      routedDraft,
       routedInGame,
-      autoOpenChampion: autoOpenChampion(),
+      autoOpenDraft: autoOpenDraft(),
       autoOpenLive: autoOpenLive(),
     });
-    if (route?.startsWith("/champions/")) {
-      routedChampion = draft?.myChampionId ?? 0;
-      if (draft?.myRole) setSelectedRole(draft.myRole);
-    } else if (route === "/live") {
-      routedInGame = true;
-    }
     if (route) navigate(route);
-    if (!draft?.active) routedChampion = 0;
+    // Latch on the observed location, not the navigate() intent: a navigate
+    // fired while the router is still resolving its initial location is
+    // silently dropped, and the steady stream of phase/champ-select events
+    // retries it here until the route actually sticks.
+    if (active && location.pathname === "/draft") routedDraft = true;
+    if (inGame && location.pathname === "/live") routedInGame = true;
+    if (!active) routedDraft = false;
     if (!inGame) routedInGame = false;
   });
+
+  const liveDot = (href: string) => {
+    if (href === "/draft") return champSelect()?.active ?? false;
+    if (href === "/live") return phase()?.inGame ?? false;
+    return false;
+  };
 
   return (
     <div class="desktop-shell">
@@ -52,7 +59,7 @@ export function DesktopShell(props: { children?: JSX.Element }) {
               activeClass="desktop-nav-link--active"
             >
               <span>{link.label}</span>
-              {link.href === "/live" && phase()?.inGame ? <span class="desktop-live-dot" /> : null}
+              {liveDot(link.href) ? <span class="desktop-live-dot" /> : null}
             </A>
           ))}
         </nav>

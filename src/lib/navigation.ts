@@ -1,22 +1,16 @@
 export interface AutomaticNavigationState {
-  championId: number;
-  championLocked: boolean;
+  champSelectActive: boolean;
   inGame: boolean;
-  routedChampion: number;
+  routedDraft: boolean;
   routedInGame: boolean;
-  autoOpenChampion: boolean;
+  autoOpenDraft: boolean;
   autoOpenLive: boolean;
 }
 
 export function automaticRoute(state: AutomaticNavigationState): string | null {
   if (state.autoOpenLive && state.inGame && !state.routedInGame) return "/live";
-  if (
-    state.autoOpenChampion &&
-    state.championLocked &&
-    state.championId > 0 &&
-    state.championId !== state.routedChampion
-  ) {
-    return `/champions/${state.championId}`;
+  if (state.autoOpenDraft && state.champSelectActive && !state.routedDraft && !state.inGame) {
+    return "/draft";
   }
   return null;
 }

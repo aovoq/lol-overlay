@@ -2,7 +2,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { type JSX, Show } from "solid-js";
 import {
   autoImport,
-  autoOpenChampion,
+  autoOpenDraft,
   autoOpenLive,
   dataSource,
   dataSources,
@@ -10,7 +10,7 @@ import {
   importSpells,
   presentationMode,
   setAutoImport,
-  setAutoOpenChampion,
+  setAutoOpenDraft,
   setAutoOpenLive,
   setDataSource,
   setDeveloperMode,
@@ -142,9 +142,9 @@ export function SettingsForm() {
 
       <Section title="NAVIGATION">
         <ToggleRow
-          label="チャンピオン確定時に詳細を開く"
-          checked={autoOpenChampion()}
-          onChange={setAutoOpenChampion}
+          label="チャンプセレクト開始時にドラフトを開く"
+          checked={autoOpenDraft()}
+          onChange={setAutoOpenDraft}
         />
         <ToggleRow
           label="試合開始時にLiveを開く"

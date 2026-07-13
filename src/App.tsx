@@ -1,6 +1,7 @@
 import { HashRouter, Route } from "@solidjs/router";
 import { createEffect, Show } from "solid-js";
 import { DesktopShell } from "./components/desktop/DesktopShell";
+import { DraftPage } from "./components/desktop/DraftPage";
 import {
   ChampionPage,
   ChampionsPage,
@@ -43,6 +44,7 @@ export function ControlApp() {
     <div class="control-root">
       <HashRouter root={DesktopShell}>
         <Route path="/" component={HomePage} />
+        <Route path="/draft" component={DraftPage} />
         <Route path="/champions" component={ChampionsPage} />
         <Route path="/champions/:id" component={ChampionPage} />
         <Route path="/live" component={LivePage} />

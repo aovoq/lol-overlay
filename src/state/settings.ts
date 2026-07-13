@@ -26,14 +26,14 @@ const [dataSources, setDataSources] = createSignal<string[]>(["deeplol"]);
 const [presentationMode, setPresentationModeState] = createSignal<PresentationMode>("overlay");
 const [themeMode, setThemeModeState] = createSignal<ThemeMode>(storedTheme());
 const [developerMode, setDeveloperModeState] = createSignal(false);
-const [autoOpenChampion, setAutoOpenChampionState] = createSignal(true);
+const [autoOpenDraft, setAutoOpenDraftState] = createSignal(true);
 const [autoOpenLive, setAutoOpenLiveState] = createSignal(true);
 
 applyTheme(themeMode());
 
 export {
   autoImport,
-  autoOpenChampion,
+  autoOpenDraft,
   autoOpenLive,
   dataSource,
   dataSources,
@@ -45,8 +45,10 @@ export {
   themeMode,
 };
 
-export function setAutoOpenChampion(enabled: boolean) {
-  setAutoOpenChampionState(enabled);
+// Persisted under the historical `autoOpenChampion` settings key; the UI now
+// opens the draft board instead of a champion page.
+export function setAutoOpenDraft(enabled: boolean) {
+  setAutoOpenDraftState(enabled);
   invoke("set_auto_open_champion", { enabled }).catch(() => {});
 }
 
@@ -93,7 +95,7 @@ export function applySettings(s: Partial<Settings>) {
   if (s.dataSource !== undefined) setDataSourceState(s.dataSource);
   if (s.presentationMode !== undefined) setPresentationModeState(s.presentationMode);
   if (s.developerMode !== undefined) setDeveloperModeState(s.developerMode);
-  if (s.autoOpenChampion !== undefined) setAutoOpenChampionState(s.autoOpenChampion);
+  if (s.autoOpenChampion !== undefined) setAutoOpenDraftState(s.autoOpenChampion);
   if (s.autoOpenLive !== undefined) setAutoOpenLiveState(s.autoOpenLive);
 }
 
