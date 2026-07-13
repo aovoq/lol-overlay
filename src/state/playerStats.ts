@@ -236,6 +236,10 @@ function classifyError(error: unknown): PlayerViewError {
     const retry = message.match(/retry-after=([0-9]+)/i)?.[1];
     return { kind: "rateLimited", message, retryAfter: retry ? Number(retry) : undefined };
   }
+  if (/player-timeout|\btimeout\b/i.test(message)) return { kind: "timeout", message };
+  if (/invalid provider data|malformed json|invalid data/i.test(message)) {
+    return { kind: "invalidData", message };
+  }
   return { kind: "unknown", message };
 }
 
@@ -255,8 +259,11 @@ export function createPlayerStatsState(gateway: PlayerStatsGateway = defaultPlay
 
   async function initialize() {
     const [available, active] = await Promise.all([gateway.listSources(), gateway.getSource()]);
-    setSources(available.filter((entry) => entry.capabilities.playerProfile));
-    setSourceState(active);
+    const supported = available.filter(
+      (entry) => ["deeplol", "opgg"].includes(entry.id) && entry.capabilities.playerProfile,
+    );
+    setSources(supported);
+    if (supported.some((entry) => entry.id === active)) setSourceState(active);
   }
 
   async function search(nextPlayer: PlayerRef, forceRefresh = false) {
@@ -319,7 +326,10 @@ export function createPlayerStatsState(gateway: PlayerStatsGateway = defaultPlay
         matches: [...page.matches, ...next.matches],
         partialFailures: [...page.partialFailures, ...next.partialFailures],
       });
-      setStatus(next.partialFailures.length > 0 ? "partial" : "ready");
+      setError(undefined);
+      setStatus(
+        page.partialFailures.length + next.partialFailures.length > 0 ? "partial" : "ready",
+      );
     } catch (cause) {
       if (request === generation) {
         setError(classifyError(cause));
@@ -339,10 +349,13 @@ export function createPlayerStatsState(gateway: PlayerStatsGateway = defaultPlay
   async function refresh() {
     const current = player();
     if (!current) return;
+    const request = generation;
     try {
       await gateway.refresh(current);
+      if (request !== generation) return;
       await search(current, true);
     } catch (cause) {
+      if (request !== generation) return;
       setError(classifyError(cause));
       setStatus("error");
     }

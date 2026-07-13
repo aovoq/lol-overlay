@@ -47,10 +47,12 @@ const page = (source: string, ids: string[], nextCursor?: string): MatchPage =>
 
 function deferred<T>() {
   let resolve!: (value: T) => void;
-  const promise = new Promise<T>((done) => {
+  let reject!: (error: unknown) => void;
+  const promise = new Promise<T>((done, fail) => {
     resolve = done;
+    reject = fail;
   });
-  return { promise, resolve };
+  return { promise, resolve, reject };
 }
 
 function gateway(overrides: Partial<PlayerStatsGateway> = {}): PlayerStatsGateway {
@@ -58,7 +60,7 @@ function gateway(overrides: Partial<PlayerStatsGateway> = {}): PlayerStatsGatewa
   const descriptor = (id: string): PlayerProviderDescriptor =>
     ({ id, label: id, capabilities: { playerProfile: true } }) as PlayerProviderDescriptor;
   return {
-    listSources: async () => [descriptor("deeplol"), descriptor("ugg")],
+    listSources: async () => [descriptor("deeplol"), descriptor("opgg"), descriptor("ugg")],
     getSource: async () => source,
     setSource: async (next) => {
       source = next;
@@ -102,10 +104,10 @@ describe("player stats state", () => {
     const state = createPlayerStatsState(gateway());
     await state.initialize();
     await state.search(player);
-    await state.selectSource("ugg");
-    expect(state.source()).toBe("ugg");
+    await state.selectSource("opgg");
+    expect(state.source()).toBe("opgg");
     expect(state.player()).toEqual(player);
-    expect(state.profile()?.source).toBe("ugg");
+    expect(state.profile()?.source).toBe("opgg");
   });
 
   it("appends cursor pages and ignores duplicate load-more clicks", async () => {
@@ -181,5 +183,110 @@ describe("player stats state", () => {
     await refreshFailure.refresh();
     expect(refreshFailure.status()).toBe("error");
     expect(refreshFailure.error()?.message).toContain("refresh unavailable");
+  });
+
+  it("isolates idle, loading, ready, empty, and partial transitions", async () => {
+    const slow = deferred<PlayerProfile>();
+    const loading = createPlayerStatsState(gateway({ profile: async () => slow.promise }));
+    expect(loading.status()).toBe("idle");
+    const search = loading.search(player);
+    expect(loading.status()).toBe("loading");
+    slow.resolve(profile("deeplol"));
+    await search;
+    expect(loading.status()).toBe("ready");
+
+    const empty = createPlayerStatsState(
+      gateway({ matches: async () => page("deeplol", []), championStats: async () => [] }),
+    );
+    await empty.search(player);
+    expect(empty.status()).toBe("empty");
+
+    const partialPage = page("deeplol", ["ok"]);
+    partialPage.partialFailures = [{ matchId: "bad", message: "hydrate failed", retryable: true }];
+    const partial = createPlayerStatsState(gateway({ matches: async () => partialPage }));
+    await partial.search(player);
+    expect(partial.status()).toBe("partial");
+  });
+
+  it("filters build-only sources and covers every frontend error kind", async () => {
+    const initialized = createPlayerStatsState(gateway());
+    await initialized.initialize();
+    expect(initialized.sources().map((source) => source.id)).toEqual(["deeplol", "opgg"]);
+    await expect(initialized.selectSource("ugg")).rejects.toThrow("Unsupported player provider");
+
+    for (const [failure, kind] of [
+      [{ kind: "validation", message: "bad input" }, "validation"],
+      [{ kind: "timeout", message: "slow upstream" }, "timeout"],
+      [{ kind: "invalidData", message: "bad schema" }, "invalidData"],
+      [new Error("player-timeout"), "timeout"],
+      [new Error("invalid provider data: malformed json"), "invalidData"],
+      [new Error("unexpected"), "unknown"],
+    ] as const) {
+      const state = createPlayerStatsState(
+        gateway({ profile: async () => Promise.reject(failure) }),
+      );
+      await state.search(player);
+      expect(state.error()?.kind).toBe(kind);
+    }
+  });
+
+  it("prevents stale load-more and refresh completions from replacing a new search", async () => {
+    const oldPage = deferred<MatchPage>();
+    const refreshed = deferred<Awaited<ReturnType<PlayerStatsGateway["refresh"]>>>();
+    const state = createPlayerStatsState(
+      gateway({
+        matches: async (target, cursor) => {
+          if (cursor) return oldPage.promise;
+          return page(
+            "deeplol",
+            [target.gameName],
+            target.gameName === player.gameName ? "20" : undefined,
+          );
+        },
+        refresh: async () => refreshed.promise,
+      }),
+    );
+    await state.search(player);
+    const loadMore = state.loadMore();
+    const refresh = state.refresh();
+    const replacement = { ...player, gameName: "Replacement" };
+    await state.search(replacement);
+    oldPage.resolve(page("deeplol", ["stale"]));
+    refreshed.resolve({
+      source: "deeplol",
+      cacheInvalidated: true,
+      mutationPerformed: false,
+      refreshedAt: 2,
+    });
+    await Promise.all([loadMore, refresh]);
+    expect(state.player()).toEqual(replacement);
+    expect(state.matches()?.matches.map((match) => match.matchId)).toEqual(["Replacement"]);
+    expect(state.status()).toBe("ready");
+  });
+
+  it("reloads with isolated queue and champion filters", async () => {
+    const queueCalls: Array<number | undefined> = [];
+    const championCalls: Array<{ season?: string; queue?: string; role?: string }> = [];
+    const state = createPlayerStatsState(
+      gateway({
+        matches: async (_target, _cursor, queue) => {
+          queueCalls.push(queue);
+          return page("deeplol", [String(queue ?? "all")]);
+        },
+        championStats: async (_target, filters) => {
+          championCalls.push(filters);
+          return [];
+        },
+      }),
+    );
+    await state.search(player);
+    await state.setQueueFilter(1700);
+    await state.setChampionFilters({ season: "15", queue: "RANKED", role: "Middle" });
+    expect(queueCalls[queueCalls.length - 1]).toBe(1700);
+    expect(championCalls[championCalls.length - 1]).toEqual({
+      season: "15",
+      queue: "RANKED",
+      role: "Middle",
+    });
   });
 });

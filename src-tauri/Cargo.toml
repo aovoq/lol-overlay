@@ -46,6 +46,9 @@ overlay-provider-lolalytics = { workspace = true }
 overlay-provider-opgg = { workspace = true }
 overlay-ddragon = { workspace = true }
 
+[dev-dependencies]
+tauri = { version = "2", features = ["test"] }
+
 
 [lints]
 workspace = true

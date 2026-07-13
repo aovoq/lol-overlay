@@ -42,6 +42,27 @@ use overlay_provider_ugg::UggProvider;
 use crate::engine::{Engine, MockStage, Settings, UiLayout, WindowMode};
 use overlay_live_client::LiveClient;
 
+fn create_player_stats_proxy(
+    deeplol: Arc<DeepLolProvider>,
+    opgg: Arc<OpggProvider>,
+) -> overlay_provider::Result<PlayerStatsProxy> {
+    // U.GG is intentionally build-only. Its player GraphQL endpoint (`POST /api`)
+    // returns a Cloudflare challenge to anonymous direct clients, and the
+    // server-rendered Apollo state does not contain match history. Do not add it
+    // here until U.GG exposes a stable anonymous JSON contract covering the full
+    // PlayerStatsProvider surface. See docs/ugg-chrome-api-investigation.md.
+    PlayerStatsProxy::new(
+        ProviderKind::Deeplol,
+        [
+            (
+                ProviderKind::Deeplol,
+                deeplol as Arc<dyn PlayerStatsProvider>,
+            ),
+            (ProviderKind::Opgg, opgg as Arc<dyn PlayerStatsProvider>),
+        ],
+    )
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let ddragon = Arc::new(DdragonClient::new());
@@ -67,23 +88,8 @@ pub fn run() {
     )
     .expect("failed to build provider proxy");
     let provider = Arc::new(proxy);
-    // U.GG is intentionally build-only. Its player GraphQL endpoint (`POST /api`)
-    // returns a Cloudflare challenge to anonymous direct clients, and the
-    // server-rendered Apollo state does not contain match history. Do not add it
-    // here until U.GG exposes a stable anonymous JSON contract covering the full
-    // PlayerStatsProvider surface. See docs/ugg-chrome-api-investigation.md.
     let player_provider = Arc::new(
-        PlayerStatsProxy::new(
-            ProviderKind::Deeplol,
-            [
-                (
-                    ProviderKind::Deeplol,
-                    deeplol as Arc<dyn PlayerStatsProvider>,
-                ),
-                (ProviderKind::Opgg, opgg as Arc<dyn PlayerStatsProvider>),
-            ],
-        )
-        .expect("failed to build player stats proxy"),
+        create_player_stats_proxy(deeplol, opgg).expect("failed to build player stats proxy"),
     );
 
     let engine = Arc::new(Engine {
@@ -220,6 +226,27 @@ pub fn run() {
                 ));
             }
         });
+}
+
+#[cfg(test)]
+mod player_registration_tests {
+    use super::*;
+
+    #[test]
+    fn production_player_registry_contains_only_deeplol_and_opgg() {
+        let ddragon = Arc::new(DdragonClient::new());
+        let deeplol = Arc::new(DeepLolProvider::new(ddragon.clone()).unwrap());
+        let opgg = Arc::new(OpggProvider::new(ddragon).unwrap());
+        let proxy = create_player_stats_proxy(deeplol, opgg).unwrap();
+        let ids = proxy
+            .available()
+            .into_iter()
+            .map(|descriptor| descriptor.id)
+            .collect::<Vec<_>>();
+        assert_eq!(ids, vec!["deeplol", "opgg"]);
+        assert!(proxy.set_active(ProviderKind::Ugg).is_err());
+        assert!(proxy.set_active(ProviderKind::Lolalytics).is_err());
+    }
 }
 
 const CHAMP_SELECT_WS_RETRY_DELAY: Duration = Duration::from_secs(3);
