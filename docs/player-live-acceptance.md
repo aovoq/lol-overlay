@@ -24,6 +24,13 @@ challenge bypass, browser-cookie reuse, or rendered-HTML parser was attempted. U
 page remained visible to search crawlers, which confirms the product data exists but does not create
 a stable direct JSON contract for this application.
 
+Revalidated at `2026-07-14T00:13:09+09:00` with a minimal anonymous GraphQL health query using
+`Accept: application/json`, `Content-Type: application/json`, and the normal public-site `Origin`.
+The response was again HTTP 403 with `content-type: text/html`, `cf-mitigated: challenge`, and a
+Cloudflare challenge-only content security policy. Public first-party search results still expose
+rendered profile summaries, but endpoint discovery found no separate anonymous JSON contract. This
+does not authorize using indexed HTML as provider data under the direct-JSON-only task.
+
 The final three-provider gate is therefore **not complete** because U.GG still lacks an executable
 direct JSON contract. OP.GG continuation is now verified. Site mutation is unavailable on both
 implemented transports; their explicit refresh action is a cache invalidation plus forced read, as
