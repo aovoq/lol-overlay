@@ -15,8 +15,9 @@ test("auto-searches the current player and supports provider, details, load more
   await expect(page.getByRole("heading", { name: "Auto Player#JP1" })).toBeVisible();
   await expect(page.locator(".summoner-match")).toHaveCount(20);
 
-  await page.getByLabel("Provider").selectOption("ugg");
-  await expect(page.getByLabel("Provider")).toHaveValue("ugg");
+  await expect(page.getByLabel("Provider").locator('option[value="ugg"]')).toHaveCount(0);
+  await page.getByLabel("Provider").selectOption("opgg");
+  await expect(page.getByLabel("Provider")).toHaveValue("opgg");
   await expect(page.getByRole("heading", { name: "Auto Player#JP1" })).toBeVisible();
 
   await page.locator(".summoner-match summary").first().click();

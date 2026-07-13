@@ -903,6 +903,7 @@ impl PlayerStatsProvider for DeepLolProvider {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::fmt::Write as _;
     use std::io::{Read, Write};
     use std::net::{SocketAddr, TcpListener, TcpStream};
     use std::sync::atomic::{AtomicBool, Ordering};
@@ -1026,10 +1027,10 @@ mod tests {
             response.body.len()
         );
         if let Some(content_type) = response.content_type {
-            headers.push_str(&format!("Content-Type: {content_type}\r\n"));
+            let _ = write!(headers, "Content-Type: {content_type}\r\n");
         }
         if let Some(retry_after) = response.retry_after {
-            headers.push_str(&format!("Retry-After: {retry_after}\r\n"));
+            let _ = write!(headers, "Retry-After: {retry_after}\r\n");
         }
         headers.push_str("\r\n");
         let _ = stream.write_all(headers.as_bytes());

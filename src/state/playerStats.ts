@@ -64,7 +64,6 @@ export function createMockPlayerStatsGateway(): PlayerStatsGateway {
   return {
     listSources: async () => [
       { id: "deeplol", label: "DeepLoL", capabilities },
-      { id: "ugg", label: "U.GG", capabilities },
       { id: "opgg", label: "OP.GG", capabilities },
     ],
     getSource: async () => source,
