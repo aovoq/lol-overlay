@@ -1,0 +1,337 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>LoL Overlay — Player Stats 自律実装Goal</title>
+  <style>
+    :root{--ink:#111827;--muted:#6b7280;--line:#e5e7eb;--soft:#f8fafc;--orange:#d97706;--orange-soft:#fef3c7;--green:#16a34a;--green-soft:#f0fdf4;--yellow:#f59e0b;--yellow-soft:#fffbeb;--red:#dc2626;--red-soft:#fef2f2;--blue:#2563eb;--blue-soft:#eff6ff}
+    *{box-sizing:border-box} html{scroll-behavior:smooth} body{margin:0;background:#fff;color:var(--ink);font-family:Inter,"Noto Sans JP",system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;line-height:1.65}
+    button{font:inherit} .wrap{width:min(1160px,calc(100% - 36px));margin:auto}.hero{padding:72px 0 34px;border-bottom:1px solid var(--line);background:linear-gradient(130deg,#fff 54%,#fff7ed)}
+    .eyebrow{display:flex;align-items:center;gap:9px;color:var(--orange);font-size:12px;font-weight:800;letter-spacing:.14em;text-transform:uppercase}.eyebrow:before{content:"";width:28px;height:3px;background:var(--orange)}
+    h1{max-width:850px;margin:16px 0 12px;font-size:clamp(34px,5vw,64px);line-height:1.08;letter-spacing:-.045em} .lead{max-width:850px;margin:0;color:#4b5563;font-size:clamp(16px,2vw,21px)}
+    .verdict{margin-top:28px;padding:18px 20px;border-left:4px solid var(--orange);background:var(--orange-soft);border-radius:0 12px 12px 0}.verdict strong{display:block;font-size:18px}.verdict p{margin:4px 0 0}
+    .metrics{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin:30px 0 0}.metric{padding:18px;background:rgba(255,255,255,.9);border:1px solid var(--line);border-radius:14px}.metric .n{font-size:38px;font-weight:850;line-height:1;letter-spacing:-.04em}.metric .label{margin-top:7px;color:var(--muted);font-size:12px}.metric.good .n{color:var(--green)}.metric.warn .n{color:var(--yellow)}
+    nav{position:sticky;top:0;z-index:20;background:rgba(255,255,255,.94);backdrop-filter:blur(12px);border-bottom:1px solid var(--line)} nav .wrap{display:flex;gap:4px;overflow:auto;padding:9px 0}nav a{white-space:nowrap;padding:7px 11px;border-radius:8px;color:#4b5563;text-decoration:none;font-size:13px;font-weight:650}nav a:hover{background:var(--soft);color:var(--ink)}
+    section{padding:58px 0}section+section{border-top:1px solid var(--line)}h2{margin:0;font-size:clamp(26px,3.6vw,39px);line-height:1.2;letter-spacing:-.03em}.sub{max-width:780px;margin:9px 0 28px;color:var(--muted)}
+    .legend{display:flex;flex-wrap:wrap;gap:8px;margin:18px 0}.pill,.chip{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line);border-radius:999px;padding:5px 9px;background:#fff;font-size:12px;font-weight:700}.dot{width:8px;height:8px;border-radius:50%}.dot.api{background:var(--green)}.dot.html{background:var(--yellow)}.dot.none{background:#9ca3af}
+    .filterbar{display:flex;flex-wrap:wrap;gap:8px;margin:22px 0}.filter{cursor:pointer;border:1px solid var(--line);background:#fff;border-radius:9px;padding:8px 13px;color:#4b5563}.filter:hover,.filter.active{color:#fff;background:var(--ink);border-color:var(--ink)}
+    .providers{display:grid;grid-template-columns:repeat(2,1fr);gap:16px}.provider{position:relative;border:1px solid var(--line);border-radius:16px;padding:22px;background:#fff;transition:.2s transform,.2s box-shadow}.provider:hover{transform:translateY(-2px);box-shadow:0 14px 34px rgba(17,24,39,.08)}.provider.hidden{display:none}.provider-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}.provider h3{font-size:24px;margin:0}.kind{font-size:11px;font-weight:800;padding:5px 8px;border-radius:999px}.kind.api{color:#166534;background:var(--green-soft)}.kind.html{color:#92400e;background:var(--yellow-soft)}
+    .health{display:flex;align-items:center;gap:7px;margin:10px 0 14px;font-size:13px;font-weight:750}.health.ok{color:var(--green)}.health.partial{color:var(--red)}.provider p{margin:0;color:#4b5563}.scoreline{display:grid;grid-template-columns:106px 1fr 32px;align-items:center;gap:9px;margin-top:10px;font-size:12px}.bar{height:8px;border-radius:99px;background:#e5e7eb;overflow:hidden}.bar i{display:block;height:100%;border-radius:99px;background:linear-gradient(90deg,var(--yellow),var(--green))}.cap-list{display:flex;flex-wrap:wrap;gap:6px;margin-top:16px}.cap{font-size:11px;border-radius:6px;padding:4px 7px;background:#f3f4f6;color:#374151}.details-toggle{cursor:pointer;width:100%;margin-top:18px;padding:9px 0;border:0;border-top:1px solid var(--line);background:transparent;text-align:left;color:var(--orange);font-weight:750}.detail{display:none;padding-top:10px;font-size:13px;color:#4b5563}.provider.open .detail{display:block}.detail code,.path{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;background:#f3f4f6;padding:2px 5px;border-radius:5px;overflow-wrap:anywhere}
+    .flow{display:grid;grid-template-columns:1fr 70px 1fr 70px 1fr;align-items:stretch;gap:0;margin-top:28px}.flowbox{padding:20px;border:1px solid var(--line);border-radius:14px;background:var(--soft)}.flowbox b{display:block;margin-bottom:5px}.arrow{display:grid;place-items:center;color:var(--orange);font-size:30px}.split{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:14px}.route{padding:18px;border:1px solid var(--line);border-radius:12px}.route.api{border-top:4px solid var(--green)}.route.html{border-top:4px solid var(--yellow)}.route h3{margin:0 0 6px}.route p{margin:0;color:var(--muted);font-size:14px}
+    .proxy-map{display:grid;grid-template-columns:1fr 52px 1fr 52px 1fr;align-items:center;margin:26px 0}.proxy-node{height:100%;padding:18px;border:1px solid var(--line);border-radius:14px;background:#fff}.proxy-node.current{border-color:#fdba74;background:#fff7ed}.proxy-node.missing{border-style:dashed;border-color:#f59e0b;background:var(--yellow-soft)}.proxy-node b{display:block;margin-bottom:5px}.proxy-node small{display:block;color:var(--muted)}.proxy-arrow{text-align:center;color:var(--orange);font-size:25px}.truth-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}.truth{padding:18px;border-radius:13px;border:1px solid var(--line)}.truth strong{display:block;margin-bottom:5px}.truth.yes{background:var(--green-soft);color:#166534}.truth.no{background:var(--red-soft);color:#991b1b}.semantic-list{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:16px}.semantic{padding:14px;border:1px solid var(--line);border-radius:11px;background:var(--soft);font-size:13px}.semantic b{display:block;color:var(--ink)}
+    .player-rule{display:flex;align-items:center;gap:14px;margin:20px 0;padding:18px;border:1px solid #bbf7d0;border-radius:14px;background:var(--green-soft)}.player-rule .rank{display:grid;place-items:center;min-width:52px;height:52px;border-radius:12px;background:var(--green);color:#fff;font-size:23px;font-weight:900}.player-rule strong{display:block;font-size:18px}.player-rule p{margin:2px 0 0;color:#166534}.player-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}.player-provider{padding:19px;border:1px solid var(--line);border-radius:14px;background:#fff}.player-provider h3{display:flex;justify-content:space-between;gap:8px;margin:0 0 8px}.player-provider h3 span{font-size:10px;padding:4px 7px;border-radius:999px;background:var(--blue-soft);color:var(--blue)}.player-provider p{margin:0;color:var(--muted);font-size:13px}.api-flow{display:grid;grid-template-columns:repeat(7,auto);align-items:center;justify-content:space-between;gap:8px;margin:20px 0;padding:18px;border:1px solid var(--line);border-radius:14px;background:var(--soft)}.api-stage{padding:10px 12px;border-radius:9px;background:#fff;border:1px solid var(--line);font-size:12px;font-weight:750}.api-next{color:var(--orange);font-weight:900}.defer{padding:16px 18px;border-left:4px solid var(--red);border-radius:0 12px 12px 0;background:var(--red-soft);color:#991b1b}.defer strong{display:block}
+    .source-links{display:flex;flex-wrap:wrap;gap:8px;margin:14px 0 22px}.source-link{padding:8px 11px;border:1px solid var(--line);border-radius:9px;color:var(--blue);text-decoration:none;font-size:12px;font-weight:750}.source-link:hover{background:var(--blue-soft)}.api-facts{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin:18px 0}.api-fact{padding:15px;border:1px solid var(--line);border-radius:12px;background:var(--soft)}.api-fact b{display:block;font-size:19px}.api-fact span{color:var(--muted);font-size:12px}.endpoint-table code{font-size:11px}.flag{display:inline-block;padding:3px 6px;border-radius:5px;font-size:10px;font-weight:850}.flag.ok{color:#166534;background:var(--green-soft)}.flag.blocked{color:#991b1b;background:var(--red-soft)}.flag.warn{color:#92400e;background:var(--yellow-soft)}.contract-gaps{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin-top:16px}.contract-gap{padding:15px;border-left:4px solid var(--yellow);background:var(--yellow-soft);border-radius:0 11px 11px 0;font-size:13px}.contract-gap b{display:block;color:#713f12}.contract-gap p{margin:3px 0 0;color:#92400e}
+    .matrix-wrap{overflow:auto;border:1px solid var(--line);border-radius:14px}table{width:100%;border-collapse:collapse;min-width:850px}th,td{padding:13px 12px;border-bottom:1px solid var(--line);text-align:center;font-size:13px}th{position:sticky;top:0;background:#f8fafc;color:#4b5563;font-size:11px;text-transform:uppercase;letter-spacing:.06em}th:first-child,td:first-child{text-align:left;font-weight:800}.yes{color:var(--green);font-weight:850}.no{color:#9ca3af}.partial{color:var(--yellow);font-weight:850}.source{display:block;margin-top:2px;color:var(--muted);font-size:10px;font-weight:500}
+    .tests{display:grid;grid-template-columns:1.15fr .85fr;gap:16px}.test-card{padding:22px;border:1px solid var(--line);border-radius:15px}.test-card h3{margin:0 0 15px}.testrow{display:grid;grid-template-columns:110px 1fr auto;gap:12px;align-items:center;margin:12px 0}.testrow .bar i.ok{background:var(--green)}.testrow .bar i.bad{background:var(--red)}.status-ok{color:var(--green);font-weight:800}.status-bad{color:var(--red);font-weight:800}.note{padding:18px;border-left:4px solid var(--yellow);background:var(--yellow-soft);border-radius:0 12px 12px 0}.note h3{margin:0 0 5px}.note p{margin:0;color:#713f12}
+    .roadmap{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}.step{padding:20px;border:1px solid var(--line);border-radius:14px}.step .priority{color:var(--orange);font-size:11px;font-weight:850;letter-spacing:.1em}.step h3{margin:6px 0}.step p{margin:0;color:var(--muted);font-size:14px}.callout{margin-top:18px;padding:20px;border:1px solid #bbf7d0;background:var(--green-soft);border-radius:14px}.callout strong{font-size:18px}
+    .task-summary{display:flex;align-items:center;gap:12px;margin:20px 0;padding:14px 16px;border:1px solid var(--line);border-radius:12px;background:var(--soft)}.task-summary b{font-size:24px}.task-list{display:grid;gap:10px}.task{display:grid;grid-template-columns:auto 1fr auto;gap:13px;align-items:start;padding:17px;border:1px solid var(--line);border-radius:13px;background:#fff}.task input{width:19px;height:19px;margin-top:3px;accent-color:var(--green);cursor:pointer}.task h3{margin:0;font-size:16px}.task p{margin:3px 0 0;color:var(--muted);font-size:13px}.task .done-when{margin-top:8px;color:#374151}.task .tag{padding:4px 7px;border-radius:6px;background:var(--orange-soft);color:#92400e;font-size:10px;font-weight:850}.task.done{opacity:.58;background:#f9fafb}.task.done h3{text-decoration:line-through}
+    .goal-banner{margin-top:28px;padding:22px;border:2px solid var(--orange);border-radius:16px;background:#fff}.goal-banner strong{display:block;color:var(--orange);font-size:12px;letter-spacing:.12em}.goal-banner p{margin:6px 0 0;font-size:18px;font-weight:750}.decision-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}.decision{padding:16px;border:1px solid var(--line);border-radius:12px;background:var(--soft)}.decision b{display:block;margin-bottom:4px}.decision span{color:var(--muted);font-size:13px}.scope-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:18px}.scope{padding:19px;border-radius:13px}.scope h3{margin:0 0 8px}.scope ul{margin:0;padding-left:19px}.scope.in{border:1px solid #bbf7d0;background:var(--green-soft)}.scope.out{border:1px solid #fecaca;background:var(--red-soft)}
+    .phase-list{counter-reset:phase;display:grid;gap:10px}.phase{position:relative;padding:17px 18px 17px 68px;border:1px solid var(--line);border-radius:13px}.phase:before{counter-increment:phase;content:counter(phase);position:absolute;left:17px;top:17px;display:grid;place-items:center;width:34px;height:34px;border-radius:9px;background:var(--ink);color:#fff;font-weight:850}.phase h3{margin:0}.phase p{margin:3px 0 0;color:var(--muted);font-size:13px}.phase .gate{display:inline-block;margin-top:7px;padding:3px 7px;border-radius:5px;background:var(--green-soft);color:#166534;font-size:10px;font-weight:850}.code-card{margin:14px 0;border:1px solid var(--line);border-radius:13px;overflow:hidden}.code-card h3{margin:0;padding:11px 15px;background:#f3f4f6;border-bottom:1px solid var(--line);font-size:13px}.code-card pre{margin:0;padding:17px;overflow:auto;background:#111827;color:#e5e7eb;font-size:12px;line-height:1.6}.contract-table td:last-child{text-align:left}.state-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:9px}.state{padding:14px;border:1px solid var(--line);border-radius:11px;background:var(--soft)}.state b{display:block}.state span{color:var(--muted);font-size:12px}.file-tree{padding:19px;border:1px solid var(--line);border-radius:13px;background:#111827;color:#d1d5db;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px;white-space:pre-wrap}.test-matrix{display:grid;grid-template-columns:repeat(2,1fr);gap:12px}.test-block{padding:18px;border:1px solid var(--line);border-radius:13px}.test-block h3{margin:0 0 7px}.test-block ul{margin:0;padding-left:18px;color:var(--muted);font-size:13px}.done-list{display:grid;gap:8px;counter-reset:done}.done-item{position:relative;padding:13px 15px 13px 49px;border:1px solid #bbf7d0;border-radius:10px;background:var(--green-soft)}.done-item:before{counter-increment:done;content:'✓';position:absolute;left:16px;color:var(--green);font-weight:900}.agent-command{padding:20px;border:2px solid var(--ink);border-radius:14px;background:#111827;color:#f9fafb}.agent-command h3{margin:0 0 8px;color:#fbbf24}.agent-command code{white-space:pre-wrap;font-size:12px}.stop-rule{margin-top:14px;padding:17px;border-left:4px solid var(--red);border-radius:0 11px 11px 0;background:var(--red-soft);color:#991b1b}
+    footer{padding:28px 0 48px;color:var(--muted);font-size:12px;border-top:1px solid var(--line)}
+    @media(max-width:800px){.metrics{grid-template-columns:repeat(2,1fr)}.providers,.split,.tests,.roadmap,.truth-grid,.semantic-list,.player-grid,.api-facts,.contract-gaps,.decision-grid,.scope-grid,.test-matrix,.state-grid{grid-template-columns:1fr}.flow,.proxy-map,.api-flow{grid-template-columns:1fr}.arrow,.proxy-arrow,.api-next{transform:rotate(90deg);height:48px;text-align:center}.hero{padding-top:48px}.provider:hover{transform:none}.task{grid-template-columns:auto 1fr}.task .tag{grid-column:2}}
+  </style>
+</head>
+<body>
+  <header class="hero">
+    <div class="wrap">
+      <div class="eyebrow">Autonomous Coding Goal / Source of Truth</div>
+      <h1>Player Statsを、<br>2 Providerで完成させる</h1>
+      <p class="lead">このHTMLは調査メモではなく実行仕様。Coding Agentは確定事項を再質問せず、設計・実装・テスト・実API検証・ローカルcommitまで自律的に完了する。</p>
+      <div class="goal-banner"><strong>GOAL</strong><p>DeepLoL・OP.GGのプロフィール、ランク、直近戦績、Champion別成績、手動更新をDesktop Dashboardで実際に動かし、全offline testと最終live testを成功させる。U.GGはBuild Providerとして維持し、Player Statsには登録しない。</p></div>
+      <div class="verdict"><strong>結論：Player StatsはDeepLoLとOP.GGで正式提供する。</strong><p>U.GGのPlayer GraphQL契約は特定済みだが、匿名GET/POSTがCloudflare Challengeで遮断され、実ChromeでもMatch History取得に失敗した。回避実装は行わず、安定した匿名JSON契約が公開されるまでBuild専用とする。</p></div>
+      <div class="metrics">
+        <div class="metric"><div class="n">4</div><div class="label">登録済みプロバイダ</div></div>
+        <div class="metric good"><div class="n">3</div><div class="label">構造化JSON取得</div></div>
+        <div class="metric warn"><div class="n">1</div><div class="label">HTML埋め込みデータ解析</div></div>
+        <div class="metric good"><div class="n">14/18</div><div class="label">ライブテスト成功（2026-07-13）</div></div>
+      </div>
+    </div>
+  </header>
+  <nav><div class="wrap"><a href="#goal-contract">Goal契約</a><a href="#execution">実装順序</a><a href="#contracts">型・Command</a><a href="#ui-spec">UI仕様</a><a href="#tests-spec">テスト</a><a href="#agent-protocol">Agent規則</a><a href="#tasks">タスク</a><a href="#deeplol-player-api">DeepLoL API</a><a href="#providers">調査資料</a></div></nav>
+
+  <main>
+    <section id="goal-contract"><div class="wrap">
+      <h2>Goal契約：ここに書かれた完成形まで止まらない</h2><p class="sub">調査だけ、型だけ、1 Providerだけ、テスト未実行、UI未接続は未完成。外部サイトの一時障害はretry/backoffして再検証し、恒久的な認証・CAPTCHAだけを真正なblockerとする。</p>
+      <div class="decision-grid">
+        <div class="decision"><b>対象</b><span>Desktop Dashboardのみ。Mobile / relay / overlay panelは変更しない。</span></div>
+        <div class="decision"><b>Player Provider</b><span>DeepLoL・OP.GGが必須。デフォルトはDeepLoL。U.GGはBuild専用。</span></div>
+        <div class="decision"><b>取得優先度</b><span>直接JSON API → HTML内JSON/Flight → DOM解析。認証回避は禁止。</span></div>
+        <div class="decision"><b>データ分離</b><span>Provider結果を混ぜない。自動fallbackなし。切替時は同じRiot IDを再取得。</span></div>
+        <div class="decision"><b>Refresh</b><span>全Providerでapp cache破棄＋再取得。認証不要mutationだけ明示ボタンで実行。</span></div>
+        <div class="decision"><b>Git</b><span>ローカルcommit可。GitHub / push / PR / releaseは使わない。</span></div>
+      </div>
+      <div class="scope-grid"><div class="scope in"><h3>必須スコープ</h3><ul><li>generic RouterとBuild/Player Proxy分離</li><li>Player DTO・cache・capabilities</li><li>DeepLoL・OP.GG Player実装とrefresh</li><li>U.GG Player未登録のcontract test</li><li>検索、履歴、filter、pagination、詳細表示</li><li>offline test、UI E2E、最終live test</li><li>設定migrationとドキュメント更新</li></ul></div><div class="scope out"><h3>非Goal</h3><ul><li>U.GG Player Stats・Cloudflare回避</li><li>Mobile sideboard / relay変更</li><li>Provider比較・データ混合</li><li>Mastery、Live Game、Timeline event表示</li><li>外部サイトのログインUI</li><li>CAPTCHA・bot対策・認証回避</li><li>GitHub操作、配布、release</li></ul></div></div>
+    </div></section>
+
+    <section id="execution"><div class="wrap">
+      <h2>依存順に実装する</h2><p class="sub">各Phaseのgateを通るまで次へ進まない。論理Phaseごとに関連testを通してローカルcommitする。既存の未コミット変更はユーザー所有として保護する。</p>
+      <div class="phase-list">
+        <div class="phase"><h3>作業ツリー監査とbaseline</h3><p>AGENTS.md、git status、既存差分を確認。<code>bun run check</code>と既存Provider testを実行し、開始時点の失敗を記録する。</p><span class="gate">Gate: ユーザー変更を特定し、上書きしない作業方針が立つ</span></div>
+        <div class="phase"><h3>ProviderRouterを抽出</h3><p>登録・active・available・currentだけをgeneric化。既存ProxyはBuildProviderProxyへ改名し、挙動を変えない。</p><span class="gate">Gate: 既存Provider testとTauri buildが通る</span></div>
+        <div class="phase"><h3>Player契約とSettings migration</h3><p>共通DTO、PlayerStatsProvider、capabilities、PlayerStatsProxyを追加。旧dataSourceをbuildDataSourceへ移行し、playerStatsSource=deeplolを追加。</p><span class="gate">Gate: serde、routing、migration contract testが通る</span></div>
+        <div class="phase"><h3>DeepLoL read API</h3><p>Riot ID resolver、Profile、Matches、details、Champion Stats、Tier chart、freshnessを実装。N+1に並列上限と部分失敗許容を入れる。</p><span class="gate">Gate: fixture test + DeepLoL live test成功</span></div>
+        <div class="phase"><h3>U.GG Player除外境界</h3><p>Chrome調査結果とCloudflare制約を文書化し、Build Providerは維持したままPlayer一覧・設定・live acceptanceから除外する。</p><span class="gate">Gate: 未登録contract test + 理由・再評価条件の文書化</span></div>
+        <div class="phase"><h3>OP.GG Player API</h3><p>内部JSONを最優先し、必要なら既存Flight parserを一般化。表示HTML文字列の脆い解析は最後の手段。</p><span class="gate">Gate: fixture test + OP.GG live test成功</span></div>
+        <div class="phase"><h3>Cache・refresh・error統一</h3><p>TTL、single-flight、force reload、429、Retry-After、timeout、部分失敗を共通化。mutationはread clientから分離。</p><span class="gate">Gate: fake clock / mock HTTP testが通る</span></div>
+        <div class="phase"><h3>Tauri commandを接続</h3><p>Provider設定、Profile、Matches、Champion Stats、refreshをcommand登録し、camelCase payloadと型付きerrorを保証。</p><span class="gate">Gate: command/serde test + cargo test成功</span></div>
+        <div class="phase"><h3>Desktop Summoners UI</h3><p>新規route、navigation、検索、履歴、Provider selector、Profile、Rank、Matches、details、Champion Stats、全状態を実装。</p><span class="gate">Gate: Vitest + frontend E2E成功</span></div>
+        <div class="phase"><h3>全体hardening</h3><p>format、Clippy、typecheck、全unit/integration/E2Eを修正。既存Home/Build/Overlay/Mobileに退行がないことを確認。</p><span class="gate">Gate: bun run check成功</span></div>
+        <div class="phase"><h3>最終live検証</h3><p>DeepLoL・OP.GGの検索・Profile・20 matches・load more・Champion Stats・refreshを実APIで検証。U.GGがPlayer一覧へ現れないことも確認する。</p><span class="gate">Gate: 2 Player Provider成功 + U.GG除外contract成功</span></div>
+        <div class="phase"><h3>完了commitと報告</h3><p>全差分、commit、test結果、実API方式、既知制約をまとめる。HTML task statusと関連docsも更新する。</p><span class="gate">Gate: Done Definitionを全項目満たす</span></div>
+      </div>
+    </div></section>
+
+    <section id="contracts"><div class="wrap">
+      <h2>共通型とBackend契約</h2><p class="sub">実装時に名前を微調整してもよいが、意味・nullable・単位・Provider分離は変えない。未知値を0や空文字で偽装しない。</p>
+      <div class="code-card"><h3>crates/types/src/player.rs — 必須モデル</h3><pre><code>PlayerRef { platform_id, game_name, tag_line }
+PlayerIdentity { platform_id, game_name, tag_line, puuid: Option&lt;String&gt; }
+PlayerProfile { source, identity, level: Option&lt;i64&gt;, profile_icon_id: Option&lt;i64&gt;,
+  ranks: Vec&lt;RankedEntry&gt;, previous_seasons: Vec&lt;SeasonRank&gt;,
+  ladder_rank: Option&lt;i64&gt;, ladder_percentile: Option&lt;f64&gt;,
+  fetched_at: i64, refresh: RefreshAvailability, extras: ProviderExtras }
+RankedEntry { queue, tier: Option&lt;String&gt;, division: Option&lt;String&gt;,
+  lp: Option&lt;i64&gt;, wins: Option&lt;i64&gt;, losses: Option&lt;i64&gt; }
+PlayerMatch { match_id, started_at, duration_seconds, queue_id, remake, champion_id,
+  role: Option&lt;String&gt;, win, kills, deaths, assists, cs: Option&lt;i64&gt;,
+  items, spell_ids, perk_ids, participants: Vec&lt;MatchParticipant&gt;, extras }
+MatchPage { matches, next_cursor: Option&lt;String&gt;, partial_failures: Vec&lt;MatchFailure&gt; }
+PlayerChampionStats { champion_id, games, wins, losses, win_rate, kda,
+  cs_per_minute: Option&lt;f64&gt;, role: Option&lt;String&gt;, queue, extras }
+ProviderExtras = tagged provider-specific JSON; never reinterpret AI/OP scores as one common score.</code></pre></div>
+      <div class="code-card"><h3>PlayerStatsProvider — 必須trait</h3><pre><code>async fn profile(&amp;self, player: &amp;PlayerRef, force: bool) -&gt; Result&lt;PlayerProfile&gt;;
+async fn recent_matches(&amp;self, player: &amp;PlayerRef, cursor: Option&lt;&amp;str&gt;,
+  queue: Option&lt;i64&gt;, force: bool) -&gt; Result&lt;MatchPage&gt;;
+async fn champion_stats(&amp;self, player: &amp;PlayerRef, season: Option&lt;&amp;str&gt;,
+  queue: Option&lt;&amp;str&gt;, role: Option&lt;&amp;str&gt;, force: bool)
+  -&gt; Result&lt;Vec&lt;PlayerChampionStats&gt;&gt;;
+async fn refresh(&amp;self, player: &amp;PlayerRef) -&gt; Result&lt;RefreshResult&gt;;
+fn capabilities(&amp;self) -&gt; ProviderCapabilities;</code></pre></div>
+      <div class="matrix-wrap contract-table"><table><thead><tr><th>Tauri command</th><th>返却</th><th>契約</th></tr></thead><tbody>
+        <tr><td><code>get_player_stats_source</code></td><td>String</td><td>Build設定と独立したactive source。</td></tr>
+        <tr><td><code>list_player_stats_sources</code></td><td>Provider descriptor[]</td><td>capabilitiesとdirectApiを含み、U.GGとLoLalyticsは除外。</td></tr>
+        <tr><td><code>set_player_stats_source</code></td><td>()</td><td>永続化してplayer-stats-source eventをemit。</td></tr>
+        <tr><td><code>get_player_profile</code></td><td>PlayerProfile</td><td>PlayerRef + forceRefresh。Provider混合なし。</td></tr>
+        <tr><td><code>get_player_matches</code></td><td>MatchPage</td><td>cursor + queue + forceRefresh。初回/追加とも20件を目標。</td></tr>
+        <tr><td><code>get_player_champion_stats</code></td><td>PlayerChampionStats[]</td><td>season + queue + role + forceRefresh。</td></tr>
+        <tr><td><code>refresh_player_data</code></td><td>RefreshResult</td><td>app cache破棄＋read再取得を保証。mutation実行有無を返す。</td></tr>
+      </tbody></table></div>
+      <div class="callout"><strong>LCU境界：</strong> 既存Homeのsummoner / match-history eventは維持する。SummonersページではLCUをログイン中PlayerRefの自動入力にだけ使い、表示データは選択中外部Providerから取得する。外部失敗時にLCU結果へ自動fallbackしない。</div>
+    </div></section>
+
+    <section id="ui-spec"><div class="wrap">
+      <h2>Desktop UI完成仕様</h2><p class="sub"><code>/summoners</code> routeと「SUMMONERS」navを追加。大きな既存Pages.tsxへ詰め込まず専用component/stateへ分離する。</p>
+      <div class="decision-grid">
+        <div class="decision"><b>初期表示</b><span>LCU接続中は自分を選択Providerで自動検索。未接続時は最後の検索、なければ検索フォーム。</span></div>
+        <div class="decision"><b>検索</b><span>Region + GameName#Tag。Tag必須、Enter対応、連打防止、内部空白・大小文字保持。</span></div>
+        <div class="decision"><b>履歴</b><span>localStorageに最大10件。次回未接続時に最後のPlayerを再取得。個別/全削除。</span></div>
+        <div class="decision"><b>Provider</b><span>ページ上部selector。永続化。切替時は同じPlayerを再取得。比較・混合なし。</span></div>
+        <div class="decision"><b>Matches</b><span>初回20件＋20件ずつ追加。全queue、filter、remake表示・集計除外、10 participants折畳み。</span></div>
+        <div class="decision"><b>Champion Stats</b><span>Champion/Role/Queue filter。games、WR、KDA、CS/min。未知値は—。</span></div>
+      </div>
+      <div class="state-grid" style="margin-top:16px"><div class="state"><b>Idle</b><span>検索案内・履歴</span></div><div class="state"><b>Loading</b><span>skeleton、操作重複防止</span></div><div class="state"><b>Ready</b><span>Profile/Rank/Matches/Stats</span></div><div class="state"><b>Empty</b><span>未Rank・戦績なし・filter 0件</span></div><div class="state"><b>404</b><span>サモナーが見つかりません</span></div><div class="state"><b>422</b><span>入力/API契約エラー</span></div><div class="state"><b>429</b><span>Retry-After/待ち時間</span></div><div class="state"><b>Partial</b><span>成功分表示＋失敗Match再試行</span></div></div>
+      <div class="callout"><strong>Refresh UI：</strong>「再読み込み」は全Providerでcacheを破棄してread APIを再取得。「サイト側更新」は認証不要mutationとcooldownが確認できたProviderだけ別ボタンで表示し、確認dialog後に実行する。</div>
+    </div></section>
+
+    <section id="tests-spec"><div class="wrap">
+      <h2>テスト戦略と完了判定</h2><p class="sub">offline testは開発中に毎回、外部live testは最終完了時に必ず実行。live testをskipした状態ではGoalをcompleteにしない。</p>
+      <div class="test-matrix"><div class="test-block"><h3>Rust offline</h3><ul><li>raw parser fixture: success / nullable / malformed</li><li>DeepLoL・OP.GG共通Player contract suite</li><li>U.GG Player未登録contract</li><li>Router / Proxy / capabilities / settings migration</li><li>TTL / single-flight / force / timeout / 429</li><li>pagination / N+1 / partial failure / refresh safety</li><li>serde camelCase snapshot</li></ul></div><div class="test-block"><h3>Frontend offline</h3><ul><li>GameName#Tag parserと履歴上限</li><li>Provider切替と永続化</li><li>queue/role/champion filterとremake集計除外</li><li>load moreとpartial retry</li><li>全UI stateのcomponent test</li><li>既存navigation regression</li></ul></div><div class="test-block"><h3>Frontend E2E</h3><ul><li>mock gateway付きVite test modeを用意</li><li>自分の自動検索、任意検索、404、429</li><li>Provider切替、追加読込、詳細開閉</li><li>再読み込み、履歴削除、再起動相当復元</li><li>desktop responsive layout</li></ul></div><div class="test-block"><h3>最終live</h3><ul><li>DeepLoL / OP.GG各1件以上</li><li>Profile、Rank、20 matches、load more</li><li>Champion Stats、read refresh</li><li>U.GGがPlayer一覧に存在しないこと</li><li>実行日時・Riot ID・結果をdocsへ記録</li></ul></div></div>
+      <div class="callout"><strong>Windows / LCU manual gate：</strong> Macで実行する自動完了ゲートとは分離する。WindowsでLeague Clientへログインした状態のidentity自動検索、既存Home event非退行、Tauri UI操作を手順書どおり確認する。Coding Agentは実行不能を隠さず、再現可能な手順・期待結果・失敗時ログ箇所を完成させる。</div>
+      <div class="code-card"><h3>必須コマンド</h3><pre><code>bun run format
+bun run check
+# 新設するPlayer Provider live tests（正確なpackage/commandは実装に合わせてdocsへ確定記載）
+cargo test -p overlay-provider-deeplol --lib -- --ignored --nocapture
+cargo test -p overlay-provider-ugg --lib
+cargo test -p overlay-provider-opgg --lib -- --ignored --nocapture
+# 新設したPlaywright E2E command</code></pre></div>
+    </div></section>
+
+    <section id="agent-protocol"><div class="wrap">
+      <h2>Coding Agent実行規則</h2><p class="sub">このセクションは実装Agentへの直接命令。Goal loop中は進捗を自分で監査し、安全な判断で前進する。</p>
+      <div class="file-tree">Expected change map
+crates/types/src/player.rs                 shared DTOs
+crates/provider/src/router.rs              generic registry/router
+crates/provider/src/build_proxy.rs         renamed build forwarding
+crates/provider/src/player_trait.rs        PlayerStatsProvider
+crates/provider/src/player_proxy.rs        player forwarding/capabilities
+crates/provider-{deeplol,opgg}/src/        player API, parser, cache, fixtures
+crates/provider-ugg/src/lib.rs             build-only boundary comment
+src-tauri/src/{engine,commands,lib}.rs      settings, state, Tauri commands
+src/types.ts                               camelCase mirrors
+src/state/playerStats.ts                   gateway/state/cache UI orchestration
+src/lib/playerSearch.ts                    parsing/history/filter helpers
+src/components/desktop/SummonerPage.tsx    dedicated page
+src/{App.tsx,app.css}                      route/nav/layout/styles
+tests / *.test.*                            contract, parser, UI, E2E</div>
+      <div class="decision-grid" style="margin-top:16px"><div class="decision"><b>自律性</b><span>コードから答えられることは質問しない。安全な最小仮定で進め、決定をtest/docへ残す。</span></div><div class="decision"><b>既存差分</b><span>ユーザー所有。reset、checkout、上書き禁止。重なる場合は内容を統合して保持。</span></div><div class="decision"><b>依存追加</b><span>必要なRust/Bun dev dependencyは追加可。lockfile commit。system-wide/課金/API key依存は禁止。</span></div><div class="decision"><b>Commit</b><span>論理Phaseごと。関連test成功後のみ。Conventional Commits、英語。pushしない。</span></div><div class="decision"><b>外部調査</b><span>実サイトとnetworkを調査可。APIを優先。CAPTCHA/認証回避、秘密情報取得、規約違反は禁止。</span></div><div class="decision"><b>Loop</b><span>テスト失敗や難所でGoalを止めない。原因を切り分け、fixture化し、修正して再実行。</span></div></div>
+      <div class="stop-rule"><strong>唯一の停止条件：</strong> CAPTCHA、外部ログイン必須、閉鎖API、サービス停止など、コード変更では解消不能な同じblockerを十分に再現・証明した場合のみ。単なる失敗、未知のendpoint、テスト不合格、時間の長さは停止理由にならない。</div>
+      <h3 style="margin-top:26px">Done Definition</h3><div class="done-list"><div class="done-item">DeepLoL・OP.GGの2つで任意Riot ID検索が動く。</div><div class="done-item">U.GGはBuild Providerとして動き、Player Provider一覧には現れない。</div><div class="done-item">Profile、Solo/Flex Rank、過去Tier、20件＋追加戦績、Champion Statsが表示される。</div><div class="done-item">Provider切替・設定永続化・旧dataSource migrationが動く。</div><div class="done-item">全queue filter、remake処理、match詳細、partial retry、履歴が動く。</div><div class="done-item">全Player Providerでapp refreshが動く。</div><div class="done-item">Providerデータを混ぜず、未知値を0で偽装せず、独自scoreはextrasに隔離する。</div><div class="done-item">全offline unit/contract/component/E2E testを作成し成功させる。</div><div class="done-item"><code>bun run check</code>が成功する。</div><div class="done-item">最終live testがDeepLoL・OP.GGで成功し、証跡を記録する。</div><div class="done-item">Windows/LCU実機確認は独立manual gateとして手順と期待結果が記録される。</div><div class="done-item">既存Home/Build/Overlay/Mobileとユーザーの未コミット変更を壊さない。</div><div class="done-item">論理的なローカルcommitが作成され、GitHub操作は行われていない。</div><div class="done-item">上記をすべて満たすまでGoalをcompleteにしない。</div></div>
+      <div class="agent-command" style="margin-top:24px"><h3>/goal に渡す指示</h3><code>このHTMLを唯一の実行仕様として最初から最後まで実装する。全セクションを読み、Goal契約・確定仕様・Phase gate・Done Definitionを遵守すること。DeepLoL・OP.GGのPlayer Stats、U.GG Player未登録境界、Desktop UI、全offline test、最終live test、ローカルcommitまで完了させる。Windows/LCU実機確認は独立manual gateとして手順化する。既存の未コミット変更を保護し、GitHubは使わない。進捗中の失敗はloop内で診断・修正・再検証し、Done Definitionを全項目満たしたときだけcompleteにする。</code></div>
+    </div></section>
+
+    <section id="providers"><div class="wrap">
+      <h2>取得方式と発展性の比較</h2>
+      <p class="sub">ここでの「API」は公式サポートAPIという意味ではなく、HTTPでJSONを返す構造化エンドポイント。4つとも外部サイト側の内部・非公開仕様への依存があり、Riot公式API相当の安定保証はありません。</p>
+      <div class="legend"><span class="pill"><i class="dot api"></i>構造化JSON</span><span class="pill"><i class="dot html"></i>HTML / Flight解析</span><span class="pill"><i class="dot none"></i>データなし</span></div>
+      <div class="filterbar" role="group" aria-label="取得方式で絞り込み"><button class="filter active" data-filter="all">すべて</button><button class="filter" data-filter="api">JSON API</button><button class="filter" data-filter="html">HTML解析</button></div>
+      <div class="providers">
+        <article class="provider" data-kind="api"><div class="provider-head"><div><h3>U.GG</h3><div class="health ok">● ライブ 2/2 成功</div></div><span class="kind api">JSON API</span></div><p><code>stats2.u.gg</code> のバージョン付きJSONを直接デシリアライズ。機能範囲と拡張しやすさのバランスが最良。</p><div class="scoreline"><span>発展性</span><span class="bar"><i style="width:88%"></i></span><b>88</b></div><div class="scoreline"><span>変更耐性</span><span class="bar"><i style="width:76%"></i></span><b>76</b></div><div class="cap-list"><span class="cap">地域</span><span class="cap">パッチ</span><span class="cap">Arena</span><span class="cap">対面ルーン</span><span class="cap">Tier</span></div><button class="details-toggle">根拠と注意点を表示 ＋</button><div class="detail">overview / matchups / champion_ranking はそれぞれ <code>.json</code> を返し、APIバージョン表も取得してURLへ組み込む。地域→World、ロール→最多試合ロールの内部フォールバックあり。公開契約ではないためURLやスキーマ変更リスクは残る。<br><span class="path">crates/provider-ugg/src/api.rs</span></div></article>
+        <article class="provider" data-kind="api"><div class="provider-head"><div><h3>DeepLoL</h3><div class="health partial">● ライブ 5/9 成功・4失敗</div></div><span class="kind api">JSON API</span></div><p><code>b2c-api-cdn.deeplol.gg</code> のJSON API。最も独自性が高く、対面ルーンをOTP試合から集計できるが、今日一部レスポンスでデコード不一致。</p><div class="scoreline"><span>発展性</span><span class="bar"><i style="width:78%"></i></span><b>78</b></div><div class="scoreline"><span>変更耐性</span><span class="bar"><i style="width:48%"></i></span><b>48</b></div><div class="cap-list"><span class="cap">地域</span><span class="cap">前パッチ</span><span class="cap">OTP集計</span><span class="cap">Tier</span><span class="cap">Counter</span></div><button class="details-toggle">根拠と注意点を表示 ＋</button><div class="detail"><code>/champion/build</code>、<code>/champion/rank</code>、<code>/matchup/matchup_stats</code>、<code>/matchup/OTP_match</code> をJSONとして取得。今日、Tier・アイテム・複数の通常ルーンは成功した一方、Counter・一部ルーン・対面ルーンで「response body decode」失敗。API自体は強力だが型のnullable化やレスポンス差異に耐えるパーサー強化が必要。<br><span class="path">crates/provider-deeplol/src/lib.rs</span></div></article>
+        <article class="provider" data-kind="api"><div class="provider-head"><div><h3>LoLalytics</h3><div class="health ok">● ライブ 3/3 成功</div></div><span class="kind api">JSON API</span></div><p><code>a1.lolalytics.com/mega</code> のJSONを利用。対応機能は安定して伸ばせるが、ルーン・スキル・スペルがJSON側にないことが上限。</p><div class="scoreline"><span>発展性</span><span class="bar"><i style="width:64%"></i></span><b>64</b></div><div class="scoreline"><span>変更耐性</span><span class="bar"><i style="width:72%"></i></span><b>72</b></div><div class="cap-list"><span class="cap">Item</span><span class="cap">Tier</span><span class="cap">Counter</span><span class="cap">30日集計</span></div><button class="details-toggle">根拠と注意点を表示 ＋</button><div class="detail"><code>ep=build-itemset</code>、<code>build-earlyset</code>、<code>counter</code>、<code>tier</code> をJSON取得。User-AgentとRefererが必要。主ビルド（ルーン・スキル・スペル）はサーバーレンダリングHTMLにしかなく、現実装では意図的に非対応。対応を増やすにはHTML解析へ踏み込む必要があり、方式の強みを失う。<br><span class="path">crates/provider-lolalytics/src/api.rs</span></div></article>
+        <article class="provider" data-kind="html"><div class="provider-head"><div><h3>OP.GG</h3><div class="health ok">● ライブ 4/4 成功</div></div><span class="kind html">HTML / Flight</span></div><p>通常ページのHTMLを取得し、埋め込まれたNext.js FlightとReact要素を復元。今日の網羅性は高いが、DOM・コンポーネント構造変更に弱い。</p><div class="scoreline"><span>発展性</span><span class="bar"><i style="width:56%"></i></span><b>56</b></div><div class="scoreline"><span>変更耐性</span><span class="bar"><i style="width:34%"></i></span><b>34</b></div><div class="cap-list"><span class="cap">全主要機能</span><span class="cap">Flight JSON</span><span class="cap">React要素走査</span><span class="cap">対面query</span></div><button class="details-toggle">根拠と注意点を表示 ＋</button><div class="detail">ルーン・Counterの一部はFlight内のきれいな <code>data</code> prop。一方、Item・Spell・SkillはReact要素の <code>metaType</code>/<code>metaId</code> と祖先keyを走査して復元する。機能追加は可能だが、表示構造の変更が即パーサー修正につながる。<br><span class="path">crates/provider-opgg/src/flight.rs</span></div></article>
+      </div>
+    </div></section>
+
+    <section id="architecture"><div class="wrap">
+      <h2>同じ「取得できる」でも構造が違う</h2><p class="sub">UIへ届く最終型は共通ですが、外部サイトからそこへ到達するまでの距離が保守コストを左右します。</p>
+      <div class="flow"><div class="flowbox"><b>外部サイト</b><span>統計・ビルドデータ</span></div><div class="arrow">→</div><div class="flowbox"><b>各Provider</b><span>取得・解析・キャッシュ・フォールバック</span></div><div class="arrow">→</div><div class="flowbox"><b>BuildProvider</b><span>共通のItem / Rune / Tier / Counter型</span></div></div>
+      <div class="split"><div class="route api"><h3>JSONルート</h3><p>URL → JSON → serde型。フィールド追加やnullable化への対処が中心。テストfixtureを作りやすく、機能追加も比較的局所的。</p></div><div class="route html"><h3>HTMLルート</h3><p>URL → HTML → script抽出 → Flight decode → React要素走査 → 共通型。途中段階が多く、サイトの表示実装変更がデータ取得へ波及。</p></div></div>
+    </div></section>
+
+    <section id="normalization"><div class="wrap">
+      <h2>Proxyはある。ただし「意味」までは均していない</h2>
+      <p class="sub">現在は、各Providerが外部データを共通DTOへ変換し、<code>ProviderProxy</code> が選択中Providerへ呼び出しを転送します。Proxy自身は値を補正せず、失敗時に別Providerへ切り替えることもありません。</p>
+      <div class="proxy-map">
+        <div class="proxy-node current"><b>Provider Adapter</b><small>DeepLoL / U.GG / OP.GG / LoLalyticsが、Raw dataを共通型へ変換</small></div><div class="proxy-arrow">→</div>
+        <div class="proxy-node current"><b>BuildProvider trait</b><small>Item / Skill / Rune / Tier / Counterの共通インターフェース</small></div><div class="proxy-arrow">→</div>
+        <div class="proxy-node current"><b>ProviderProxy</b><small>active providerを選び、そのまま転送。自動fallbackなし</small></div>
+      </div>
+      <div class="truth-grid"><div class="truth yes"><strong>現在できていること</strong>返却型、勝率の基本レンジ、Counterの向き、Runeの構造、Champion IDなどをAdapter側で共通化。</div><div class="truth no"><strong>まだ揃っていないこと</strong>「0」と取得不能、実測値と推定値、統計期間、地域、Item統計の意味、データ鮮度などのセマンティクス。</div></div>
+      <div class="semantic-list">
+        <div class="semantic"><b>games</b>OP.GGは取得不能で0、DeepLoL Tierは推定値。現在の型だけでは区別不能。</div>
+        <div class="semantic"><b>win_rate_delta</b>取得できないProviderも0.0。実際に変化なしなのか不明なのかを判別できない。</div>
+        <div class="semantic"><b>地域・母集団</b>地域別、KR固定、World、グローバル集計が同じDTOに入る。</div>
+        <div class="semantic"><b>Itemの意味</b>開始ItemとCore Itemの並びや、表示する勝率・gamesの由来がProviderごとに異なる。</div>
+        <div class="semantic"><b>推定・fallback</b>前パッチ、World、KR、最多ロールへのfallbackが結果だけでは見えない。</div>
+        <div class="semantic"><b>鮮度</b>6時間TTLやprocess lifetime cacheがあるが、取得日時はUIへ渡らない。</div>
+      </div>
+      <div class="callout"><strong>推奨構造：</strong> Adapter → Normalizer / Validator → 共通DTO → ProviderProxy。Proxyはroutingに専念させ、正規化は共通helperまたはDecoratorとして独立させる。</div>
+      <p class="sub"><span class="path">crates/provider/src/trait_def.rs</span>　<span class="path">crates/provider/src/proxy.rs</span>　<span class="path">crates/provider/src/shared.rs</span></p>
+    </div></section>
+
+    <section id="player-stats"><div class="wrap">
+      <h2>次の拡張：サモナー戦績Provider</h2>
+      <p class="sub">DeepLoL・OP.GGに存在する特定サモナーのプロフィール、ランク、直近試合、Champion別成績を取得する。Champion全体統計を扱う既存の <code>BuildProvider</code> には混ぜず、独立した <code>PlayerStatsProvider</code> として実装する。U.GGはBuild専用でPlayerには登録しない。</p>
+      <div class="player-rule"><div class="rank">1st</div><div><strong>最優先は直接JSON API</strong><p>ブラウザ向け内部APIを含め、構造化レスポンスを直接取得できる経路を先に実装する。HTML / DOM / Flight解析はAPIが存在しない機能だけに限定。</p></div></div>
+      <div class="player-grid">
+        <article class="player-provider"><h3>U.GG <span>BUILD ONLY</span></h3><p><code>POST https://u.gg/api</code> のGraphQL契約とHTML内Apollo Stateは特定済み。ただし匿名直接HTTPはCloudflare 403、実ChromeでもMatch HistoryがHTML応答で失敗したためPlayer Providerには登録しない。</p></article>
+        <article class="player-provider"><h3>DeepLoL <span>DIRECT API CONFIRMED</span></h3><p>プロフィール・戦績・Champion Statsの読み取りは既存と同じ <code>b2c-api-cdn.deeplol.gg</code> のJSON APIで実測済み。refreshだけ別host・認証条件未解決。</p></article>
+        <article class="player-provider"><h3>OP.GG <span>API FIRST</span></h3><p>既存Build実装はHTML/Flight解析だが、戦績ではそれを即流用しない。まず内部JSON APIを探索し、安定して直接取得できる場合だけPhase 1へ含める。</p></article>
+      </div>
+      <div class="api-flow"><span class="api-stage">Riot ID + Region</span><span class="api-next">→</span><span class="api-stage">Account / PUUID解決</span><span class="api-next">→</span><span class="api-stage">Profile + Rank JSON</span><span class="api-next">→</span><span class="api-stage">Cursor付きMatch JSON</span></div>
+      <div class="proxy-map">
+        <div class="proxy-node current"><b>LCU Player Adapter</b><small>ログイン中の本人。既存のcurrent-summoner / match-historyを共通型へ変換</small></div><div class="proxy-arrow">+</div>
+        <div class="proxy-node missing"><b>PlayerStatsProvider</b><small>任意のRiot ID。profile / ranked_summary / recent_matches / champion_stats</small></div><div class="proxy-arrow">→</div>
+        <div class="proxy-node current"><b>PlayerStatsProxy</b><small>DeepLoL / OP.GGを明示選択。U.GGなし・別Providerへの自動fallbackなし</small></div>
+      </div>
+      <div class="defer"><strong>Phase 1でやらないこと</strong>HTMLスクレイピングを前提にした実装、3サイトの結果混合、独自スコアの共通scoreへの強制変換。OP Score・DeepLoL AI Scoreなどはprovider固有extrasとして後から追加する。</div>
+    </div></section>
+
+    <section id="deeplol-player-api"><div class="wrap">
+      <h2>DeepLoL Player API：実測済み契約</h2>
+      <p class="sub">API ReferenceとExplorerをsubagentで並行スキャンし、公開フロントエンドJSと2026-07-13の実API応答でも確認。読み取り系はAPI key / Cookieなしの直接JSON、更新系は別hostかつ認証境界があります。</p>
+      <div class="source-links"><a class="source-link" href="https://docs.aovoq.work/deeplol-api-reference-888373e6.html">DeepLoL API Reference ↗</a><a class="source-link" href="https://docs.aovoq.work/deeplol-api-explorer-59b07766.html">DeepLoL API Explorer ↗</a></div>
+      <div class="api-facts"><div class="api-fact"><b>JSON GET</b><span>b2c-api-cdn.deeplol.gg・読取認証なし</span></div><div class="api-fact"><b>PUUID</b><span>Riot ID解決後の内部主キー</span></div><div class="api-fact"><b>20件固定</b><span>Match listの実測返却単位</span></div><div class="api-fact"><b>最大約1.48MB</b><span>Champion Stats実測payload</span></div></div>
+      <div class="matrix-wrap endpoint-table"><table><thead><tr><th>Endpoint</th><th>用途</th><th>状態</th><th>実装上の要点</th></tr></thead><tbody>
+        <tr><td><code>GET /summoner/summoner</code></td><td>Riot ID → PUUID / 基本Profile</td><td><span class="flag ok">200実測</span></td><td><code>platform_id</code>、<code>riot_id_name</code>、<code>riot_id_tag_line</code>。現在Rankは含まれない。存在しないIDは404 JSON。</td></tr>
+        <tr><td><code>GET /summoner/summoner-name</code></td><td>PUUID → 現Riot ID</td><td><span class="flag ok">200実測</span></td><td>旧<code>summoner_name</code>は空文字になり得るため必須DTOにしない。</td></tr>
+        <tr><td><code>GET /summoner/summoner-realtime</code></td><td>現在Rank / challenges</td><td><span class="flag blocked">契約不整合</span></td><td>Explorer未記載の<code>summoner_id</code>が必須で422。一方Profileでは空文字例があり、取得元確定までdefer。</td></tr>
+        <tr><td><code>GET /match/matches</code></td><td>Match ID一覧</td><td><span class="flag ok">200実測</span></td><td><code>only_list=1</code>。<code>count</code>に関係なく20件、<code>offset</code>は行offset。次値はoffset + 実返却件数。</td></tr>
+        <tr><td><code>GET /match/match-cached</code></td><td>1試合の詳細</td><td><span class="flag ok">200実測</span></td><td>一覧後にmatchごと取得するN+1構成。10 participants、AI score等を含み、実測約177KB。</td></tr>
+        <tr><td><code>GET /summoner/champion-stat</code></td><td>Champion別個人成績</td><td><span class="flag warn">巨大JSON</span></td><td>counter / reverse / synergy、role別統計、AI score。実測約1.48MBなので必要項目抽出と別cacheが必須。</td></tr>
+        <tr><td><code>GET /summoner/tier-chart</code></td><td>Tier推移</td><td><span class="flag warn">文書差異</span></td><td><code>last_match_id</code>はoptional記載だが実APIでは必須。未指定422、指定時Solo 30件を実測。</td></tr>
+        <tr><td><code>GET /summoner/updated-time</code></td><td>更新時刻・更新可否</td><td><span class="flag ok">200実測</span></td><td><code>updated_timestamp</code>、<code>auto_update</code>、<code>remain_second</code>をfreshness metadataへ変換。</td></tr>
+        <tr><td><code>POST renew.deeplol.gg/match/*</code></td><td>戦績 / Tier / Stats更新</td><td><span class="flag blocked">401 / 副作用</span></td><td>CDN読取とは別client・別capability。認証条件確定まで自動実行しない。</td></tr>
+      </tbody></table></div>
+      <div class="contract-gaps">
+        <div class="contract-gap"><b>Profileは2段階だがRank合成が現在block</b><p><code>/summoner/summoner</code>でPUUID/basicを取得できるが、realtimeが要求するsummoner_idの信頼できる取得元が未確定。</p></div>
+        <div class="contract-gap"><b>cursorではなくoffset semantics</b><p>共通<code>MatchPage.cursor</code>にはoffsetを文字列化して保持。countを信用せず、実返却件数から次offsetを計算する。</p></div>
+        <div class="contract-gap"><b>一覧と詳細を分離</b><p>ID一覧を先に返し、詳細hydrationは並列数制限・timeout・部分失敗許容・match ID cache付きで行う。</p></div>
+        <div class="contract-gap"><b>Provider固有値を隔離</b><p>AI Score、lane/final analysis、synergy/counter詳細は共通Matchへ押し込まずDeepLoL extrasへ保存する。</p></div>
+      </div>
+      <div class="callout"><strong>Platform規則：</strong> <code>KR</code>だけ番号なし。<code>JP1</code>、<code>NA1</code>、<code>EUW1</code>等へ正規化し、番号なし<code>JP</code>などをAPIへ送らない。対応regionはmappingの存在だけでなくlive fixtureで確認する。</div>
+    </div></section>
+
+    <section id="capabilities"><div class="wrap">
+      <h2>機能別マトリクス</h2><p class="sub">セル下段は、その機能がどの経路で得られるかを示します。LoLalyticsの非対応はバグではなく、JSON APIに必要データがないという設計上の境界です。</p>
+      <div class="matrix-wrap"><table><thead><tr><th>Provider</th><th>Item</th><th>Skill</th><th>通常Rune</th><th>対面Rune</th><th>Tier</th><th>Counter</th><th>地域</th></tr></thead><tbody>
+        <tr><td>U.GG</td><td class="yes">✓<span class="source">overview JSON</span></td><td class="yes">✓<span class="source">overview JSON</span></td><td class="yes">✓<span class="source">overview JSON</span></td><td class="yes">✓<span class="source">matchup JSON</span></td><td class="yes">✓<span class="source">ranking JSON</span></td><td class="yes">✓<span class="source">matchups JSON</span></td><td class="yes">✓<span class="source">region→World</span></td></tr>
+        <tr><td>DeepLoL</td><td class="yes">✓<span class="source">build JSON</span></td><td class="yes">✓<span class="source">build JSON</span></td><td class="partial">△<span class="source">JSON・一部実測失敗</span></td><td class="partial">△<span class="source">OTP JSON集計・実測失敗</span></td><td class="yes">✓<span class="source">rank JSON</span></td><td class="partial">△<span class="source">build JSON・実測失敗</span></td><td class="partial">△<span class="source">Build地域別 / Tier KR</span></td></tr>
+        <tr><td>LoLalytics</td><td class="yes">✓<span class="source">mega JSON</span></td><td class="no">—<span class="source">HTMLのみ</span></td><td class="no">—<span class="source">HTMLのみ</span></td><td class="no">—<span class="source">未実装</span></td><td class="yes">✓<span class="source">mega JSON</span></td><td class="yes">✓<span class="source">mega JSON</span></td><td class="no">—<span class="source">グローバル集計</span></td></tr>
+        <tr><td>OP.GG</td><td class="yes">✓<span class="source">React要素</span></td><td class="yes">✓<span class="source">React要素</span></td><td class="yes">✓<span class="source">Flight data</span></td><td class="yes">✓<span class="source">HTML + query</span></td><td class="yes">✓<span class="source">Flight data</span></td><td class="yes">✓<span class="source">Flight data</span></td><td class="no">—<span class="source">グローバルページ</span></td></tr>
+      </tbody></table></div>
+    </div></section>
+
+    <section id="live"><div class="wrap">
+      <h2>2026-07-13 ライブ取得結果</h2><p class="sub">ignored指定の実通信テストをネットワーク許可付きで実行。通常のローカル単体テストは別途48件すべて成功しています。</p>
+      <div class="tests"><div class="test-card"><h3>プロバイダ別</h3>
+        <div class="testrow"><b>U.GG</b><span class="bar"><i class="ok" style="width:100%"></i></span><span class="status-ok">2/2</span></div>
+        <div class="testrow"><b>OP.GG</b><span class="bar"><i class="ok" style="width:100%"></i></span><span class="status-ok">4/4</span></div>
+        <div class="testrow"><b>LoLalytics</b><span class="bar"><i class="ok" style="width:100%"></i></span><span class="status-ok">3/3</span></div>
+        <div class="testrow"><b>DeepLoL</b><span class="bar"><i class="bad" style="width:56%"></i></span><span class="status-bad">5/9</span></div>
+      </div><div class="test-card"><h3>DeepLoLの内訳</h3><p><span class="status-ok">成功：</span>Tier、Zed Item、現在Tier上位のRune群、JP1→KRフォールバック、mock pick Rune。</p><p><span class="status-bad">失敗：</span>Wukong名称、Shaco Counter、Viego通常Rune、Viego対Shaco Rune。主にレスポンスbodyのJSONデコード失敗。</p></div></div>
+      <div class="note"><h3>読み方の注意</h3><p>ライブテスト成功は「この日時・この代表ケースで取得できた」というスモークテストです。全チャンピオン、全地域、全ロールの可用性や将来の継続を保証しません。逆にDeepLoLの失敗もサービス全停止ではなく、同じ実行で成功機能が多数ありました。</p></div>
+    </div></section>
+
+    <section id="roadmap"><div class="wrap">
+      <h2>推奨ロードマップ</h2><p class="sub">機能数を増やす前に、取得方式ごとの弱点へ投資すると、今後の追加開発が速くなります。</p>
+      <div class="roadmap">
+        <div class="step"><span class="priority">P0 / PLAYER API</span><h3>3サイトの戦績JSON endpointを確定</h3><p>Riot ID解決、Profile、Rank、Match History、cursor、refresh APIをnetwork contractとして記録する。</p></div>
+        <div class="step"><span class="priority">P0 / CONTRACT</span><h3>PlayerStatsProviderを先に定義</h3><p>LCUを最初のadapterとして共通DTOを検証し、外部Provider実装がUI都合へ引っ張られないようにする。</p></div>
+        <div class="step"><span class="priority">P1 / DIRECT</span><h3>直接APIが安定したProviderから実装</h3><p>構造化JSON、cursor、rate limit、cacheを満たすProviderを優先。HTMLしかないProviderは後段へ送る。</p></div>
+      </div>
+      <div class="callout"><strong>優先順位：</strong> サモナー戦績の直接API実装 → 戦績共通化とcontract test → 既存Providerの耐障害性 → HTML解析による追加機能。APIで取れないデータのために全体をスクレイピング設計へ寄せない。</div>
+    </div></section>
+
+    <section id="tasks"><div class="wrap">
+      <h2>実装タスク</h2><p class="sub">チェック状態はこのブラウザのlocalStorageへ保存されます。Coding Agentは上のPhase順と各完了条件を優先し、32タスクすべてを完了してから最終Done Definitionを監査します。</p>
+      <div class="task-summary"><b id="task-count">0 / 32</b><span>完了</span></div>
+      <div class="callout"><strong>2026-07-14 方針確定：</strong> Player StatsはDeepLoL・OP.GGの2 Providerで完成させる。U.GGはChrome調査でGraphQL契約とApollo Stateを確認したが、匿名HTTPとMatch HistoryがCloudflareに遮断されるためBuild専用とし、Player未登録を正しい完成状態とする。独立監査で指摘されたfixture・command・state test不足はすべて解消する。</div>
+      <div class="task-list">
+        <label class="task" data-task="router-extract"><input type="checkbox"><span><h3>ProviderProxyからgeneric ProviderRouterを抽出</h3><p>Provider登録、active保持、<code>set_active</code>、<code>available</code>、<code>current</code>だけを型に依存しないRouterへ移す。値の正規化やfallbackは入れない。</p><p class="done-when"><b>完了条件:</b> 現在の切替・一覧・未登録Provider拒否テストがgeneric Routerに移り、外部動作が変わらない。</p></span><span class="tag">P0 / REFACTOR</span></label>
+        <label class="task" data-task="build-proxy-rename"><input type="checkbox"><span><h3>既存ProviderProxyをBuildProviderProxyへ明確化</h3><p>BuildProviderの転送責務だけを持つwrapperへ改名し、generic Routerを内包する。</p><p class="done-when"><b>完了条件:</b> items / skills / runes / tier / countersの全転送テストとTauri commandが名称変更後も通る。</p></span><span class="tag">P0 / REFACTOR</span></label>
+        <label class="task" data-task="provider-settings-split"><input type="checkbox"><span><h3>Build用とPlayer Stats用のProvider設定を分離</h3><p><code>dataSource</code>を<code>buildDataSource</code>と<code>playerStatsSource</code>へ分け、既存保存データを安全にmigrationする。</p><p class="done-when"><b>完了条件:</b> Build=U.GG / Player Stats=DeepLoLのように独立選択でき、旧設定からの起動で選択が失われない。</p></span><span class="tag">P0 / SETTINGS</span></label>
+        <label class="task" data-task="provider-capabilities"><input type="checkbox"><span><h3>ProviderCapabilitiesを登録情報へ追加</h3><p>builds、playerProfile、matchHistory、championStats、liveGame、directApiの対応可否を明示する。</p><p class="done-when"><b>完了条件:</b> 非対応ProviderをUIで選択できず、利用可能一覧が機能別に返る。</p></span><span class="tag">P0 / CONTRACT</span></label>
+        <label class="task" data-task="player-proxy"><input type="checkbox"><span><h3>PlayerStatsProxyを追加</h3><p>PlayerStatsProvider専用Routerを内包し、profile / rank / matches / champion statsを選択中Providerへ単純転送する。</p><p class="done-when"><b>完了条件:</b> Build側と独立して切替でき、失敗時に別Providerへ自動fallbackせず、stubによるrouting testが通る。</p></span><span class="tag">P0 / PLAYER</span></label>
+        <label class="task" data-task="player-api-map"><input type="checkbox"><span><h3>U.GG・OP.GGのサモナーAPIをnetwork調査</h3><p>OP.GGの実装可能な取得契約と、U.GGがPlayer Providerに不適切なCloudflare境界を実Chromeを含めて記録する。</p><p class="done-when"><b>完了条件:</b> endpoint、method、request/response、pagination、必要header、取得不能条件と再評価条件がProviderごとに文書化。</p></span><span class="tag">P0 / SPIKE</span></label>
+        <label class="task" data-task="player-contract"><input type="checkbox"><span><h3>PlayerStatsProviderと共通DTOを定義</h3><p><code>PlayerRef</code>、<code>PlayerProfile</code>、<code>RankedEntry</code>、<code>PlayerMatch</code>、<code>MatchPage</code>を追加する。</p><p class="done-when"><b>完了条件:</b> profile / ranked_summary / recent_matches / champion_statsとcursor semanticsがtraitで固定される。</p></span><span class="tag">P0 / DESIGN</span></label>
+        <label class="task" data-task="player-lcu"><input type="checkbox"><span><h3>LCUをSummoners初期identityへ接続</h3><p>ログイン中のcurrent-summonerとplatform IDからPlayerRefを作り、選択中外部Providerの自動検索を開始する。既存HomeのLCU表示は維持する。</p><p class="done-when"><b>完了条件:</b> Client接続時に自分を自動検索し、外部失敗時にLCUデータを混ぜず、既存summoner / match-history eventが退行しない。</p></span><span class="tag">P0 / BASELINE</span></label>
+        <label class="task" data-task="player-ugg"><input type="checkbox"><span><h3>U.GGをPlayer Statsから意図的に除外</h3><p>Build Providerは維持し、Player登録・設定候補・Player live acceptanceには含めない。Cloudflare理由と再有効化条件をコード・調査文書へ残す。</p><p class="done-when"><b>完了条件:</b> Player一覧がDeepLoL・OP.GGだけを返すcontract testが通り、U.GG Build testは継続して成功する。</p></span><span class="tag">P1 / BOUNDARY</span></label>
+        <label class="task" data-task="player-deeplol"><input type="checkbox"><span><h3>DeepLoL Riot ID resolver / basic profileを実装</h3><p><code>/summoner/summoner</code>からRiot IDをPUUIDへ解決し、basic profileと過去Tierを共通DTOへ変換する。</p><p class="done-when"><b>完了条件:</b> 200、404 JSON、URL encoding、空summoner_id/nameのfixtureとlive testが通る。</p></span><span class="tag">P0 / API</span></label>
+        <label class="task" data-task="deep-match-history"><input type="checkbox"><span><h3>DeepLoL Match一覧と詳細hydrationを分離実装</h3><p><code>/match/matches?only_list=1</code>で固定20件のIDを取得し、必要時だけ<code>/match/match-cached</code>を並列数制限付きで取得する。</p><p class="done-when"><b>完了条件:</b> offset cursor、次ページ、部分失敗、timeout、match ID cache、PUUID participant抽出をテスト。</p></span><span class="tag">P0 / API</span></label>
+        <label class="task" data-task="deep-champion-stat"><input type="checkbox"><span><h3>DeepLoL Champion Statsを別capabilityで実装</h3><p>約1.48MBのraw JSONから主要統計だけ抽出し、AI・synergy・counter詳細はextrasへ分離する。</p><p class="done-when"><b>完了条件:</b> 縮小fixtureとraw schema sampleを分け、UI再描画で巨大payloadを再取得しない。</p></span><span class="tag">P1 / API</span></label>
+        <label class="task" data-task="deep-tier-chart"><input type="checkbox"><span><h3>Tier chartの実契約を実装</h3><p><code>last_match_id</code>を必須として扱い、Match一覧の最新IDからTier推移を取得する。</p><p class="done-when"><b>完了条件:</b> 未指定422と指定200をfixture化し、optionalという旧資料前提を残さない。</p></span><span class="tag">P1 / API</span></label>
+        <label class="task" data-task="deep-realtime-blocker"><input type="checkbox"><span><h3>summoner-realtimeのsummoner_id不整合を解決</h3><p>Explorer未記載の必須<code>summoner_id</code>の取得元を特定し、空文字Profileでの挙動を確認する。</p><p class="done-when"><b>完了条件:</b> 現在Rank取得がcontract testを通るか、未対応理由と代替表示がADR化される。</p></span><span class="tag">P1 / BLOCKER</span></label>
+        <label class="task" data-task="deep-refresh-boundary"><input type="checkbox"><span><h3>DeepLoL refreshをread APIから分離</h3><p><code>renew.deeplol.gg</code>の副作用POSTを別Command/capabilityに隔離し、認証条件確定まで自動実行しない。</p><p class="done-when"><b>完了条件:</b> 読取ProviderがPOSTを呼ばず、refreshは明示操作・認証・cooldownを満たす場合だけ有効。</p></span><span class="tag">P1 / SAFETY</span></label>
+        <label class="task" data-task="deep-contract-fixtures"><input type="checkbox"><span><h3>DeepLoL Player API contract fixtureを整備</h3><p>200/404/422、固定20件、空ID、巨大payload、空Flex、特殊queue/Arena、updated-timeを回帰テスト化する。</p><p class="done-when"><b>完了条件:</b> host・endpoint・top-level shape変更を検知するignored smoke testとoffline contract testが揃う。</p></span><span class="tag">P1 / TEST</span></label>
+        <label class="task" data-task="deep-platform-map"><input type="checkbox"><span><h3>DeepLoL platform mappingを共通化</h3><p><code>KR</code>を例外とし、JP1/NA1/EUW1等へ正規化。mapping上存在してもdisabledなregionはcapabilityで除外する。</p><p class="done-when"><b>完了条件:</b> 番号なしJP等を送らないunit testと、対応regionのlive fixtureがある。</p></span><span class="tag">P1 / REGION</span></label>
+        <label class="task" data-task="player-commands"><input type="checkbox"><span><h3>Player Stats Tauri commandを実装・登録</h3><p>source一覧/取得/設定、Profile、Matches、Champion Stats、refreshをEngineのPlayerStatsProxyへ接続する。</p><p class="done-when"><b>完了条件:</b> 全commandがcamelCase DTOと型付きerrorを返し、invoke handler登録・serde snapshot・command testが通る。</p></span><span class="tag">P1 / TAURI</span></label>
+        <label class="task" data-task="player-frontend-state"><input type="checkbox"><span><h3>Frontend Player Stats gateway/stateを実装</h3><p>Tauri invokeを一箇所へ集約し、検索generation、Provider切替、pagination、partial retry、force reloadの競合を防ぐ。</p><p class="done-when"><b>完了条件:</b> 古いrequestが新しい検索結果を上書きせず、全state transitionのVitestが通る。</p></span><span class="tag">P1 / FRONTEND</span></label>
+        <label class="task" data-task="summoners-page"><input type="checkbox"><span><h3>Desktop /summonersページを完成</h3><p>Nav、検索、Provider selector、Profile、Solo/Flex、過去Tier、Matches、参加者詳細、Champion Stats、全error/empty/loading stateを実装する。</p><p class="done-when"><b>完了条件:</b> 確定UI仕様の全項目がキーボード操作・レスポンシブ表示を含めて動く。</p></span><span class="tag">P1 / UI</span></label>
+        <label class="task" data-task="player-search-history"><input type="checkbox"><span><h3>検索validationと履歴を実装</h3><p>Region + GameName#Tag、Tag必須、空白/大小文字保持、最大10件localStorage、再起動相当復元、削除を実装する。</p><p class="done-when"><b>完了条件:</b> parser、重複、上限、破損storage、個別/全削除testが通る。</p></span><span class="tag">P1 / UX</span></label>
+        <label class="task" data-task="player-settings-ui"><input type="checkbox"><span><h3>Build/Player Provider設定UIを分離</h3><p>既存DATA selectorをBuild用と明示し、Player Stats selectorを追加。capability非対応Providerを候補から除外する。</p><p class="done-when"><b>完了条件:</b> 独立切替、永続化、旧設定migration、data-source event回帰testが通る。</p></span><span class="tag">P1 / SETTINGS</span></label>
+        <label class="task" data-task="player-e2e"><input type="checkbox"><span><h3>Summoners UIの自動E2Eを追加</h3><p>mock gateway付きVite test modeで、自動検索、任意検索、Provider切替、load more、refresh、404、429、partial、履歴復元を操作する。</p><p class="done-when"><b>完了条件:</b> 新設Playwright commandがheadlessで安定して成功し、固定waitに依存しない。</p></span><span class="tag">P2 / E2E</span></label>
+        <label class="task" data-task="player-final-live"><input type="checkbox"><span><h3>2 Player Provider最終live acceptanceを実行</h3><p>DeepLoL・OP.GGでProfile、Rank、20件、追加20件、Champion Stats、read refreshを実API検証し、U.GG未登録contractも実行する。</p><p class="done-when"><b>完了条件:</b> 2 Providerが成功し、日時・代表Riot ID・取得方式・結果をdocsへ記録。U.GG Build testも退行しない。</p></span><span class="tag">P3 / ACCEPTANCE</span></label>
+        <label class="task" data-task="player-opgg"><input type="checkbox"><span><h3>OP.GG戦績の直接API可否をGate判定</h3><p>安定した内部JSON APIが確認できた場合だけPlayerStatsProviderを実装する。HTML/Flightしかない場合はPhase 2へ延期。</p><p class="done-when"><b>完了条件:</b> API実装、または延期理由と再評価条件のADRが残る。</p></span><span class="tag">P1 / GATE</span></label>
+        <label class="task" data-task="player-cache"><input type="checkbox"><span><h3>戦績APIのcache・pagination・負荷制御</h3><p>同一Riot IDの重複取得をまとめ、cursor単位cache、TTL、retry、429 handlingを共通化する。</p><p class="done-when"><b>完了条件:</b> UI再描画で再取得せず、refreshと次ページ取得を明示的に制御できる。</p></span><span class="tag">P1 / RELIABILITY</span></label>
+        <label class="task" data-task="provider-contract"><input type="checkbox"><span><h3>共通DTOの意味を契約として文書化</h3><p><code>games</code>、勝率、delta、地域、期間、fallback、並び順をフィールド単位で定義する。</p><p class="done-when"><b>完了条件:</b> 4 Providerの意味差分表と、不明値の表現方針がADRまたはpolicyに入る。</p></span><span class="tag">P0 / DESIGN</span></label>
+        <label class="task" data-task="deep-body"><input type="checkbox"><span><h3>DeepLoLの失敗レスポンスを診断・fixture化</h3><p>status、content-type、安全なbody断片を記録し、nullable・型揺れを特定する。</p><p class="done-when"><b>完了条件:</b> 今日失敗したCounter / Runeケースがfixture回帰テストになり、原因別errorを返す。</p></span><span class="tag">P0 / BUG</span></label>
+        <label class="task" data-task="optional-stats"><input type="checkbox"><span><h3>「0」と「取得不能」を分離</h3><p><code>games</code> と <code>winRateDelta</code> をOption化、またはavailability metadataを追加する。</p><p class="done-when"><b>完了条件:</b> OP.GG games不明と実games=0、delta不明とdelta=0をUIまで区別できる。</p></span><span class="tag">P1 / MODEL</span></label>
+        <label class="task" data-task="provenance"><input type="checkbox"><span><h3>Provenance / Quality metadataを追加</h3><p>provider、region、patch、rank、sample window、fetchedAt、estimated、fallbackFromを結果へ添付する。</p><p class="done-when"><b>完了条件:</b> UIまたはdebug panelで「どの母集団・いつ・fallback有無」を確認できる。</p></span><span class="tag">P1 / MODEL</span></label>
+        <label class="task" data-task="normalizer"><input type="checkbox"><span><h3>Normalizer / Validatorを共通化</h3><p>勝率レンジ、finite値、重複Item、Rune構造、Counter最小試合数、sort/capを一箇所で検証する。</p><p class="done-when"><b>完了条件:</b> 全Providerが同じvalidation suiteを通り、不正値は型付きerrorになる。</p></span><span class="tag">P1 / CORE</span></label>
+        <label class="task" data-task="contract-tests"><input type="checkbox"><span><h3>Provider横断contract testを導入</h3><p>共通fixtureとstubを使い、出力単位・順序・欠損値・fallback metadataを全実装で検証する。</p><p class="done-when"><b>完了条件:</b> 新Provider追加時に同じtest suiteを1行で適用でき、CIで実行される。</p></span><span class="tag">P2 / TEST</span></label>
+      </div>
+    </div></section>
+  </main>
+  <footer><div class="wrap">調査対象: lol-overlay repository / provider implementations. 実装・単体テスト・ignored live testsに基づく。評価スコアは取得構造、機能範囲、地域・パッチ対応、実測結果、サイト構造依存度からの相対評価。</div></footer>
+  <script>
+    document.querySelectorAll('.filter').forEach(btn=>btn.addEventListener('click',()=>{document.querySelectorAll('.filter').forEach(x=>x.classList.remove('active'));btn.classList.add('active');const f=btn.dataset.filter;document.querySelectorAll('.provider').forEach(card=>card.classList.toggle('hidden',f!=='all'&&card.dataset.kind!==f));}));
+    document.querySelectorAll('.details-toggle').forEach(btn=>btn.addEventListener('click',()=>{const card=btn.closest('.provider');card.classList.toggle('open');btn.textContent=card.classList.contains('open')?'根拠と注意点を隠す −':'根拠と注意点を表示 ＋';}));
+    const taskKey='lol-overlay.provider-report.tasks.v2';
+    const implementationBlockers=new Set(['player-deeplol','deep-match-history','deep-champion-stat','deep-contract-fixtures','deep-platform-map','player-commands','player-frontend-state','player-settings-ui','contract-tests']);
+    let taskState={};try{taskState=JSON.parse(localStorage.getItem(taskKey)||'{}');}catch{localStorage.removeItem(taskKey);}
+    const updateTasks=()=>{const tasks=[...document.querySelectorAll('.task')];tasks.forEach(task=>task.classList.toggle('done',task.querySelector('input').checked));document.querySelector('#task-count').textContent=`${tasks.filter(task=>task.querySelector('input').checked).length} / ${tasks.length}`;localStorage.setItem(taskKey,JSON.stringify(Object.fromEntries(tasks.map(task=>[task.dataset.task,task.querySelector('input').checked]))));};
+    document.querySelectorAll('.task').forEach(task=>{const input=task.querySelector('input');input.checked=task.dataset.task in taskState?Boolean(taskState[task.dataset.task]):!implementationBlockers.has(task.dataset.task);input.addEventListener('change',updateTasks);});updateTasks();
+  </script>
+</body>
+</html>

@@ -67,6 +67,11 @@ pub fn run() {
     )
     .expect("failed to build provider proxy");
     let provider = Arc::new(proxy);
+    // U.GG is intentionally build-only. Its player GraphQL endpoint (`POST /api`)
+    // returns a Cloudflare challenge to anonymous direct clients, and the
+    // server-rendered Apollo state does not contain match history. Do not add it
+    // here until U.GG exposes a stable anonymous JSON contract covering the full
+    // PlayerStatsProvider surface. See docs/ugg-chrome-api-investigation.md.
     let player_provider = Arc::new(
         PlayerStatsProxy::new(
             ProviderKind::Deeplol,

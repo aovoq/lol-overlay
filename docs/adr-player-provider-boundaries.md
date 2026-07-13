@@ -31,8 +31,11 @@ instead of replaying page one or synthesizing a cursor.
 
 ## U.GG player provider
 
-Implementation is gated on direct JSON. The currently observable GraphQL endpoint is intercepted by
-a managed Cloudflare challenge in the live environment, and stable anonymous profile operations are
-not documented. The project will not parse rendered HTML, automate Turnstile, borrow user cookies,
-or evade bot protection. Consequently U.GG player support remains unregistered and the overall
-three-provider acceptance goal remains open.
+U.GG is intentionally build-only. The observable player GraphQL endpoint is intercepted by a
+managed Cloudflare challenge for anonymous direct clients. A real-Chrome investigation found
+profile, rank, historic-rank, and champion aggregates in `window.__APOLLO_STATE__`, but no match
+history; the client match query received HTML instead of JSON. The project will not automate
+Turnstile, borrow user cookies, or evade bot protection. Consequently U.GG player support remains
+unregistered and is not part of Player Stats acceptance. Reconsider only when U.GG exposes a stable
+anonymous JSON contract covering the complete `PlayerStatsProvider` surface. See
+`docs/ugg-chrome-api-investigation.md`.

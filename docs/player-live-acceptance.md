@@ -6,7 +6,7 @@ Execution date: 2026-07-13 JST. Representative account: `KR / Hide on bush#KR1`.
 | --- | --- | --- | --- | --- | --- | --- |
 | DeepLoL | Anonymous JSON GET, `b2c-api-cdn.deeplol.gg` | Pass; tier chart also returned using derived `last_match_id` | Pass, 20 + 20 | Pass, 76 rows | Pass; app cache/read only | Pass |
 | OP.GG | Official anonymous MCP plus first-party `getGames` Flight action | Pass, 3 rank rows | Pass, 20 + 20 | Pass, 10 rows | Pass; app cache/read only | Pass |
-| U.GG | Candidate GraphQL POST, `u.gg/api` | Not executable | Not executable | Not executable | Not executable | Blocked upstream |
+| U.GG | Build-only `stats2.u.gg`; Player GraphQL excluded | N/A | N/A | N/A | N/A | Intentionally not registered |
 
 Commands/results:
 
@@ -51,7 +51,11 @@ cargo test -p overlay-provider-ugg --lib -- --ignored --nocapture
 2 build-statistics live tests passed; this crate still has no player-stat adapter or player acceptance test.
 ```
 
-The final three-provider gate is therefore **not complete** because U.GG still lacks an executable
-direct JSON contract. OP.GG continuation is now verified. Site mutation is unavailable on both
-implemented transports; their explicit refresh action is a cache invalidation plus forced read, as
-documented in the provider-boundary ADR.
+The product decision on `2026-07-14` is to support DeepLoL and OP.GG as the two Player Stats
+providers and keep U.GG build-only. A real-Chrome investigation confirmed the GraphQL operations
+and server-rendered `window.__APOLLO_STATE__`, but match history was absent from that state and the
+client GraphQL request received HTML instead of JSON. Details are in
+`docs/ugg-chrome-api-investigation.md`. The final Player Stats live gate therefore requires
+DeepLoL and OP.GG to pass plus a contract assertion that U.GG is not registered for Player Stats.
+Site mutation is unavailable on both implemented transports; their explicit refresh action is a
+cache invalidation plus forced read, as documented in the provider-boundary ADR.

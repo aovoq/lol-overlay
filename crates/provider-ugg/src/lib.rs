@@ -2,6 +2,12 @@
 //!
 //! Data comes from u.gg's stats2 JSON API, including site-wide tier lists via
 //! the `champion_ranking` endpoint used by <https://u.gg/lol/tier-list>.
+//!
+//! This crate deliberately does not implement `PlayerStatsProvider`: U.GG's
+//! player GraphQL endpoint is blocked for anonymous direct HTTP clients by a
+//! Cloudflare challenge, while its initial Apollo state omits match history.
+//! Reconsider only when a stable anonymous player JSON contract is available;
+//! see `docs/ugg-chrome-api-investigation.md`.
 
 mod api;
 mod tier_list;
