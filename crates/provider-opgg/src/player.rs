@@ -100,7 +100,7 @@ impl<'a> CompactParser<'a> {
         let value = self.value()?;
         self.space();
         if self.at != self.input.len() {
-            return Err(ProviderError::Other(format!(
+            return Err(ProviderError::InvalidData(format!(
                 "OP.GG compact response has trailing data at byte {}",
                 self.at
             )));
@@ -115,7 +115,7 @@ impl<'a> CompactParser<'a> {
             Some(b'[') => self.array(),
             Some(b'-' | b'0'..=b'9') => self.number(),
             Some(b'a'..=b'z' | b'A'..=b'Z' | b'_') => self.identifier_or_call(),
-            _ => Err(ProviderError::Other(format!(
+            _ => Err(ProviderError::InvalidData(format!(
                 "invalid OP.GG compact value at byte {}",
                 self.at
             ))),
@@ -137,7 +137,7 @@ impl<'a> CompactParser<'a> {
             self.at += 1;
         }
         let name = std::str::from_utf8(&self.input[start..self.at])
-            .map_err(|error| ProviderError::Other(error.to_string()))?;
+            .map_err(|error| ProviderError::InvalidData(error.to_string()))?;
         self.space();
         if self.peek() == Some(b'(') {
             self.at += 1;
@@ -147,7 +147,7 @@ impl<'a> CompactParser<'a> {
             "null" => Ok(CompactValue::Null),
             "true" => Ok(CompactValue::Bool(true)),
             "false" => Ok(CompactValue::Bool(false)),
-            _ => Err(ProviderError::Other(format!(
+            _ => Err(ProviderError::InvalidData(format!(
                 "unexpected OP.GG compact identifier: {name}"
             ))),
         }
@@ -170,7 +170,7 @@ impl<'a> CompactParser<'a> {
                     return Ok(values);
                 }
                 _ => {
-                    return Err(ProviderError::Other(format!(
+                    return Err(ProviderError::InvalidData(format!(
                         "unterminated OP.GG compact list at byte {}",
                         self.at
                     )))
@@ -191,11 +191,13 @@ impl<'a> CompactParser<'a> {
                 escaped = true;
             } else if byte == b'"' {
                 let json = std::str::from_utf8(&self.input[start..self.at])
-                    .map_err(|error| ProviderError::Other(error.to_string()))?;
-                return serde_json::from_str(json).map_err(Into::into);
+                    .map_err(|error| ProviderError::InvalidData(error.to_string()))?;
+                return serde_json::from_str(json).map_err(|error| {
+                    ProviderError::InvalidData(format!("invalid OP.GG compact string: {error}"))
+                });
             }
         }
-        Err(ProviderError::Other(
+        Err(ProviderError::InvalidData(
             "unterminated OP.GG compact string".into(),
         ))
     }
@@ -209,15 +211,15 @@ impl<'a> CompactParser<'a> {
             self.at += 1;
         }
         let raw = std::str::from_utf8(&self.input[start..self.at])
-            .map_err(|error| ProviderError::Other(error.to_string()))?;
+            .map_err(|error| ProviderError::InvalidData(error.to_string()))?;
         raw.parse::<f64>()
             .map(CompactValue::Number)
-            .map_err(|error| ProviderError::Other(error.to_string()))
+            .map_err(|error| ProviderError::InvalidData(error.to_string()))
     }
 
     fn expect(&mut self, expected: u8) -> Result<()> {
         if self.peek() != Some(expected) {
-            return Err(ProviderError::Other(format!(
+            return Err(ProviderError::InvalidData(format!(
                 "expected '{}' at byte {}",
                 expected as char, self.at
             )));
@@ -240,14 +242,16 @@ impl<'a> CompactParser<'a> {
 fn args<'a>(value: &'a CompactValue, name: &str) -> Result<&'a [CompactValue]> {
     match value {
         CompactValue::Call(actual, values) if actual == name => Ok(values),
-        _ => Err(ProviderError::Other(format!("expected OP.GG {name} value"))),
+        _ => Err(ProviderError::InvalidData(format!(
+            "expected OP.GG {name} value"
+        ))),
     }
 }
 
 fn array(value: &CompactValue) -> Result<&[CompactValue]> {
     match value {
         CompactValue::Array(values) => Ok(values),
-        _ => Err(ProviderError::Other("expected OP.GG array".into())),
+        _ => Err(ProviderError::InvalidData("expected OP.GG array".into())),
     }
 }
 
@@ -262,6 +266,27 @@ fn integer(value: Option<&CompactValue>) -> Option<i64> {
     match value? {
         CompactValue::Number(value) if value.is_finite() => Some(*value as i64),
         _ => None,
+    }
+}
+
+fn division(value: Option<&CompactValue>) -> Option<String> {
+    text(value).or_else(|| {
+        integer(value).and_then(|division| match division {
+            1 => Some("I".into()),
+            2 => Some("II".into()),
+            3 => Some("III".into()),
+            4 => Some("IV".into()),
+            _ => None,
+        })
+    })
+}
+
+fn ranked_queue(value: Option<&CompactValue>) -> String {
+    match text(value).as_deref() {
+        Some("SOLORANKED") => "RANKED_SOLO_5x5".into(),
+        Some("FLEXRANKED") => "RANKED_FLEX_SR".into(),
+        Some(value) => value.into(),
+        None => String::new(),
     }
 }
 
@@ -337,6 +362,25 @@ fn action_json(body: &str) -> Result<Value> {
         ProviderError::InvalidData(format!(
             "OP.GG action returned malformed Flight JSON: {error}"
         ))
+    })
+}
+
+fn player_status_error(status: reqwest::StatusCode, retry_after: Option<u64>) -> ProviderError {
+    match status.as_u16() {
+        404 => ProviderError::PlayerNotFound,
+        422 => ProviderError::InvalidPlayerRequest("OP.GG rejected player input".into()),
+        429 => ProviderError::RateLimited { retry_after },
+        code => ProviderError::Other(format!("player-http:{code}")),
+    }
+}
+
+async fn response_text(response: reqwest::Response) -> Result<String> {
+    response.text().await.map_err(|error| {
+        if error.is_timeout() {
+            ProviderError::Timeout
+        } else {
+            ProviderError::Http(error)
+        }
     })
 }
 
@@ -508,25 +552,23 @@ impl OpggProvider {
             .get(reqwest::header::RETRY_AFTER)
             .and_then(|value| value.to_str().ok())
             .map(str::to_owned);
-        let body = response.text().await?;
+        let body = response_text(response).await?;
         if !status.is_success() {
-            return Err(match status.as_u16() {
-                404 => ProviderError::PlayerNotFound,
-                422 => ProviderError::InvalidPlayerRequest("OP.GG rejected player input".into()),
-                429 => ProviderError::RateLimited {
-                    retry_after: retry_after.and_then(|value| value.parse().ok()),
-                },
-                code => ProviderError::Other(format!("player-http:{code}")),
-            });
+            return Err(player_status_error(
+                status,
+                retry_after.and_then(|value| value.parse().ok()),
+            ));
         }
-        let value: Value = serde_json::from_str(&body)?;
+        let value: Value = serde_json::from_str(&body).map_err(|error| {
+            ProviderError::InvalidData(format!("OP.GG MCP returned malformed JSON: {error}"))
+        })?;
         if let Some(error) = value.get("error") {
             return Err(ProviderError::Other(format!("OP.GG MCP error: {error}")));
         }
         let content = value
             .pointer("/result/content/0/text")
             .and_then(Value::as_str)
-            .ok_or_else(|| ProviderError::Other("OP.GG MCP omitted text content".into()))?;
+            .ok_or_else(|| ProviderError::InvalidData("OP.GG MCP omitted text content".into()))?;
         let compact = content
             .rsplit_once("\n\n")
             .map_or(content, |(_, value)| value);
@@ -583,16 +625,16 @@ impl OpggProvider {
         if let Some(action) = self.games_action.read().await.clone() {
             return Ok(action);
         }
-        let response = self
-            .api
-            .http()
-            .get(public_profile_url(player)?)
-            .send()
-            .await?;
-        if response.status() == reqwest::StatusCode::NOT_FOUND {
-            return Err(ProviderError::PlayerNotFound);
+        let response = send_with_retry(self.api.http().get(public_profile_url(player)?)).await?;
+        if !response.status().is_success() {
+            let retry_after = response
+                .headers()
+                .get(reqwest::header::RETRY_AFTER)
+                .and_then(|value| value.to_str().ok())
+                .and_then(|value| value.parse().ok());
+            return Err(player_status_error(response.status(), retry_after));
         }
-        let html = response.error_for_status()?.text().await?;
+        let html = response_text(response).await?;
         let mut bundles = html
             .split('"')
             .filter(|part| {
@@ -606,7 +648,7 @@ impl OpggProvider {
         bundles.sort_by_key(|url| !url.contains("/7716-"));
         bundles.dedup();
         for url in bundles {
-            let Ok(response) = self.api.http().get(url).send().await else {
+            let Ok(response) = send_with_retry(self.api.http().get(url)).await else {
                 continue;
             };
             let Ok(response) = response.error_for_status() else {
@@ -659,10 +701,10 @@ impl OpggProvider {
             .get(reqwest::header::RETRY_AFTER)
             .and_then(|value| value.to_str().ok())
             .and_then(|value| value.parse().ok());
-        if status == reqwest::StatusCode::TOO_MANY_REQUESTS {
-            return Err(ProviderError::RateLimited { retry_after });
+        if !status.is_success() {
+            return Err(player_status_error(status, retry_after));
         }
-        let body = response.error_for_status()?.text().await?;
+        let body = response_text(response).await?;
         action_json(&body)
     }
 }
@@ -670,10 +712,10 @@ impl OpggProvider {
 fn summoner_node(root: &CompactValue) -> Result<&[CompactValue]> {
     let data = args(root, "LolGetSummonerProfile")?
         .first()
-        .ok_or_else(|| ProviderError::Other("OP.GG profile omitted data".into()))?;
+        .ok_or_else(|| ProviderError::InvalidData("OP.GG profile omitted data".into()))?;
     let summoner = args(data, "Data")?
         .first()
-        .ok_or_else(|| ProviderError::Other("OP.GG profile omitted summoner".into()))?;
+        .ok_or_else(|| ProviderError::InvalidData("OP.GG profile omitted summoner".into()))?;
     args(summoner, "Summoner")
 }
 
@@ -685,9 +727,9 @@ fn parse_profile(player: &PlayerRef, root: &CompactValue) -> Result<PlayerProfil
             let fields = args(entry, "LeagueStat")?;
             let tier = fields.get(4).and_then(|value| args(value, "TierInfo").ok());
             ranks.push(RankedEntry {
-                queue: text(fields.first()).unwrap_or_default(),
+                queue: ranked_queue(fields.first()),
                 tier: tier.and_then(|fields| text(fields.get(2))),
-                division: tier.and_then(|fields| text(fields.first())),
+                division: tier.and_then(|fields| division(fields.first())),
                 lp: tier.and_then(|fields| integer(fields.get(1))),
                 wins: integer(fields.get(1)),
                 losses: integer(fields.get(2)),
@@ -712,8 +754,8 @@ fn parse_profile(player: &PlayerRef, root: &CompactValue) -> Result<PlayerProfil
                 });
                 previous_seasons.push(SeasonRank {
                     season: season_id.clone(),
-                    queue: text(fields.first()).unwrap_or_default(),
-                    division: rank.and_then(|fields| text(fields.first())),
+                    queue: ranked_queue(fields.first()),
+                    division: rank.and_then(|fields| division(fields.first())),
                     lp: rank.and_then(|fields| integer(fields.get(1))),
                     tier: rank.and_then(|fields| text(fields.get(2))),
                 });
@@ -816,8 +858,8 @@ impl PlayerStatsProvider for OpggProvider {
         &self,
         player: &PlayerRef,
         _season: Option<&str>,
-        queue: Option<&str>,
-        role: Option<&str>,
+        _queue: Option<&str>,
+        _role: Option<&str>,
         force: bool,
     ) -> Result<Vec<PlayerChampionStats>> {
         let root = self.profile_compact(player, force).await?;
@@ -863,8 +905,10 @@ impl PlayerStatsProvider for OpggProvider {
                 },
                 kda: None,
                 cs_per_minute: None,
-                role: role.map(str::to_owned),
-                queue: queue.unwrap_or("RANKED").into(),
+                // MCP exposes an aggregate ranked-most-champions list. Do not
+                // relabel it as a requested role or queue that was not queried.
+                role: None,
+                queue: "RANKED".into(),
                 extras: ProviderExtras::Opgg(json!({})),
             });
         }
@@ -1025,8 +1069,13 @@ mod tests {
         assert_eq!(profile.profile_icon_id, Some(6));
         assert_eq!(profile.ladder_percentile, Some(399.0 / 2_750_000.0 * 100.0));
         assert_eq!(profile.ranks.len(), 2);
+        assert_eq!(profile.ranks[0].queue, "RANKED_SOLO_5x5");
+        assert_eq!(profile.ranks[0].division.as_deref(), Some("I"));
+        assert_eq!(profile.ranks[1].queue, "RANKED_FLEX_SR");
         assert_eq!(profile.ranks[1].tier, None);
         assert_eq!(profile.previous_seasons.len(), 2);
+        assert_eq!(profile.previous_seasons[0].queue, "RANKED_SOLO_5x5");
+        assert_eq!(profile.previous_seasons[0].division.as_deref(), Some("I"));
         let values = summoner_node(&root).unwrap();
         let champions = args(&values[9], "RankedMostChampions").unwrap();
         assert_eq!(array(&champions[0]).unwrap().len(), 1);
@@ -1071,6 +1120,14 @@ mod tests {
             .expect("Flight action value");
         assert!(parsed["data"].as_array().unwrap().is_empty());
         assert!(action_json("0:{}").is_err());
+        assert!(matches!(
+            CompactParser::new("Root(").parse(),
+            Err(ProviderError::InvalidData(_))
+        ));
+        assert!(matches!(
+            player_status_error(reqwest::StatusCode::UNPROCESSABLE_ENTITY, None),
+            ProviderError::InvalidPlayerRequest(_)
+        ));
     }
 
     #[test]
