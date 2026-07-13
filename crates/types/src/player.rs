@@ -141,7 +141,7 @@ pub struct PlayerChampionStats {
     pub wins: i64,
     pub losses: i64,
     pub win_rate: f64,
-    pub kda: f64,
+    pub kda: Option<f64>,
     pub cs_per_minute: Option<f64>,
     pub role: Option<String>,
     pub queue: String,

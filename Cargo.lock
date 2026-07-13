@@ -2739,6 +2739,8 @@ name = "overlay-provider-opgg"
 version = "0.1.0"
 dependencies = [
  "async-trait",
+ "chrono",
+ "futures",
  "overlay-ddragon",
  "overlay-provider",
  "overlay-types",

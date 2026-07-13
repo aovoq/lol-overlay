@@ -462,7 +462,7 @@ fn parse_champion_stats(
                 wins,
                 losses,
                 win_rate,
-                kda: float(row, &["kda"]).unwrap_or((kills + assists) / deaths.max(1.0)),
+                kda: Some(float(row, &["kda"]).unwrap_or((kills + assists) / deaths.max(1.0))),
                 cs_per_minute: float(row, &["cs_per_minute", "cs_per_min"]),
                 role: role
                     .map(str::to_owned)
@@ -798,7 +798,7 @@ mod tests {
         }]});
         let stats = parse_champion_stats(&value, Some("RANKED"), Some("Middle"));
         assert_eq!(stats[0].win_rate, 0.6);
-        assert_eq!(stats[0].kda, 6.0);
+        assert_eq!(stats[0].kda, Some(6.0));
         assert!(matches!(stats[0].extras, ProviderExtras::Deeplol(_)));
     }
 

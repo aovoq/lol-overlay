@@ -365,7 +365,7 @@ export interface PlayerChampionStats {
   wins: number;
   losses: number;
   winRate: number;
-  kda: number;
+  kda?: number | null;
   csPerMinute?: number | null;
   role?: string | null;
   queue: string;

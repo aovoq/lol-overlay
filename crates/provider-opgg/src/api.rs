@@ -65,6 +65,10 @@ pub struct OpggApi {
 }
 
 impl OpggApi {
+    pub(super) fn http(&self) -> &reqwest::Client {
+        &self.http
+    }
+
     pub fn new() -> Result<Self> {
         let http = reqwest::Client::builder()
             .timeout(Duration::from_secs(8))

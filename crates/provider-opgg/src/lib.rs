@@ -33,6 +33,7 @@
 
 mod api;
 mod flight;
+mod player;
 mod types;
 
 use std::collections::HashMap;
