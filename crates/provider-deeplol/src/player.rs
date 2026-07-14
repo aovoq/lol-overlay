@@ -15,7 +15,7 @@ use serde_json::{json, Value};
 
 use super::DeepLolProvider;
 
-const PLAYER_CACHE_TTL: Duration = Duration::from_secs(5 * 60);
+const PLAYER_CACHE_TTL: Duration = Duration::from_mins(5);
 const MATCH_CONCURRENCY: usize = 5;
 const MATCH_PAGE_SIZE: usize = 20;
 const RETRY_ATTEMPTS: usize = 2;

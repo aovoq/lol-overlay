@@ -22,7 +22,7 @@ use super::OpggProvider;
 
 const MCP_URL: &str = "https://mcp-api.op.gg/mcp";
 const PAGE_SIZE: usize = 20;
-const PLAYER_CACHE_TTL: Duration = Duration::from_secs(5 * 60);
+const PLAYER_CACHE_TTL: Duration = Duration::from_mins(5);
 const RETRY_ATTEMPTS: usize = 2;
 const RETRY_DELAY: Duration = Duration::from_millis(250);
 
