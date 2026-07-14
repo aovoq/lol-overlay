@@ -20,7 +20,7 @@ pub struct PlayerStatsProxy {
     epochs: Mutex<HashMap<String, u64>>,
 }
 
-const CACHE_TTL: Duration = Duration::from_secs(5 * 60);
+const CACHE_TTL: Duration = Duration::from_mins(5);
 
 type Timed<T> = (Instant, T);
 
