@@ -1,5 +1,5 @@
 import { createEffect, createSignal, For, onCleanup, onMount, Show } from "solid-js";
-import { assetsReady, champIconByName, itemIconUrl } from "../../assets";
+import { assetsReady, champIconByName } from "../../assets";
 import {
   applyPanelPosition,
   clampPanelToViewport,
@@ -12,7 +12,9 @@ import { phase, recommendations } from "../../state/backend";
 import { ingameCollapsed, ingamePos, setIngameCollapsed } from "../../state/layout";
 import { Icon } from "../Icon";
 import { ScrollArea } from "../ScrollArea";
+import { RecommendedItems } from "./RecommendedItems";
 import { SkillOrder } from "./SkillOrder";
+import { ThreatChips } from "./ThreatChips";
 
 function PanelBody(props: { embedded?: boolean }) {
   let panelEl!: HTMLDivElement;
@@ -55,30 +57,6 @@ function PanelBody(props: { embedded?: boolean }) {
   };
 
   const recs = () => recommendations();
-  const threats = () => {
-    const t = recs()?.threats;
-    if (!t) return [];
-    const chips: { kind: string; count?: number; label: string; cc?: boolean }[] = [
-      { kind: "ad", count: t.adCount, label: "AD" },
-      { kind: "ap", count: t.apCount, label: "AP" },
-      { kind: "tank", count: t.tankCount, label: "TANK" },
-    ];
-    if (t.ccHeavy) chips.push({ kind: "cc", label: "CC HEAVY", cc: true });
-    return chips;
-  };
-
-  const threatColor = (kind: string) => {
-    switch (kind) {
-      case "ad":
-        return "text-hx-physical";
-      case "ap":
-        return "text-hx-magic";
-      case "tank":
-        return "text-hx-durable";
-      default:
-        return "";
-    }
-  };
 
   return (
     <div
@@ -169,24 +147,7 @@ function PanelBody(props: { embedded?: boolean }) {
                       </For>
                     </Show>
                   </div>
-                  <div class="flex flex-wrap gap-1">
-                    <For each={threats()}>
-                      {(chip) => (
-                        <span
-                          class={`px-[7px] py-0.5 border rounded-[3px] bg-hx-bg-raised text-[10px] font-semibold tracking-[0.06em] ${
-                            chip.cc
-                              ? "text-hx-red border-hx-red-soft"
-                              : "text-hx-muted border-hx-border"
-                          }`}
-                        >
-                          <Show when={chip.count !== undefined} fallback={chip.label}>
-                            <b class={`font-bold ${threatColor(chip.kind)}`}>{chip.count}</b>
-                            {` ${chip.label}`}
-                          </Show>
-                        </span>
-                      )}
-                    </For>
-                  </div>
+                  <ThreatChips threats={e().threats} />
                 </div>
 
                 <SkillOrder order={e().skillOrder} championImageId={e().selfRawName} />
@@ -198,35 +159,7 @@ function PanelBody(props: { embedded?: boolean }) {
                   contentClass="px-2 pb-2"
                   hit={!props.embedded}
                 >
-                  <ul class="list-none m-0 flex flex-col gap-[5px]">
-                    <For each={e().items}>
-                      {(it, i) => (
-                        <li
-                          class={`flex flex-row items-center gap-[9px] px-2 py-1.5 border rounded-[5px] bg-hx-bg-raised ${
-                            i() === 0 ? "border-hx-keystone-border" : "border-transparent"
-                          }`}
-                        >
-                          <span class="w-3.5 flex-none text-right text-[10px] font-extrabold text-hx-accent-dim tabular-nums">
-                            {i() + 1}
-                          </span>
-                          <Show when={assetsReady()}>
-                            <Icon
-                              url={itemIconUrl(it.itemId)}
-                              class="w-8 h-8 rounded border border-hx-border flex-none"
-                            />
-                          </Show>
-                          <div class="flex flex-col min-w-0 flex-1">
-                            <span class="font-semibold text-hx-text truncate">{it.name}</span>
-                            <span class="text-[10.5px] text-hx-muted">{it.reason}</span>
-                            <div
-                              class="h-0.5 mt-1 rounded-sm bg-gradient-to-r from-hx-accent to-hx-accent-dim opacity-85"
-                              style={{ width: `${Math.round(it.score * 100)}%` }}
-                            />
-                          </div>
-                        </li>
-                      )}
-                    </For>
-                  </ul>
+                  <RecommendedItems items={e().items} />
                 </ScrollArea>
               </>
             )}

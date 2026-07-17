@@ -1,8 +1,8 @@
 import { createEffect, createMemo, createSignal, For, Index, type JSX, Show } from "solid-js";
 import {
-  allChampions,
   assetsReady,
   champIconByKey,
+  championKeyByImage,
   champName,
   fmtCompact,
   fmtPct,
@@ -40,12 +40,6 @@ const draft = () => {
   return live?.active ? live : lastDraft();
 };
 
-/** Data Dragon numeric key for a live-client English champion name. */
-function championKeyByImage(rawName: string): number {
-  const needle = rawName.toLowerCase();
-  return allChampions().find((c) => c.imageId.toLowerCase() === needle)?.key ?? 0;
-}
-
 function ChampRow(props: {
   championId: number;
   rank?: number;
@@ -54,8 +48,12 @@ function ChampRow(props: {
 }) {
   return (
     <div
-      class="flex-none flex items-center gap-2 px-2 py-1 rounded-md hover:bg-hx-bg-raised"
-      title={props.title}
+      class={`flex-none flex items-center gap-2 px-2 py-1 rounded-md transition-colors ${
+        hoverChampId() === props.championId
+          ? "bg-hx-accent-wash ring-1 ring-inset ring-hx-accent-dim"
+          : "hover:bg-hx-bg-raised"
+      }`}
+      title={`ホバーで${champName(props.championId)}のルーンをプレビュー${props.title ? ` · ${props.title}` : ""}`}
       onMouseEnter={() => setHoverChampId(props.championId)}
       onMouseLeave={() => setHoverChampId(0)}
     >
@@ -184,10 +182,15 @@ function TierLists(props: { role: string }) {
 
   return (
     <>
-      <div class="flex items-baseline justify-between px-0.5 pt-1 pb-0.5">
+      <div class="flex items-baseline justify-between gap-2 px-0.5 pt-1 pb-0.5">
         <span class="hx-section-title">STRONG PICKS</span>
-        <span class="text-[10px] font-bold tracking-[0.12em] text-hx-muted">
-          {roleLabel(props.role)}
+        <span class="flex min-w-0 flex-col items-end gap-0.5">
+          <span class="text-[10px] font-bold tracking-[0.12em] text-hx-muted">
+            {roleLabel(props.role)}
+          </span>
+          <span class="text-[7px] font-bold tracking-[0.1em] text-hx-accent-dim">
+            HOVER TO PREVIEW
+          </span>
         </span>
       </div>
       <ColHeader
@@ -253,7 +256,12 @@ function TeamRow(props: {
 
   return (
     <div>
-      <div class="text-[9px] font-bold tracking-[0.18em] text-hx-muted mb-1.5">{props.label}</div>
+      <div class="mb-1.5 flex items-center justify-between gap-2 text-[9px] font-bold tracking-[0.18em] text-hx-muted">
+        <span>{props.label}</span>
+        <Show when={props.enemy}>
+          <span class="text-[7px] tracking-[0.08em] text-hx-accent-dim">CLICK TO SET MATCHUP</span>
+        </Show>
+      </div>
       <div class="flex gap-2">
         <Index each={slots()}>
           {(id) => {
@@ -274,7 +282,14 @@ function TeamRow(props: {
                         : "border-hx-border"
                   }`}
                   disabled={!props.enemy || id() <= 0}
-                  title={id() > 0 ? champName(id()) : undefined}
+                  aria-pressed={props.enemy && id() > 0 ? id() === vsEnemyId() : undefined}
+                  title={
+                    id() > 0
+                      ? props.enemy
+                        ? `${champName(id())} · クリックで対面に設定`
+                        : champName(id())
+                      : undefined
+                  }
                   onClick={() => {
                     if (!props.enemy || id() <= 0) return;
                     // Clicking the selected enemy again returns to the best build.
@@ -455,7 +470,7 @@ export function DraftPage() {
   };
 
   return (
-    <div class="desktop-page desktop-draft">
+    <ScrollArea class="desktop-draft-scroll" contentClass="desktop-page desktop-draft">
       <header class="desktop-page-header">
         <span class="desktop-eyebrow">DRAFT</span>
         <div class="desktop-draft-title-row">
@@ -513,12 +528,27 @@ export function DraftPage() {
               />
             </Show>
           </div>
-          <div class="desktop-draft-build">
-            <div class="hx-section-title">RUNES</div>
+          <div class={`desktop-draft-build ${hoverChampId() ? "is-previewing" : ""}`}>
+            <div class="desktop-draft-build-header">
+              <div class="hx-section-title">{hoverChampId() ? "RUNE PREVIEW" : "RUNES"}</div>
+              <Show when={hoverChampId()}>
+                {(id) => (
+                  <span class="desktop-draft-preview-chip">
+                    <Show when={assetsReady()}>
+                      <Icon url={champIconByKey(id())} />
+                    </Show>
+                    <span>
+                      <small>プレビュー中</small>
+                      <strong>{champName(id()) || `#${id()}`}</strong>
+                    </span>
+                  </span>
+                )}
+              </Show>
+            </div>
             <BuildArea championId={previewChamp()} role={role()} enemyId={previewEnemy()} />
           </div>
         </section>
       </div>
-    </div>
+    </ScrollArea>
   );
 }

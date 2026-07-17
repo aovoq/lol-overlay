@@ -123,6 +123,12 @@ export const champName = (key: number) => {
   return championByKey.get(key)?.name ?? "";
 };
 
+/** Data Dragon numeric key for a live-client English champion name (0 = unknown). */
+export function championKeyByImage(rawName: string): number {
+  const needle = rawName.toLowerCase();
+  return allChampions().find((c) => c.imageId.toLowerCase() === needle)?.key ?? 0;
+}
+
 export const getPerk = (id: number) => {
   assetsReady();
   return perkById.get(id);

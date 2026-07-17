@@ -1,5 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { type JSX, Show } from "solid-js";
+import { dataSourceLabel } from "../lib/openlol";
 import {
   autoImport,
   autoOpenDraft,
@@ -26,14 +27,6 @@ import {
 import type { PresentationMode } from "../types";
 import { MobilePairing } from "./MobilePairing";
 
-/** Display names for the backend `ProviderKind` ids (fallback: the raw id). */
-const DATA_SOURCE_LABELS: Record<string, string> = {
-  deeplol: "DeepLoL",
-  ugg: "u.gg",
-  lolalytics: "LoLalytics",
-  opgg: "OP.GG",
-};
-
 function ToggleRow(props: {
   label: string;
   hint?: string;
@@ -41,11 +34,11 @@ function ToggleRow(props: {
   onChange: (on: boolean) => void;
 }) {
   return (
-    <label class="flex items-center justify-between gap-3 cursor-pointer text-[12px] text-hx-text py-1">
-      <span class="flex flex-col gap-0.5 min-w-0">
-        <span>{props.label}</span>
+    <label class="settings-toggle">
+      <span class="settings-toggle-copy">
+        <strong>{props.label}</strong>
         <Show when={props.hint}>
-          <span class="text-[10px] text-hx-muted">{props.hint}</span>
+          <small>{props.hint}</small>
         </Show>
       </span>
       <input
@@ -66,20 +59,16 @@ function Segmented<T extends string>(props: {
   onChange: (value: T) => void;
 }) {
   return (
-    <div class="flex flex-col gap-1">
-      <span class="text-[10px] tracking-[0.08em] text-hx-muted">{props.label}</span>
+    <div class="settings-segmented">
+      <span>{props.label}</span>
       <div
-        class="grid gap-1 rounded border border-hx-border bg-hx-bg-raised p-1"
+        class="settings-segmented-options"
         style={{ "grid-template-columns": `repeat(${props.options.length}, 1fr)` }}
       >
         {props.options.map((option) => (
           <button
             type="button"
-            class={`rounded px-2 py-1.5 font-hx-display text-[10px] font-bold tracking-[0.16em] cursor-pointer ${
-              props.value === option.value
-                ? "bg-hx-accent-wash text-hx-accent"
-                : "bg-transparent text-hx-muted hover:text-hx-accent"
-            }`}
+            class={props.value === option.value ? "is-active" : ""}
             onClick={() => props.onChange(option.value)}
           >
             {option.label}
@@ -90,11 +79,21 @@ function Segmented<T extends string>(props: {
   );
 }
 
-function Section(props: { title: string; children: JSX.Element }) {
+function Section(props: {
+  title: string;
+  meta: string;
+  description: string;
+  wide?: boolean;
+  children: JSX.Element;
+}) {
   return (
-    <section class="flex flex-col gap-2">
-      <div class="hx-section-title">{props.title}</div>
-      {props.children}
+    <section class={`settings-section ${props.wide ? "settings-section--wide" : ""}`}>
+      <header class="settings-section-header">
+        <span>{props.meta}</span>
+        <h2>{props.title}</h2>
+        <p>{props.description}</p>
+      </header>
+      <div class="settings-section-body">{props.children}</div>
     </section>
   );
 }
@@ -110,100 +109,127 @@ export function SettingsForm() {
   ];
 
   return (
-    <div class="settings-form flex flex-col gap-5">
-      <Section title="IMPORT">
-        <ToggleRow
-          label="ルーン自動インポート"
-          hint="チャンプ確定時にルーンページを自動で書き込む"
-          checked={autoImport()}
-          onChange={(on) => {
-            setAutoImport(on);
-            invoke("set_auto_import", { enabled: on }).catch(() => {});
-          }}
-        />
-        <ToggleRow
-          label="サモナースペルも書き込む"
-          checked={importSpells()}
-          onChange={setImportSpells}
-        />
-      </Section>
-
-      <Section title="DISPLAY">
-        <Segmented
-          label="表示モード"
-          value={presentationMode()}
-          options={presentationOptions}
-          onChange={setPresentationMode}
-        />
-        <Segmented
-          label="テーマ"
-          value={themeMode()}
-          options={themeOptions}
-          onChange={setThemeMode}
-        />
-      </Section>
-
-      <Section title="NAVIGATION">
-        <ToggleRow
-          label="チャンプセレクト開始時にドラフトを開く"
-          checked={autoOpenDraft()}
-          onChange={setAutoOpenDraft}
-        />
-        <ToggleRow
-          label="試合開始時にLiveを開く"
-          checked={autoOpenLive()}
-          onChange={setAutoOpenLive}
-        />
-      </Section>
-
-      <Show when={dataSources().length > 1}>
-        <Section title="BUILD DATA">
-          <label class="flex flex-col gap-1 text-hx-text">
-            <span class="text-[10px] tracking-[0.08em] text-hx-muted">ビルドデータソース</span>
-            <select
-              class="bg-hx-panel border border-hx-border rounded px-2 py-1.5 text-[12px]"
-              value={dataSource()}
-              onChange={(e) => setDataSource(e.currentTarget.value)}
-            >
-              {dataSources().map((src) => (
-                <option value={src}>{DATA_SOURCE_LABELS[src] ?? src}</option>
-              ))}
-            </select>
-          </label>
+    <div class="settings-form">
+      <div class="settings-grid">
+        <Section
+          meta="IMPORT"
+          title="自動インポート"
+          description="チャンピオン確定後にクライアントへ反映します。"
+        >
+          <ToggleRow
+            label="ルーンを自動で書き込む"
+            hint="確定したチャンピオンとロールに合うページを作成"
+            checked={autoImport()}
+            onChange={(on) => {
+              setAutoImport(on);
+              invoke("set_auto_import", { enabled: on }).catch(() => {});
+            }}
+          />
+          <ToggleRow
+            label="サモナースペルも書き込む"
+            checked={importSpells()}
+            onChange={setImportSpells}
+          />
         </Section>
-      </Show>
 
-      <Show when={playerStatsSources().length > 0}>
-        <Section title="PLAYER STATS">
-          <label class="flex flex-col gap-1 text-hx-text">
-            <span class="text-[10px] tracking-[0.08em] text-hx-muted">戦績データソース</span>
-            <select
-              class="bg-hx-panel border border-hx-border rounded px-2 py-1.5 text-[12px]"
-              value={playerStatsSource()}
-              onChange={(event) => setPlayerStatsSource(event.currentTarget.value)}
-            >
-              {playerStatsSources().map((source) => (
-                <option value={source.id}>{source.label}</option>
-              ))}
-            </select>
-          </label>
+        <Section
+          meta="DISPLAY"
+          title="画面表示"
+          description="プレイ環境に合わせて表示方法を選びます。"
+        >
+          <Segmented
+            label="表示モード"
+            value={presentationMode()}
+            options={presentationOptions}
+            onChange={setPresentationMode}
+          />
+          <Segmented
+            label="テーマ"
+            value={themeMode()}
+            options={themeOptions}
+            onChange={setThemeMode}
+          />
         </Section>
-      </Show>
 
-      <Section title="MOBILE">
-        <MobilePairing />
-      </Section>
+        <Section
+          meta="NAVIGATION"
+          title="自動画面切り替え"
+          description="ゲームの進行に合わせて必要な画面を開きます。"
+        >
+          <ToggleRow
+            label="ドラフト開始時に開く"
+            checked={autoOpenDraft()}
+            onChange={setAutoOpenDraft}
+          />
+          <ToggleRow
+            label="試合開始時にLiveを開く"
+            checked={autoOpenLive()}
+            onChange={setAutoOpenLive}
+          />
+        </Section>
 
-      <Section title="ADVANCED">
-        <ToggleRow
-          label="開発者モード"
-          hint="デバッグパネルとモックシナリオを表示"
-          checked={developerMode()}
-          onChange={setDeveloperMode}
-        />
-      </Section>
+        <Show when={dataSources().length > 1}>
+          <Section
+            meta="BUILD DATA"
+            title="ビルドデータ"
+            description="推薦ビルドに使用する提供元を選択します。"
+          >
+            <label class="settings-select-field">
+              <span>データ提供元</span>
+              <select value={dataSource()} onChange={(e) => setDataSource(e.currentTarget.value)}>
+                {dataSources().map((src) => (
+                  <option value={src}>{dataSourceLabel(src)}</option>
+                ))}
+              </select>
+            </label>
+          </Section>
+        </Show>
 
-      <div class="flex flex-col gap-1.5 pt-3 border-t border-hx-border text-[11px] text-hx-muted">
+        <Show when={playerStatsSources().length > 0}>
+          <Section
+            meta="PLAYER STATS"
+            title="戦績データ"
+            description="サモナー検索に使用する提供元を選択します。"
+          >
+            <label class="settings-select-field">
+              <span>データ提供元</span>
+              <select
+                value={playerStatsSource()}
+                onChange={(event) => setPlayerStatsSource(event.currentTarget.value)}
+              >
+                {playerStatsSources().map((source) => (
+                  <option value={source.id}>{source.label}</option>
+                ))}
+              </select>
+            </label>
+          </Section>
+        </Show>
+
+        <Section
+          meta="MOBILE"
+          title="iPhoneサイドボード"
+          description="試合中の情報を手元の端末にも表示します。"
+          wide
+        >
+          <MobilePairing />
+        </Section>
+
+        <Section
+          meta="ADVANCED"
+          title="開発者向け"
+          description="モックシナリオとイベントログを有効にします。"
+          wide
+        >
+          <ToggleRow
+            label="開発者モード"
+            hint="デバッグ用の操作とログを表示"
+            checked={developerMode()}
+            onChange={setDeveloperMode}
+          />
+        </Section>
+      </div>
+
+      <div class="settings-shortcuts">
         <div class="flex items-center gap-2">
           <kbd class="hx-kbd">Ctrl+Shift+O</kbd>
           <span>このウィンドウを表示</span>

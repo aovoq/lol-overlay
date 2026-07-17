@@ -86,6 +86,31 @@ export const backendReady = invoke<AppSnapshot>("get_app_snapshot")
   .then(hydrateBackend)
   .catch(() => {});
 
+// Browser-only layout fixture. The real Tauri mock remains the source of truth;
+// this mirrors its payload shape so responsive previews exercise populated
+// draft rows instead of the empty/error state.
+if (
+  import.meta.env.DEV &&
+  new URLSearchParams(window.location.search).has("desktop-test") &&
+  new URLSearchParams(window.location.search).has("draft-mock")
+) {
+  hydrateBackend({
+    phase: { phase: "ChampSelect", clientUp: true, inGame: false },
+    windowMode: "champselect",
+    champSelect: {
+      active: true,
+      myRole: "jungle",
+      myChampionId: 234,
+      myLocked: false,
+      myTeamChampionIds: [234, 266, 103, 22, 40],
+      enemyChampionIds: [35, 86, 238, 51, 412],
+      myBans: [157],
+      enemyBans: [64, 555],
+      timerPhase: "BAN_PICK",
+    },
+  });
+}
+
 listen<PhaseEvent>("phase", (e) => {
   setPhase(e.payload);
   if (!retainDraft(e.payload)) clearDraftContext();

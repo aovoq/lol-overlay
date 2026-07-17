@@ -10,14 +10,22 @@ import {
   profileIconUrl,
 } from "../../assets";
 import { matchRank, normalizeForSearch, searchChampions } from "../../lib/championSearch";
-import { fmtTier, ROLES, roleLabel } from "../../lib/openlol";
+import { dataSourceLabel, fmtTier, phaseChipLabel, ROLES, roleLabel } from "../../lib/openlol";
 import { formSummary } from "../../lib/recentForm";
-import { matchHistory, phase, selectedRole, setSelectedRole, summoner } from "../../state/backend";
+import {
+  champSelect,
+  lpChange,
+  matchHistory,
+  phase,
+  selectedRole,
+  setSelectedRole,
+  summoner,
+} from "../../state/backend";
 import { buildDetailsCache, buildKey, tierCache } from "../../state/caches";
-import { developerMode } from "../../state/settings";
+import { autoImport, dataSource, developerMode, importSpells } from "../../state/settings";
 import { DebugPanel } from "../DebugPanel";
 import { Icon } from "../Icon";
-import { InGamePanel } from "../ingame/InGamePanel";
+import { LiveDashboard } from "../ingame/LiveDashboard";
 import { SkillOrder } from "../ingame/SkillOrder";
 import { BuildArea } from "../openlol/BuildArea";
 import { Counters } from "../openlol/Counters";
@@ -49,19 +57,121 @@ export function HomePage() {
     return `${Math.round((value.soloWins / (value.soloWins + value.soloLosses)) * 100)}%`;
   });
   const form = createMemo(() => formSummary(games()));
+  const currentStatus = createMemo(() => {
+    const current = phase();
+    if (!current?.clientUp) {
+      return {
+        meta: "CLIENT STATUS",
+        title: "OFFLINE",
+        detail: "Leagueクライアントを起動してください。",
+        href: "",
+      };
+    }
+    if (current.inGame) {
+      return {
+        meta: "NOW PLAYING",
+        title: "試合中",
+        detail: "おすすめビルドと敵チームを確認できます。",
+        href: "/live",
+      };
+    }
+    if (champSelect()?.active) {
+      return {
+        meta: "NOW PLAYING",
+        title: "チャンプセレクト",
+        detail: "ピック候補と対面ビルドを確認できます。",
+        href: "/draft",
+      };
+    }
+    return {
+      meta: "CLIENT STATUS",
+      title: phaseChipLabel(current),
+      detail: "次のゲームを待機しています。",
+      href: "",
+    };
+  });
+  const lastResult = createMemo(() => {
+    const result = lpChange();
+    if (result) {
+      const division = result.division && result.division !== "NA" ? ` ${result.division}` : "";
+      const title =
+        result.rankChange === "promoted"
+          ? "PROMOTED"
+          : result.rankChange === "demoted"
+            ? "DEMOTED"
+            : `${result.lpDelta >= 0 ? "+" : ""}${result.lpDelta} LP`;
+      return {
+        title,
+        detail: `${fmtTier(result.tier)}${division} · ${result.lp} LP`,
+        tone:
+          result.rankChange === "promoted" ||
+          (result.rankChange !== "demoted" && result.lpDelta >= 0)
+            ? "is-positive"
+            : "is-negative",
+      };
+    }
+    const recent = form();
+    return {
+      title: recent?.record ?? "NO DATA",
+      detail: recent
+        ? `${recent.kda}${recent.streakLabel ? ` · ${recent.streakLabel}` : ""}`
+        : "試合終了後にここへ表示します。",
+      tone: recent?.streakWin ? "is-positive" : recent?.streakLoss ? "is-negative" : "",
+    };
+  });
 
   return (
     <ScrollArea class="h-full" contentClass="desktop-page">
       <PageHeader
         eyebrow="DASHBOARD"
         title="ホーム"
-        description="ランクと最近の戦績をひと目で確認できます。"
+        description="現在のゲーム状態、ランク、直近のフォームをまとめて確認できます。"
       />
+
+      <div class="desktop-home-status-grid">
+        <section
+          class={`desktop-card desktop-home-status-card ${currentStatus().href ? "is-current" : ""}`}
+        >
+          <span class="desktop-home-card-meta">{currentStatus().meta}</span>
+          <div class="desktop-home-card-value">
+            <span class={`desktop-state-dot ${phase()?.clientUp ? "is-online" : ""}`} />
+            <strong>{currentStatus().title}</strong>
+          </div>
+          <p>{currentStatus().detail}</p>
+          <Show when={currentStatus().href}>
+            <A href={currentStatus().href}>画面を開く →</A>
+          </Show>
+        </section>
+
+        <section class="desktop-card desktop-home-status-card">
+          <span class="desktop-home-card-meta">AUTO IMPORT</span>
+          <div class="desktop-home-card-value">
+            <span class={`desktop-state-dot ${autoImport() ? "is-online" : ""}`} />
+            <strong>{autoImport() ? "ON" : "OFF"}</strong>
+          </div>
+          <p>{importSpells() ? "ルーンとサモナースペル" : "ルーンのみ"}</p>
+          <span class="desktop-home-card-footer">SOURCE · {dataSourceLabel(dataSource())}</span>
+        </section>
+
+        <section class="desktop-card desktop-home-status-card">
+          <span class="desktop-home-card-meta">LAST RESULT</span>
+          <div class="desktop-home-card-value">
+            <strong class={lastResult().tone}>{lastResult().title}</strong>
+          </div>
+          <p>{lastResult().detail}</p>
+          <A href="/summoners">詳しい戦績を見る →</A>
+        </section>
+      </div>
+
       <Show
         when={s()}
         fallback={
-          <section class="desktop-card desktop-empty">
-            Leagueクライアントの起動を待っています…
+          <section class="desktop-card desktop-home-offline">
+            <span class="desktop-state-dot" />
+            <div>
+              <strong>Leagueクライアントを待っています</strong>
+              <p>接続するとプロフィールと直近の試合が自動で表示されます。</p>
+            </div>
           </section>
         }
       >
@@ -99,37 +209,6 @@ export function HomePage() {
         <span>{games().length} GAMES</span>
       </div>
       <section class="desktop-card desktop-match-list">
-        <Show when={form()}>
-          {(f) => (
-            <div class="desktop-form-row">
-              <div class="desktop-form-strip">
-                <Show when={assetsReady()}>
-                  <For each={games()}>
-                    {(g) => (
-                      <Icon
-                        url={champIconByKey(g.championId)}
-                        class={g.win ? "is-win" : "is-loss"}
-                        title={`${champName(g.championId)} · ${g.kills}/${g.deaths}/${g.assists} · ${g.win ? "勝利" : "敗北"}`}
-                      />
-                    )}
-                  </For>
-                </Show>
-              </div>
-              <span class="desktop-form-summary">
-                {f().record} · {f().kda}
-                <Show when={f().streakLabel}>
-                  <span
-                    class={`desktop-form-streak ${
-                      f().streakWin ? "is-win" : f().streakLoss ? "is-loss" : ""
-                    }`}
-                  >
-                    {f().streakLabel}
-                  </span>
-                </Show>
-              </span>
-            </div>
-          )}
-        </Show>
         <Show
           when={games().length > 0}
           fallback={<div class="desktop-empty">試合履歴はまだありません。</div>}
@@ -410,6 +489,34 @@ export function ChampionPage() {
   );
 }
 
+function LiveEmptyState() {
+  const lastGame = () => matchHistory()?.[0];
+  return (
+    <section class="desktop-card live-empty">
+      <span class="live-empty-message">現在進行中のゲームはありません。</span>
+      <Show when={lastGame()}>
+        {(g) => (
+          <div class="live-empty-last">
+            <span class="live-empty-label">LAST GAME</span>
+            <Show when={assetsReady()}>
+              <Icon url={champIconByKey(g().championId)} class="live-empty-icon" />
+            </Show>
+            <strong>{champName(g().championId) || `#${g().championId}`}</strong>
+            <span class={g().win ? "is-win" : "is-loss"}>{g().win ? "勝利" : "敗北"}</span>
+            <span class="live-empty-kda">
+              {g().kills} / {g().deaths} / {g().assists}
+            </span>
+          </div>
+        )}
+      </Show>
+      <div class="live-empty-links">
+        <A href="/champions">チャンピオンを調べる</A>
+        <A href="/summoners">サモナーを検索</A>
+      </div>
+    </section>
+  );
+}
+
 export function LivePage() {
   return (
     <ScrollArea class="h-full" contentClass="desktop-page">
@@ -418,17 +525,8 @@ export function LivePage() {
         title="現在のゲーム"
         description="進行中の試合情報とおすすめを表示します。"
       />
-      <Show
-        when={phase()?.inGame}
-        fallback={
-          <section class="desktop-card desktop-empty desktop-live-empty">
-            現在進行中のゲームはありません。
-          </section>
-        }
-      >
-        <section class="desktop-live-panel">
-          <InGamePanel embedded />
-        </section>
+      <Show when={phase()?.inGame} fallback={<LiveEmptyState />}>
+        <LiveDashboard />
       </Show>
     </ScrollArea>
   );
@@ -440,11 +538,9 @@ export function SettingsPage() {
       <PageHeader
         eyebrow="PREFERENCES"
         title="設定"
-        description="オーバーレイ、インポート、表示方法を管理します。"
+        description="プレイ中の動作とデータ表示を、自分の環境に合わせて調整します。"
       />
-      <section class="desktop-card">
-        <SettingsForm />
-      </section>
+      <SettingsForm />
       <Show when={developerMode()}>
         <section class="desktop-card">
           <DebugPanel />

@@ -1,23 +1,13 @@
 import { invoke } from "@tauri-apps/api/core";
-import { listen } from "@tauri-apps/api/event";
 import QRCode from "qrcode";
 import { createEffect, createSignal, onCleanup, onMount, Show } from "solid-js";
+import { initMobilePairingState, mobilePairing, setMobilePairing } from "../state/mobile";
 import type { MobilePairingState } from "../types";
-
-const DISCONNECTED: MobilePairingState = {
-  status: "disconnected",
-  sessionId: "",
-  viewerUrl: "",
-  pairingCode: "",
-  pairingCodeExpiresAt: 0,
-  expiresAt: 0,
-  message: "",
-};
 
 const RELAY_URL = (import.meta.env.EXPO_PUBLIC_MOBILE_RELAY_URL ?? "").trim();
 
 export function MobilePairing() {
-  const [state, setState] = createSignal<MobilePairingState>(DISCONNECTED);
+  const state = mobilePairing;
   const [loading, setLoading] = createSignal(false);
   const [error, setError] = createSignal("");
   const [now, setNow] = createSignal(Date.now());
@@ -25,32 +15,9 @@ export function MobilePairing() {
   let expiryStopSessionId = "";
 
   onMount(() => {
-    let cancelled = false;
-    let unlisten: (() => void) | undefined;
-
-    invoke<MobilePairingState>("get_mobile_pairing")
-      .then((value) => {
-        if (!cancelled) setState(value);
-      })
-      .catch(() => {});
-
-    listen<MobilePairingState>("mobile-pairing", (event) => setState(event.payload))
-      .then((dispose) => {
-        if (cancelled) {
-          dispose();
-          return;
-        }
-        unlisten = dispose;
-      })
-      .catch(() => {});
-
+    initMobilePairingState();
     const timer = window.setInterval(() => setNow(Date.now()), 15_000);
-
-    onCleanup(() => {
-      cancelled = true;
-      unlisten?.();
-      window.clearInterval(timer);
-    });
+    onCleanup(() => window.clearInterval(timer));
   });
 
   createEffect(() => {
@@ -74,7 +41,9 @@ export function MobilePairing() {
     setError("");
     expiryStopSessionId = "";
     try {
-      setState(await invoke<MobilePairingState>("start_mobile_pairing", { relayUrl: RELAY_URL }));
+      setMobilePairing(
+        await invoke<MobilePairingState>("start_mobile_pairing", { relayUrl: RELAY_URL }),
+      );
     } catch (reason) {
       setError(String(reason));
     } finally {
@@ -85,7 +54,7 @@ export function MobilePairing() {
   const stop = async () => {
     setLoading(true);
     try {
-      setState(await invoke<MobilePairingState>("stop_mobile_pairing"));
+      setMobilePairing(await invoke<MobilePairingState>("stop_mobile_pairing"));
       setError("");
       expiryStopSessionId = "";
     } catch (reason) {

@@ -2,6 +2,15 @@ import type { PhaseEvent } from "../types";
 
 export const APP_NAME = "OPENLOL";
 
+const DATA_SOURCE_LABELS: Record<string, string> = {
+  deeplol: "DeepLoL",
+  ugg: "u.gg",
+  lolalytics: "LoLalytics",
+  opgg: "OP.GG",
+};
+
+export const dataSourceLabel = (source: string) => DATA_SOURCE_LABELS[source] ?? source;
+
 export const ROLES = [
   { lcu: "top", chip: "TOP", label: "TOP" },
   { lcu: "jungle", chip: "JG", label: "JUNGLE" },

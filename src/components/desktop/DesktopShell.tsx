@@ -1,16 +1,32 @@
 import { A, useLocation, useNavigate } from "@solidjs/router";
-import { createEffect, type JSX } from "solid-js";
+import { createEffect, type JSX, onMount, Show } from "solid-js";
 import { automaticRoute } from "../../lib/navigation";
-import { champSelect, phase } from "../../state/backend";
-import { autoOpenDraft, autoOpenLive } from "../../state/settings";
+import { dataSourceLabel, phaseChipLabel } from "../../lib/openlol";
+import { availableUpdateVersion } from "../../lib/updater";
+import { champSelect, importState, phase } from "../../state/backend";
+import { initMobilePairingState, mobilePairing } from "../../state/mobile";
+import { autoImport, autoOpenDraft, autoOpenLive, dataSource } from "../../state/settings";
 
-const links = [
-  { href: "/", label: "HOME", end: true },
-  { href: "/draft", label: "DRAFT" },
-  { href: "/summoners", label: "SUMMONERS" },
-  { href: "/champions", label: "CHAMPIONS" },
-  { href: "/live", label: "LIVE" },
-  { href: "/settings", label: "SETTINGS" },
+const navGroups = [
+  {
+    label: "PLAY",
+    links: [
+      { href: "/", label: "ホーム", meta: "OVERVIEW", end: true },
+      { href: "/draft", label: "ドラフト", meta: "DRAFT" },
+      { href: "/live", label: "試合中", meta: "LIVE" },
+    ],
+  },
+  {
+    label: "EXPLORE",
+    links: [
+      { href: "/summoners", label: "サモナー", meta: "SUMMONERS" },
+      { href: "/champions", label: "チャンピオン", meta: "CHAMPIONS" },
+    ],
+  },
+  {
+    label: "SYSTEM",
+    links: [{ href: "/settings", label: "設定", meta: "SETTINGS" }],
+  },
 ] as const;
 
 export function DesktopShell(props: { children?: JSX.Element }) {
@@ -18,6 +34,8 @@ export function DesktopShell(props: { children?: JSX.Element }) {
   const location = useLocation();
   let routedDraft = false;
   let routedInGame = false;
+
+  onMount(() => initMobilePairingState());
 
   createEffect(() => {
     const active = champSelect()?.active ?? false;
@@ -47,28 +65,99 @@ export function DesktopShell(props: { children?: JSX.Element }) {
     return false;
   };
 
+  const clientStatus = () => {
+    const current = phase();
+    return current ? phaseChipLabel(current) : "CONNECTING";
+  };
+  const autoImportStatus = () => {
+    if (!autoImport()) return "OFF";
+    if (importState() === "importing") return "WORKING";
+    if (importState() === "failed") return "FAILED";
+    return "ON";
+  };
+  const autoImportTone = () => {
+    if (importState() === "failed") return "is-error";
+    if (autoImport()) return importState() === "importing" ? "is-active" : "is-ok";
+    return "";
+  };
+  const mobileStatus = () => {
+    if (mobilePairing().status === "paired") return "PAIRED";
+    if (mobilePairing().status === "error") return "ERROR";
+    return "OFF";
+  };
+
   return (
     <div class="desktop-shell">
-      <header class="desktop-topbar">
-        <div class="desktop-brand">OPENLOL</div>
+      <aside class="desktop-sidebar">
+        <div class="desktop-brand">
+          <strong>OPENLOL</strong>
+          <small>LEAGUE COMPANION</small>
+        </div>
         <nav class="desktop-nav" aria-label="メインナビゲーション">
-          {links.map((link) => (
-            <A
-              href={link.href}
-              end={"end" in link ? link.end : false}
-              class="desktop-nav-link"
-              activeClass="desktop-nav-link--active"
-            >
-              <span>{link.label}</span>
-              {liveDot(link.href) ? <span class="desktop-live-dot" /> : null}
-            </A>
+          {navGroups.map((group) => (
+            <section class="desktop-nav-group">
+              <h2>{group.label}</h2>
+              <div class="desktop-nav-group-links">
+                {group.links.map((link) => (
+                  <A
+                    href={link.href}
+                    end={"end" in link ? link.end : false}
+                    class="desktop-nav-link"
+                    activeClass="desktop-nav-link--active"
+                  >
+                    <span class="desktop-nav-copy">
+                      <strong>{link.label}</strong>
+                      <small>{link.meta}</small>
+                    </span>
+                    {liveDot(link.href) ? <span class="desktop-live-dot" /> : null}
+                  </A>
+                ))}
+              </div>
+            </section>
           ))}
         </nav>
-        <div class="desktop-client-state">
-          <span class={`desktop-state-dot ${phase()?.clientUp ? "is-online" : ""}`} />
-          {phase()?.clientUp ? phase()?.phase || "CONNECTED" : "CLIENT OFFLINE"}
+        <div class="desktop-status-stack">
+          <div class="desktop-client-state">
+            <span class={`desktop-state-dot ${phase()?.clientUp ? "is-online" : ""}`} />
+            <span>
+              <small>LEAGUE CLIENT</small>
+              <strong>{clientStatus()}</strong>
+            </span>
+          </div>
+          <section class="desktop-status-rows" aria-label="アプリ状態">
+            <div class="desktop-status-row">
+              <span>AUTO IMPORT</span>
+              <strong class={autoImportTone()}>{autoImportStatus()}</strong>
+            </div>
+            <div class="desktop-status-row">
+              <span>MOBILE</span>
+              <strong
+                class={
+                  mobilePairing().status === "paired"
+                    ? "is-ok"
+                    : mobilePairing().status === "error"
+                      ? "is-error"
+                      : ""
+                }
+              >
+                {mobileStatus()}
+              </strong>
+            </div>
+            <div class="desktop-status-row">
+              <span>BUILD DATA</span>
+              <strong>{dataSourceLabel(dataSource())}</strong>
+            </div>
+            <Show when={availableUpdateVersion()}>
+              {(version) => (
+                <div class="desktop-status-row is-attention">
+                  <span>UPDATE</span>
+                  <strong>v{version()}</strong>
+                </div>
+              )}
+            </Show>
+          </section>
         </div>
-      </header>
+      </aside>
       <main class="desktop-content">{props.children}</main>
     </div>
   );
