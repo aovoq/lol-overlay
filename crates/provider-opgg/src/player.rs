@@ -23,13 +23,57 @@ use super::OpggProvider;
 const MCP_URL: &str = "https://mcp-api.op.gg/mcp";
 const PAGE_SIZE: usize = 20;
 const PLAYER_CACHE_TTL: Duration = Duration::from_mins(5);
+const REFRESH_STATUS_CACHE_TTL: Duration = Duration::from_secs(30);
+const LOCAL_REFRESH_COOLDOWN: Duration = Duration::from_mins(1);
+const MAX_RENEWAL_POLLS: usize = 20;
+const DEFAULT_RENEWAL_POLL_DELAY: Duration = Duration::from_secs(1);
+const MAX_RENEWAL_POLL_DELAY: Duration = Duration::from_secs(5);
 const RETRY_ATTEMPTS: usize = 2;
 const RETRY_DELAY: Duration = Duration::from_millis(250);
+
+#[derive(Default)]
+pub(super) struct OpggActionCache {
+    ids: tokio::sync::RwLock<HashMap<&'static str, String>>,
+    request: tokio::sync::Mutex<()>,
+}
 
 #[derive(Default)]
 pub(super) struct OpggPlayerCache {
     profiles: tokio::sync::RwLock<HashMap<PlayerRef, (Instant, CompactValue)>>,
     request: tokio::sync::Mutex<()>,
+    refresh_statuses: tokio::sync::RwLock<HashMap<PlayerRef, (Instant, RenewalState)>>,
+    refresh_status_request: tokio::sync::Mutex<()>,
+    refresh_request: tokio::sync::Mutex<()>,
+    local_cooldowns: tokio::sync::RwLock<HashMap<PlayerRef, i64>>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum RenewalStatus {
+    Finished,
+    Renewing,
+    Failed,
+    TooManyRenewals,
+}
+
+#[derive(Debug, Clone)]
+struct RenewalState {
+    status: RenewalStatus,
+    raw_status: String,
+    renewable_at: Option<i64>,
+    delay: Option<Duration>,
+    status_code: Option<u16>,
+}
+
+impl RenewalState {
+    fn cooldown_until(&self, now: i64) -> Option<i64> {
+        self.renewable_at.filter(|until| *until > now)
+    }
+
+    fn retry_after(&self, now: i64) -> Option<u64> {
+        self.renewable_at
+            .filter(|until| *until > now)
+            .map(|until| (until - now).cast_unsigned().div_ceil(1_000))
+    }
 }
 
 async fn send_with_retry(request: reqwest::RequestBuilder) -> Result<reqwest::Response> {
@@ -343,14 +387,52 @@ fn public_profile_url(player: &PlayerRef) -> Result<reqwest::Url> {
     Ok(url)
 }
 
-fn games_action_id(bundle: &str) -> Option<String> {
-    let end = bundle.find("\"getGames\"")?;
+fn server_action_id(bundle: &str, name: &str) -> Option<String> {
+    let end = bundle.find(&format!("\"{name}\""))?;
     let prefix = &bundle[end.saturating_sub(240)..end];
     prefix
         .split(|character: char| !character.is_ascii_hexdigit())
         .rev()
         .find(|candidate| candidate.len() == 42)
         .map(str::to_owned)
+}
+
+fn renewal_state(value: &Value) -> Result<RenewalState> {
+    let raw_status = value
+        .get("status")
+        .and_then(Value::as_str)
+        .ok_or_else(|| ProviderError::InvalidData("OP.GG renewal omitted status".into()))?;
+    let status = match raw_status {
+        "RENEWAL_FINISH" => RenewalStatus::Finished,
+        "RENEWING" => RenewalStatus::Renewing,
+        "RENEWAL_FAILED" | "REQUEST_FAILED" | "UNKNOWN" => RenewalStatus::Failed,
+        "TOO_MANY_RENEWALS" => RenewalStatus::TooManyRenewals,
+        other => {
+            return Err(ProviderError::InvalidData(format!(
+                "OP.GG renewal returned unknown status: {other}"
+            )))
+        }
+    };
+    let renewable_at = value
+        .get("renewableAt")
+        .and_then(Value::as_str)
+        .and_then(|raw| DateTime::parse_from_rfc3339(raw).ok())
+        .map(|date| date.timestamp_millis());
+    let delay = value
+        .get("delay")
+        .and_then(Value::as_u64)
+        .map(Duration::from_millis);
+    let status_code = value
+        .get("statusCode")
+        .and_then(Value::as_u64)
+        .and_then(|code| u16::try_from(code).ok());
+    Ok(RenewalState {
+        status,
+        raw_status: raw_status.into(),
+        renewable_at,
+        delay,
+        status_code,
+    })
 }
 
 fn action_json(body: &str) -> Result<Value> {
@@ -628,8 +710,16 @@ impl OpggProvider {
         Ok(value)
     }
 
-    async fn discover_games_action(&self, player: &PlayerRef) -> Result<String> {
-        if let Some(action) = self.games_action.read().await.clone() {
+    async fn discover_player_action(
+        &self,
+        player: &PlayerRef,
+        name: &'static str,
+    ) -> Result<String> {
+        if let Some(action) = self.player_actions.ids.read().await.get(name).cloned() {
+            return Ok(action);
+        }
+        let _request = self.player_actions.request.lock().await;
+        if let Some(action) = self.player_actions.ids.read().await.get(name).cloned() {
             return Ok(action);
         }
         let response = send_with_retry(self.api.http().get(public_profile_url(player)?)).await?;
@@ -664,24 +754,31 @@ impl OpggProvider {
             let Ok(bundle) = response.text().await else {
                 continue;
             };
-            if let Some(action) = games_action_id(&bundle) {
-                *self.games_action.write().await = Some(action.clone());
+            let discovered = ["getGames", "renewalStatus", "renewal"]
+                .into_iter()
+                .filter_map(|candidate| {
+                    server_action_id(&bundle, candidate).map(|id| (candidate, id))
+                })
+                .collect::<Vec<_>>();
+            if !discovered.is_empty() {
+                self.player_actions.ids.write().await.extend(discovered);
+            }
+            if let Some(action) = self.player_actions.ids.read().await.get(name).cloned() {
                 return Ok(action);
             }
         }
-        Err(ProviderError::InvalidData(
-            "OP.GG public app omitted the getGames server action".into(),
-        ))
+        Err(ProviderError::InvalidData(format!(
+            "OP.GG public app omitted the {name} server action"
+        )))
     }
 
-    async fn action_matches(
+    async fn player_action(
         &self,
         player: &PlayerRef,
-        puuid: &str,
-        cursor: Option<&str>,
-        queue: Option<i64>,
+        name: &'static str,
+        arguments: Value,
     ) -> Result<Value> {
-        let action = self.discover_games_action(player).await?;
+        let action = self.discover_player_action(player, name).await?;
         let response = send_with_retry(
             self.api
                 .http()
@@ -689,17 +786,7 @@ impl OpggProvider {
                 .header("accept", "text/x-component")
                 .header("content-type", "text/plain;charset=UTF-8")
                 .header("next-action", action)
-                .body(
-                    json!([{
-                        "locale": "en",
-                        "region": platform(&player.platform_id)?.to_ascii_lowercase(),
-                        "puuid": puuid,
-                        "gameType": action_queue(queue),
-                        "endedAt": cursor.unwrap_or_default(),
-                        "champion": Value::Null,
-                    }])
-                    .to_string(),
-                ),
+                .body(arguments.to_string()),
         )
         .await?;
         let status = response.status();
@@ -713,6 +800,141 @@ impl OpggProvider {
         }
         let body = response_text(response).await?;
         action_json(&body)
+    }
+
+    async fn renewal_status(
+        &self,
+        player: &PlayerRef,
+        puuid: &str,
+        force: bool,
+    ) -> Result<RenewalState> {
+        let request_started = Instant::now();
+        if !force {
+            if let Some((loaded, state)) =
+                self.player_cache.refresh_statuses.read().await.get(player)
+            {
+                if loaded.elapsed() < REFRESH_STATUS_CACHE_TTL {
+                    return Ok(state.clone());
+                }
+            }
+        }
+
+        let _request = self.player_cache.refresh_status_request.lock().await;
+        if let Some((loaded, state)) = self.player_cache.refresh_statuses.read().await.get(player) {
+            let refreshed_by_concurrent_request = *loaded >= request_started;
+            if loaded.elapsed() < REFRESH_STATUS_CACHE_TTL
+                && (!force || refreshed_by_concurrent_request)
+            {
+                return Ok(state.clone());
+            }
+        }
+
+        let value = self
+            .player_action(
+                player,
+                "renewalStatus",
+                json!([{
+                    "region": platform(&player.platform_id)?.to_ascii_lowercase(),
+                    "puuid": puuid,
+                }]),
+            )
+            .await?;
+        let state = renewal_state(&value)?;
+        self.player_cache
+            .refresh_statuses
+            .write()
+            .await
+            .insert(player.clone(), (Instant::now(), state.clone()));
+        Ok(state)
+    }
+
+    async fn local_cooldown_until(&self, player: &PlayerRef) -> Option<i64> {
+        self.player_cache
+            .local_cooldowns
+            .read()
+            .await
+            .get(player)
+            .copied()
+            .filter(|until| *until > now_millis())
+    }
+
+    async fn set_local_cooldown(&self, player: &PlayerRef, until: i64) {
+        let mut cooldowns = self.player_cache.local_cooldowns.write().await;
+        let current = cooldowns.get(player).copied().unwrap_or_default();
+        cooldowns.insert(player.clone(), current.max(until));
+    }
+
+    async fn cache_renewal_state(&self, player: &PlayerRef, state: RenewalState) {
+        self.player_cache
+            .refresh_statuses
+            .write()
+            .await
+            .insert(player.clone(), (Instant::now(), state));
+    }
+
+    async fn poll_renewal(
+        &self,
+        player: &PlayerRef,
+        puuid: &str,
+        mut state: RenewalState,
+    ) -> Result<RenewalState> {
+        for _ in 0..MAX_RENEWAL_POLLS {
+            match state.status {
+                RenewalStatus::Finished => return Ok(state),
+                RenewalStatus::TooManyRenewals => {
+                    let now = now_millis();
+                    let retry_after = state.retry_after(now);
+                    let until = state
+                        .renewable_at
+                        .unwrap_or_default()
+                        .max(now + LOCAL_REFRESH_COOLDOWN.as_millis() as i64);
+                    self.set_local_cooldown(player, until).await;
+                    self.cache_renewal_state(player, state).await;
+                    return Err(ProviderError::RateLimited { retry_after });
+                }
+                RenewalStatus::Failed => {
+                    return Err(ProviderError::Other(format!(
+                        "OP.GG renewal failed: {}{}",
+                        state.raw_status,
+                        state
+                            .status_code
+                            .map(|code| format!(" ({code})"))
+                            .unwrap_or_default()
+                    )));
+                }
+                RenewalStatus::Renewing => {
+                    let delay = state
+                        .delay
+                        .unwrap_or(DEFAULT_RENEWAL_POLL_DELAY)
+                        .min(MAX_RENEWAL_POLL_DELAY);
+                    tokio::time::sleep(delay).await;
+                    state = self.renewal_status(player, puuid, true).await?;
+                }
+            }
+        }
+        Err(ProviderError::Timeout)
+    }
+
+    async fn action_matches(
+        &self,
+        player: &PlayerRef,
+        puuid: &str,
+        cursor: Option<&str>,
+        queue: Option<i64>,
+    ) -> Result<Value> {
+        self.player_action(
+            player,
+            "getGames",
+            json!([{
+                "locale": "en",
+                "region": platform(&player.platform_id)?.to_ascii_lowercase(),
+                "puuid": puuid,
+                "gameType": action_queue(queue),
+                "endedAt": cursor.unwrap_or_default(),
+                "champion": Value::Null,
+            }]),
+        )
+        .await
     }
 }
 
@@ -799,7 +1021,7 @@ fn parse_profile(player: &PlayerRef, root: &CompactValue) -> Result<PlayerProfil
         fetched_at: now_millis(),
         refresh: RefreshAvailability {
             app_refresh: true,
-            site_refresh: false,
+            site_refresh: true,
             cooldown_until: None,
         },
         extras: ProviderExtras::Opgg(json!({"updatedAt": text(values.get(5))})),
@@ -809,7 +1031,19 @@ fn parse_profile(player: &PlayerRef, root: &CompactValue) -> Result<PlayerProfil
 #[async_trait]
 impl PlayerStatsProvider for OpggProvider {
     async fn profile(&self, player: &PlayerRef, force: bool) -> Result<PlayerProfile> {
-        parse_profile(player, &self.profile_compact(player, force).await?)
+        let mut profile = parse_profile(player, &self.profile_compact(player, force).await?)?;
+        let local_cooldown = self.local_cooldown_until(player).await;
+        if let Some(puuid) = profile.identity.puuid.as_deref() {
+            if let Ok(state) = self.renewal_status(player, puuid, false).await {
+                profile.refresh.cooldown_until =
+                    state.cooldown_until(now_millis()).max(local_cooldown);
+            } else {
+                profile.refresh.cooldown_until = local_cooldown;
+            }
+        } else {
+            profile.refresh.cooldown_until = local_cooldown;
+        }
+        Ok(profile)
     }
 
     async fn recent_matches(
@@ -923,12 +1157,73 @@ impl PlayerStatsProvider for OpggProvider {
     }
 
     async fn refresh(&self, player: &PlayerRef) -> Result<RefreshResult> {
+        let _refresh = self.player_cache.refresh_request.lock().await;
+        let now = now_millis();
+        if let Some(until) = self.local_cooldown_until(player).await {
+            return Err(ProviderError::RateLimited {
+                retry_after: Some((until - now).cast_unsigned().div_ceil(1_000)),
+            });
+        }
+
+        let compact = self.profile_compact(player, false).await?;
+        let puuid = text(summoner_node(&compact)?.get(4))
+            .ok_or_else(|| ProviderError::InvalidData("OP.GG profile omitted puuid".into()))?;
+        let current = self.renewal_status(player, &puuid, true).await?;
+        if let Some(retry_after) = current.retry_after(now_millis()) {
+            let until = current
+                .renewable_at
+                .unwrap_or_else(|| now_millis() + retry_after as i64 * 1_000);
+            self.set_local_cooldown(player, until).await;
+            return Err(ProviderError::RateLimited {
+                retry_after: Some(retry_after),
+            });
+        }
+        if current.status == RenewalStatus::TooManyRenewals {
+            self.set_local_cooldown(
+                player,
+                now_millis() + LOCAL_REFRESH_COOLDOWN.as_millis() as i64,
+            )
+            .await;
+            return Err(ProviderError::RateLimited { retry_after: None });
+        }
+
+        let started = match self
+            .player_action(
+                player,
+                "renewal",
+                json!([{
+                    "region": platform(&player.platform_id)?.to_ascii_lowercase(),
+                    "puuid": puuid,
+                    "isPremiumPrimary": false,
+                }]),
+            )
+            .await
+        {
+            Ok(value) => value,
+            Err(ProviderError::RateLimited { retry_after }) => {
+                let seconds = retry_after.unwrap_or(LOCAL_REFRESH_COOLDOWN.as_secs());
+                self.set_local_cooldown(player, now_millis() + seconds as i64 * 1_000)
+                    .await;
+                return Err(ProviderError::RateLimited { retry_after });
+            }
+            Err(error) => return Err(error),
+        };
+        let completed = self
+            .poll_renewal(player, &puuid, renewal_state(&started)?)
+            .await?;
+        let refreshed_at = now_millis();
+        let cooldown_until = completed
+            .renewable_at
+            .unwrap_or_default()
+            .max(refreshed_at + LOCAL_REFRESH_COOLDOWN.as_millis() as i64);
+        self.set_local_cooldown(player, cooldown_until).await;
+        self.cache_renewal_state(player, completed).await;
         self.player_cache.profiles.write().await.remove(player);
         Ok(RefreshResult {
             source: "opgg".into(),
             cache_invalidated: true,
-            mutation_performed: false,
-            refreshed_at: now_millis(),
+            mutation_performed: true,
+            refreshed_at,
         })
     }
 
@@ -942,7 +1237,7 @@ impl PlayerStatsProvider for OpggProvider {
             // Profile data is direct MCP JSON-RPC, but match pagination discovers
             // and invokes a first-party Flight action from the public app.
             direct_api: false,
-            site_refresh: false,
+            site_refresh: true,
             regions: [
                 "KR", "JP1", "NA1", "EUW1", "EUN1", "OC1", "BR1", "LA1", "LA2", "TR1", "RU", "PH2",
                 "SG2", "TH2", "TW2", "VN2",
@@ -1026,7 +1321,7 @@ mod tests {
             refresh: RefreshResult {
                 source: "opgg".into(),
                 cache_invalidated: true,
-                mutation_performed: false,
+                mutation_performed: true,
                 refreshed_at: 4,
             },
             capabilities: ProviderCapabilities {
@@ -1034,6 +1329,7 @@ mod tests {
                 match_history: true,
                 champion_stats: true,
                 direct_api: false,
+                site_refresh: true,
                 regions: vec!["KR".into(), "JP1".into()],
                 ..ProviderCapabilities::default()
             },
@@ -1118,10 +1414,18 @@ mod tests {
 
     #[test]
     fn server_action_and_flight_value_parsers_reject_malformed_contracts() {
-        let bundle = r#"let c=(0,d.createServerReference)("409a2b9ca50d15e50a4dace93552e3a40113dc2753",d.callServer,void 0,d.findSourceMapURL,"getGames");"#;
+        let bundle = r#"let g=(0,d.createServerReference)("409a2b9ca50d15e50a4dace93552e3a40113dc2753",d.callServer,void 0,d.findSourceMapURL,"getGames");let s=(0,d.createServerReference)("400c02bdfd8c90756a329b312a7455e73880ad43ec",d.callServer,void 0,d.findSourceMapURL,"renewalStatus");let r=(0,d.createServerReference)("405a04669583947dc03eb8c7f367adf28c8f714e86",d.callServer,void 0,d.findSourceMapURL,"renewal");"#;
         assert_eq!(
-            games_action_id(bundle).as_deref(),
+            server_action_id(bundle, "getGames").as_deref(),
             Some("409a2b9ca50d15e50a4dace93552e3a40113dc2753")
+        );
+        assert_eq!(
+            server_action_id(bundle, "renewalStatus").as_deref(),
+            Some("400c02bdfd8c90756a329b312a7455e73880ad43ec")
+        );
+        assert_eq!(
+            server_action_id(bundle, "renewal").as_deref(),
+            Some("405a04669583947dc03eb8c7f367adf28c8f714e86")
         );
         let parsed = action_json("0:{\"a\":\"$@1\"}\n1:{\"data\":[],\"meta\":{}}")
             .expect("Flight action value");
@@ -1135,6 +1439,24 @@ mod tests {
             player_status_error(reqwest::StatusCode::UNPROCESSABLE_ENTITY, None),
             ProviderError::InvalidPlayerRequest(_)
         ));
+    }
+
+    #[test]
+    fn renewal_state_preserves_server_cooldown_and_status() {
+        let state = renewal_state(&json!({
+            "status": "RENEWAL_FINISH",
+            "lastUpdatedAt": "2026-07-17T10:38:13+09:00",
+            "renewableAt": "2026-07-17T11:12:27+09:00"
+        }))
+        .expect("renewal state");
+        assert_eq!(state.status, RenewalStatus::Finished);
+        assert_eq!(
+            state.cooldown_until(1_784_254_287_001),
+            Some(1_784_254_347_000)
+        );
+        assert_eq!(state.retry_after(1_784_254_287_001), Some(60));
+        assert_eq!(state.retry_after(1_784_254_347_000), None);
+        assert!(renewal_state(&json!({"status": "UNKNOWN_NEW_STATUS"})).is_err());
     }
 
     #[test]
@@ -1222,6 +1544,56 @@ mod tests {
                 second.matches.len(),
                 champions.len()
             );
+        });
+    }
+
+    #[test]
+    #[ignore = "network + site mutation: requires OPGG_LIVE_RIOT_ID"]
+    fn live_player_refresh_acceptance() {
+        let riot_id = std::env::var("OPGG_LIVE_RIOT_ID").expect("OPGG_LIVE_RIOT_ID=Name#Tag");
+        let (game_name, tag_line) = riot_id
+            .rsplit_once('#')
+            .expect("OPGG_LIVE_RIOT_ID must contain #");
+        let player = PlayerRef {
+            platform_id: std::env::var("OPGG_LIVE_PLATFORM").unwrap_or_else(|_| "JP1".into()),
+            game_name: game_name.into(),
+            tag_line: tag_line.into(),
+        };
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .expect("runtime");
+        runtime.block_on(async {
+            let provider =
+                OpggProvider::new(std::sync::Arc::new(overlay_ddragon::DdragonClient::new()))
+                    .expect("provider");
+            let before = provider.profile(&player, true).await.expect("profile");
+            match provider.refresh(&player).await {
+                Ok(result) => {
+                    assert!(result.cache_invalidated);
+                    assert!(result.mutation_performed);
+                    assert!(matches!(
+                        provider.refresh(&player).await,
+                        Err(ProviderError::RateLimited {
+                            retry_after: Some(_)
+                        })
+                    ));
+                    println!("OPGG REFRESH LIVE OK: mutation completed; duplicate blocked");
+                }
+                Err(ProviderError::RateLimited { retry_after }) => {
+                    assert!(before.refresh.cooldown_until.is_some() || retry_after.is_some());
+                    assert!(matches!(
+                        provider.refresh(&player).await,
+                        Err(ProviderError::RateLimited {
+                            retry_after: Some(_)
+                        })
+                    ));
+                    println!(
+                        "OPGG REFRESH LIVE OK: server and local cooldowns blocked mutation; retry_after={retry_after:?}"
+                    );
+                }
+                Err(error) => panic!("OP.GG refresh failed: {error}"),
+            }
         });
     }
 }

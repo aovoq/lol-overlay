@@ -29,7 +29,7 @@ use overlay_provider::{
     CounterEntry, ItemRecommendation, ProviderError, Result, RuneBuild, RuneRecommendation,
     SkillOrder, TierEntry, MIN_MATCHUP_GAMES,
 };
-use overlay_types::GameSnapshot;
+use overlay_types::{GameSnapshot, PlayerRef};
 use serde::de::DeserializeOwned;
 use tokio::sync::RwLock;
 
@@ -44,6 +44,7 @@ use types::{
 };
 
 const DEEPLOL: &str = "https://b2c-api-cdn.deeplol.gg";
+const DEEPLOL_RENEW: &str = "https://renew.deeplol.gg";
 
 /// …and at least this many usable rune samples from `/matchup/OTP_match`.
 const MIN_RUNE_SAMPLES: usize = 3;
@@ -108,6 +109,7 @@ async fn decode_deeplol<T: DeserializeOwned>(response: reqwest::Response) -> Res
 pub struct DeepLolProvider {
     http: reqwest::Client,
     player_base_url: String,
+    site_refresh_base_url: String,
     ddragon: Arc<DdragonClient>,
     /// Region for the stat queries. DeepLoL wants a *numbered* platform id
     /// (`JP1`, `NA1`, `EUW1`, …); `KR` is the one exception. The build numbers
@@ -123,6 +125,8 @@ pub struct DeepLolProvider {
     tier: String,
     cache: RwLock<Cache>,
     player_cache: RwLock<player::PlayerCache>,
+    site_refresh_lock: tokio::sync::Mutex<()>,
+    site_refresh_cooldowns: std::sync::Mutex<HashMap<PlayerRef, Instant>>,
 }
 
 #[derive(Default)]
@@ -164,11 +168,14 @@ impl DeepLolProvider {
         Ok(Self {
             http,
             player_base_url: DEEPLOL.into(),
+            site_refresh_base_url: DEEPLOL_RENEW.into(),
             ddragon,
             platform_id: std::sync::RwLock::new("KR".into()),
             tier: "Emerald+".into(),
             cache: RwLock::new(Cache::default()),
             player_cache: RwLock::new(player::PlayerCache::default()),
+            site_refresh_lock: tokio::sync::Mutex::new(()),
+            site_refresh_cooldowns: std::sync::Mutex::new(HashMap::new()),
         })
     }
 

@@ -5,10 +5,10 @@ Execution date: 2026-07-13 JST. Representative account: `KR / Hide on bush#KR1`.
 Fresh revalidation: 2026-07-14 01:59 JST on macOS. The same representative account and anonymous
 transports passed again. This is provider-network evidence only; it is not Windows/LCU UI evidence.
 
-| Provider | Direct transport | Profile/rank | Matches | Champion stats | Read refresh | Result |
+| Provider | Direct transport | Profile/rank | Matches | Champion stats | Refresh | Result |
 | --- | --- | --- | --- | --- | --- | --- |
-| DeepLoL | Anonymous JSON GET, `b2c-api-cdn.deeplol.gg` | Pass; tier chart also returned using derived `last_match_id` | Pass, 20 + 20 | Pass, 76 rows | Pass; app cache/read only | Pass |
-| OP.GG | Official anonymous MCP plus first-party `getGames` Flight action | Pass, 3 rank rows | Pass, 20 + 20 | Pass, 10 rows | Pass; app cache/read only | Pass |
+| DeepLoL | Anonymous JSON GET plus first-party renewal host | Pass; tier chart also returned using derived `last_match_id` | Pass, 20 + 20 | Pass, 76 rows | Pass; site mutation plus cooldown | Pass |
+| OP.GG | Official anonymous MCP plus first-party Flight actions | Pass, 3 rank rows | Pass, 20 + 20 | Pass, 10 rows | Pass; `renewalStatus` cooldown enforced | Pass |
 | U.GG | Build-only `stats2.u.gg`; Player GraphQL excluded | N/A | N/A | N/A | N/A | Intentionally not registered |
 
 Commands/results:
@@ -60,8 +60,27 @@ and server-rendered `window.__APOLLO_STATE__`, but match history was absent from
 client GraphQL request received HTML instead of JSON. Details are in
 `docs/ugg-chrome-api-investigation.md`. The final Player Stats live gate therefore requires
 DeepLoL and OP.GG to pass plus a contract assertion that U.GG is not registered for Player Stats.
-Site mutation is unavailable on both implemented transports; their explicit refresh action is a
-cache invalidation plus forced read, as documented in the provider-boundary ADR.
+Both implemented providers now expose explicit site refresh behind their own first-party
+availability checks and cooldowns, followed by cache invalidation and forced reads. No refresh
+falls back to or combines data from the other provider.
+
+## 2026-07-17 refresh revalidation
+
+`JP1 / REEL#3450` was used to validate current-rank and refresh behavior. DeepLoL returned Emerald
+I, 6 LP, 106 wins, and 99 losses, completed the official tier/match/champion-stat mutation flow,
+and blocked an immediate duplicate. OP.GG returned the same rank data; its live
+`renewalStatus` response reported an active server cooldown, so the adapter returned typed 429
+behavior with 117 seconds remaining and did not call `renewal` early.
+
+```text
+cargo test -p overlay-provider-opgg --lib live_player_refresh_acceptance -- --ignored --nocapture
+OPGG REFRESH LIVE OK: server and local cooldowns blocked mutation; retry_after=Some(117)
+```
+
+The OP.GG regression suite also covers discovery of the current `renewal` and `renewalStatus`
+server actions, strict renewal-state parsing, server-time cooldown conversion, successful-mutation
+metadata, and provider capability consistency. A live acceptance run will execute one renewal only
+when OP.GG reports it as available, then require the immediate duplicate to be rejected locally.
 
 ## 2026-07-14 completion revalidation
 

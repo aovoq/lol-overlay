@@ -50,7 +50,7 @@ export function createMockPlayerStatsGateway(): PlayerStatsGateway {
     championStats: true,
     liveGame: false,
     directApi: true,
-    siteRefresh: false,
+    siteRefresh: true,
     regions: ["KR", "JP1", "NA1"],
   };
   const maybeError = (player: PlayerRef) => {
@@ -97,7 +97,7 @@ export function createMockPlayerStatsGateway(): PlayerStatsGateway {
         ladderRank: 7,
         ladderPercentile: 0.01,
         fetchedAt: Date.now(),
-        refresh: { appRefresh: true, siteRefresh: false },
+        refresh: { appRefresh: true, siteRefresh: true },
         extras: { provider: source, data: {} },
       };
     },
@@ -194,7 +194,7 @@ export function createMockPlayerStatsGateway(): PlayerStatsGateway {
     refresh: async () => ({
       source,
       cacheInvalidated: true,
-      mutationPerformed: false,
+      mutationPerformed: true,
       refreshedAt: Date.now(),
     }),
   };

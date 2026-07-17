@@ -90,7 +90,7 @@ pub fn validate_player_provider_contract(
         || profile.identity.tag_line.is_empty()
         || profile.fetched_at <= 0
         || !profile.refresh.app_refresh
-        || profile.refresh.site_refresh
+        || profile.refresh.site_refresh != fixture.capabilities.site_refresh
         || !extras_match_source(&profile.extras, source)
     {
         return Err(invalid("profile violates the shared Player Stats contract"));
@@ -163,13 +163,12 @@ pub fn validate_player_provider_contract(
 
     if fixture.refresh.source != source
         || !fixture.refresh.cache_invalidated
-        || fixture.refresh.mutation_performed
+        || fixture.refresh.mutation_performed != fixture.capabilities.site_refresh
         || fixture.refresh.refreshed_at <= 0
         || !fixture.capabilities.player_profile
         || !fixture.capabilities.match_history
         || !fixture.capabilities.champion_stats
         || fixture.capabilities.live_game
-        || fixture.capabilities.site_refresh
     {
         return Err(invalid("capability or refresh contract mismatch"));
     }

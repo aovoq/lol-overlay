@@ -1,19 +1,35 @@
 # ADR: player-provider upstream boundaries
 
-Status: accepted, 2026-07-13.
+Status: accepted, 2026-07-13; amended 2026-07-17.
 
 ## DeepLoL realtime rank
 
-`summoner-realtime` requires a `summoner_id` omitted by the older explorer contract. Some valid
-basic profiles return it as an empty string. The adapter therefore calls realtime only when the
-resolver returns a non-empty ID. Otherwise current Solo/Flex rank remains unavailable while basic
-profile and previous tiers are shown. It does not infer the ID or mix LCU/another provider's rank.
+`summoner-realtime` requires a `summoner_id` query parameter, but accepts an empty value when a
+valid `puu_id` is also supplied. Some valid basic profiles return that empty value. The adapter
+therefore always sends both fields, preserving the resolver's `summoner_id` verbatim, so those
+profiles still receive current Solo/Flex rank. It does not infer the ID or mix LCU/another
+provider's rank.
 
 ## DeepLoL refresh
 
-Read freshness and site mutation are separate capabilities. The Refresh button invalidates app
-caches and forces anonymous reads. It never posts to `renew.deeplol.gg`; `siteRefresh=false` until
-an authenticated, cooldown-aware contract is deliberately implemented.
+Read freshness and site mutation are separate capabilities. DeepLoL refresh first checks
+`match/check-refresh`; only an `available` response permits the tier, match, and champion-stat
+mutation sequence on `renew.deeplol.gg`. Server-provided delays and the official client's 45-second
+cooldown are both enforced, and concurrent refreshes are serialized before any mutation. A
+successful mutation invalidates the app cache and forces fresh anonymous reads.
+
+## OP.GG refresh
+
+The official MCP has no refresh tool, but OP.GG's public profile application exposes first-party
+React server actions named `renewalStatus` and `renewal`. They use the same anonymous structured
+Flight transport already accepted for match pagination. The adapter discovers their deployment
+identifiers from the current public bundles instead of pinning hashes.
+
+Before mutation, the adapter reads `renewableAt` and returns a typed rate-limit error while the
+server cooldown is active. Allowed renewals are serialized, issued once, and polled only at the
+server-provided delay until `RENEWAL_FINISH`. The returned cooldown and a 60-second local minimum
+are both retained so repeated clicks and concurrent requests cannot multiply mutations. Failure or
+unknown statuses fail closed; no other provider is queried.
 
 ## OP.GG pagination
 

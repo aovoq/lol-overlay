@@ -130,7 +130,7 @@ fn capabilities(&amp;self) -&gt; ProviderCapabilities;</code></pre></div>
         <div class="decision"><b>Champion Stats</b><span>Champion/Role/Queue filter。games、WR、KDA、CS/min。未知値は—。</span></div>
       </div>
       <div class="state-grid" style="margin-top:16px"><div class="state"><b>Idle</b><span>検索案内・履歴</span></div><div class="state"><b>Loading</b><span>skeleton、操作重複防止</span></div><div class="state"><b>Ready</b><span>Profile/Rank/Matches/Stats</span></div><div class="state"><b>Empty</b><span>未Rank・戦績なし・filter 0件</span></div><div class="state"><b>404</b><span>サモナーが見つかりません</span></div><div class="state"><b>422</b><span>入力/API契約エラー</span></div><div class="state"><b>429</b><span>Retry-After/待ち時間</span></div><div class="state"><b>Partial</b><span>成功分表示＋失敗Match再試行</span></div></div>
-      <div class="callout"><strong>Refresh UI：</strong>「再読み込み」は全Providerでcacheを破棄してread APIを再取得。「サイト側更新」は認証不要mutationとcooldownが確認できたProviderだけ別ボタンで表示し、確認dialog後に実行する。</div>
+      <div class="callout"><strong>Refresh UI：</strong>DeepLoL・OP.GGは選択中Provider名の「更新」ボタンから明示mutationを実行し、各サイトが返すcooldown中は残り秒数を表示して無効化。未対応Providerはcache破棄＋read再取得のみ。</div>
     </div></section>
 
     <section id="tests-spec"><div class="wrap">
@@ -229,22 +229,22 @@ tests / *.test.*                            contract, parser, UI, E2E</div>
 
     <section id="deeplol-player-api"><div class="wrap">
       <h2>DeepLoL Player API：実測済み契約</h2>
-      <p class="sub">API ReferenceとExplorerをsubagentで並行スキャンし、公開フロントエンドJSと2026-07-13の実API応答でも確認。読み取り系はAPI key / Cookieなしの直接JSON、更新系は別hostかつ認証境界があります。</p>
+      <p class="sub">API ReferenceとExplorerを確認し、公開フロントエンドJSと2026-07-17の実API応答でも確認。読み取り系と明示更新系はいずれもAPI key / Cookieなしで利用し、更新系だけ別host・cooldown境界に隔離します。</p>
       <div class="source-links"><a class="source-link" href="https://docs.aovoq.work/deeplol-api-reference-888373e6.html">DeepLoL API Reference ↗</a><a class="source-link" href="https://docs.aovoq.work/deeplol-api-explorer-59b07766.html">DeepLoL API Explorer ↗</a></div>
       <div class="api-facts"><div class="api-fact"><b>JSON GET</b><span>b2c-api-cdn.deeplol.gg・読取認証なし</span></div><div class="api-fact"><b>PUUID</b><span>Riot ID解決後の内部主キー</span></div><div class="api-fact"><b>20件固定</b><span>Match listの実測返却単位</span></div><div class="api-fact"><b>最大約1.48MB</b><span>Champion Stats実測payload</span></div></div>
       <div class="matrix-wrap endpoint-table"><table><thead><tr><th>Endpoint</th><th>用途</th><th>状態</th><th>実装上の要点</th></tr></thead><tbody>
         <tr><td><code>GET /summoner/summoner</code></td><td>Riot ID → PUUID / 基本Profile</td><td><span class="flag ok">200実測</span></td><td><code>platform_id</code>、<code>riot_id_name</code>、<code>riot_id_tag_line</code>。現在Rankは含まれない。存在しないIDは404 JSON。</td></tr>
         <tr><td><code>GET /summoner/summoner-name</code></td><td>PUUID → 現Riot ID</td><td><span class="flag ok">200実測</span></td><td>旧<code>summoner_name</code>は空文字になり得るため必須DTOにしない。</td></tr>
-        <tr><td><code>GET /summoner/summoner-realtime</code></td><td>現在Rank / challenges</td><td><span class="flag blocked">契約不整合</span></td><td>Explorer未記載の<code>summoner_id</code>が必須で422。一方Profileでは空文字例があり、取得元確定までdefer。</td></tr>
+        <tr><td><code>GET /summoner/summoner-realtime</code></td><td>現在Rank / challenges</td><td><span class="flag ok">200実測</span></td><td><code>summoner_id</code>パラメータは必須だが空文字でもPUUID併用で解決可能。resolver値をそのまま送る。</td></tr>
         <tr><td><code>GET /match/matches</code></td><td>Match ID一覧</td><td><span class="flag ok">200実測</span></td><td><code>only_list=1</code>。<code>count</code>に関係なく20件、<code>offset</code>は行offset。次値はoffset + 実返却件数。</td></tr>
         <tr><td><code>GET /match/match-cached</code></td><td>1試合の詳細</td><td><span class="flag ok">200実測</span></td><td>一覧後にmatchごと取得するN+1構成。10 participants、AI score等を含み、実測約177KB。</td></tr>
         <tr><td><code>GET /summoner/champion-stat</code></td><td>Champion別個人成績</td><td><span class="flag warn">巨大JSON</span></td><td>counter / reverse / synergy、role別統計、AI score。実測約1.48MBなので必要項目抽出と別cacheが必須。</td></tr>
         <tr><td><code>GET /summoner/tier-chart</code></td><td>Tier推移</td><td><span class="flag warn">文書差異</span></td><td><code>last_match_id</code>はoptional記載だが実APIでは必須。未指定422、指定時Solo 30件を実測。</td></tr>
         <tr><td><code>GET /summoner/updated-time</code></td><td>更新時刻・更新可否</td><td><span class="flag ok">200実測</span></td><td><code>updated_timestamp</code>、<code>auto_update</code>、<code>remain_second</code>をfreshness metadataへ変換。</td></tr>
-        <tr><td><code>POST renew.deeplol.gg/match/*</code></td><td>戦績 / Tier / Stats更新</td><td><span class="flag blocked">401 / 副作用</span></td><td>CDN読取とは別client・別capability。認証条件確定まで自動実行しない。</td></tr>
+        <tr><td><code>POST renew.deeplol.gg/match/*</code></td><td>戦績 / Tier / Stats更新</td><td><span class="flag ok">201実測</span></td><td><code>check-refresh</code>がavailableの時だけ3更新を実行。server delay、45秒cooldown、同時実行lockをmutation前に強制。</td></tr>
       </tbody></table></div>
       <div class="contract-gaps">
-        <div class="contract-gap"><b>Profileは2段階だがRank合成が現在block</b><p><code>/summoner/summoner</code>でPUUID/basicを取得できるが、realtimeが要求するsummoner_idの信頼できる取得元が未確定。</p></div>
+        <div class="contract-gap"><b>ProfileとRankは2段階</b><p><code>/summoner/summoner</code>のPUUID/basicを解決し、resolverのsummoner_idを空文字も含めてrealtimeへ渡して現在Rankを合成する。</p></div>
         <div class="contract-gap"><b>cursorではなくoffset semantics</b><p>共通<code>MatchPage.cursor</code>にはoffsetを文字列化して保持。countを信用せず、実返却件数から次offsetを計算する。</p></div>
         <div class="contract-gap"><b>一覧と詳細を分離</b><p>ID一覧を先に返し、詳細hydrationは並列数制限・timeout・部分失敗許容・match ID cache付きで行う。</p></div>
         <div class="contract-gap"><b>Provider固有値を隔離</b><p>AI Score、lane/final analysis、synergy/counter詳細は共通Matchへ押し込まずDeepLoL extrasへ保存する。</p></div>

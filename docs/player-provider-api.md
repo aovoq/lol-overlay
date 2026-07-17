@@ -1,6 +1,7 @@
 # Player provider API map
 
-Recorded 2026-07-13. Player providers are selected explicitly and never fall back to another site.
+Recorded 2026-07-13; refreshed 2026-07-17. Player providers are selected explicitly and never
+fall back to another site.
 CAPTCHA, authentication, and bot mitigations are not bypassed.
 
 ## DeepLoL
@@ -8,16 +9,22 @@ CAPTCHA, authentication, and bot mitigations are not bypassed.
 - Host: `https://b2c-api-cdn.deeplol.gg`; anonymous JSON `GET` reads.
 - Identity: `/summoner/summoner` with `platform_id`, `riot_id_name`, and
   `riot_id_tag_line`; returns PUUID/basic profile. `KR` is the only unnumbered platform.
-- Current rank: `/summoner/summoner-realtime` also requires `summoner_id`. It is called only when
-  the resolver returns a non-empty value.
+- Current rank: `/summoner/summoner-realtime` requires both `summoner_id` and `puu_id`. An empty
+  resolver `summoner_id` remains a valid query value when the PUUID is present, so it is sent
+  verbatim instead of suppressing the rank request.
 - Match IDs: `/match/matches` with PUUID/platform, `only_list=1`, offset, and filters. The observed
   unit is 20; the next offset uses the actual returned count.
 - Details: `/match/match-cached`, one request per match ID, hydrated with concurrency 5 and partial
   failure reporting.
 - Champion stats: `/summoner/champion-stat`, narrowed to normalized rows and cached separately.
 - Tier chart: `/summoner/tier-chart`; `last_match_id` is required despite older documentation.
-- Freshness: `/summoner/updated-time` is a read. Mutation endpoints are on
-  `renew.deeplol.gg`, require authentication, and are not called by this provider.
+- Freshness: `/summoner/updated-time` supplies the last update and any server delay. The adapter
+  also derives the official 45-second cooldown from `updated_timestamp` so an app restart cannot
+  bypass it.
+- Site refresh: `POST renew.deeplol.gg/match/check-refresh` must return `available` before the
+  adapter calls `refresh_tier`, `refresh-matches`, and `refresh-champion-stat`. Concurrent and
+  repeated refreshes are blocked before mutation; success is followed by cache invalidation and
+  fresh reads.
 - Expected errors: JSON 404 player missing, 422 invalid/missing input, 429 with optional
   `Retry-After`; request timeout is typed separately.
 
@@ -32,13 +39,16 @@ CAPTCHA, authentication, and bot mitigations are not bypassed.
   `getGames`. The JSON argument contains locale, lowercase region, PUUID, game type, `endedAt`, and
   nullable champion. No cookie or login header is required.
 - Action discovery: fetch the public profile HTML, follow its first-party `c-lol-web.op.gg`
-  JavaScript bundle references, locate the `getGames` server reference, and cache its deployment
-  identifier. This avoids a hard-coded build hash.
+  JavaScript bundle references, locate the `getGames`, `renewalStatus`, and `renewal` server
+  references, and cache their deployment identifiers. This avoids hard-coded build hashes.
 - Pagination: each action result contains up to 20 structured games and
   `meta.last_game_created_at`. That timestamp becomes the next `endedAt` cursor; live acceptance
   returned 20 + 20 distinct chronological records.
-- Refresh: application cache invalidation/read only. The official MCP surface exposes no safe site
-  mutation.
+- Refresh: the official MCP exposes no mutation, but the first-party profile app exposes structured
+  `renewalStatus` and `renewal` server actions. The adapter checks `renewableAt` before mutation,
+  sends one anonymous renewal request, polls only at the returned delay until
+  `RENEWAL_FINISH`, then invalidates its caches. Renewal calls are serialized and protected by the
+  server cooldown plus a 60-second local minimum; `TOO_MANY_RENEWALS` maps to typed 429 behavior.
 - Rate-limit hypothesis: HTTP 429 and `Retry-After` are honored; no stable published quota was
   found.
 

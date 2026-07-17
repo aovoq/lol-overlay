@@ -20,6 +20,8 @@ const MATCH_CONCURRENCY: usize = 5;
 const MATCH_PAGE_SIZE: usize = 20;
 const RETRY_ATTEMPTS: usize = 2;
 const RETRY_DELAY: Duration = Duration::from_millis(250);
+const SITE_REFRESH_COOLDOWN: Duration = Duration::from_secs(45);
+const SITE_REFRESH_MATCH_COUNT: i64 = 20;
 
 type Timed<T> = (Instant, T);
 type ChampionCacheKey = (PlayerRef, String, Option<String>, Option<String>);
@@ -53,6 +55,10 @@ fn now_millis() -> i64 {
         .duration_since(UNIX_EPOCH)
         .unwrap_or_default()
         .as_millis() as i64
+}
+
+fn now_seconds() -> i64 {
+    now_millis() / 1_000
 }
 
 fn platform_id(raw: &str) -> Result<String> {
@@ -211,6 +217,31 @@ fn integer(value: &Value, keys: &[&str]) -> Option<i64> {
     })
 }
 
+fn upstream_refresh_retry_after(updated: &Value) -> u64 {
+    let reported = u64::try_from(
+        integer(updated, &["remain_second"])
+            .unwrap_or_default()
+            .max(0),
+    )
+    .unwrap_or_default();
+    let timestamp = integer(updated, &["updated_timestamp"])
+        .map(|value| {
+            if value > 10_000_000_000 {
+                value / 1_000
+            } else {
+                value
+            }
+        })
+        .unwrap_or_default();
+    let elapsed = u64::try_from(now_seconds().saturating_sub(timestamp).max(0)).unwrap_or_default();
+    let official_client = if timestamp > 0 {
+        SITE_REFRESH_COOLDOWN.as_secs().saturating_sub(elapsed)
+    } else {
+        0
+    };
+    reported.max(official_client)
+}
+
 fn float(value: &Value, keys: &[&str]) -> Option<f64> {
     object(value, keys).and_then(|value| value.as_f64().or_else(|| value.as_str()?.parse().ok()))
 }
@@ -278,7 +309,9 @@ fn parse_profile(
             lp: integer(value, &["lp"]),
         })
         .collect();
-    let remain_seconds = updated.and_then(|value| integer(value, &["remain_second"]));
+    let retry_after = updated
+        .map(upstream_refresh_retry_after)
+        .unwrap_or_default();
     Ok(PlayerProfile {
         source: "deeplol".into(),
         identity: PlayerIdentity {
@@ -298,9 +331,8 @@ fn parse_profile(
         fetched_at: now_millis(),
         refresh: RefreshAvailability {
             app_refresh: true,
-            // renew.deeplol.gg requires authentication; read requests never POST.
-            site_refresh: false,
-            cooldown_until: remain_seconds.map(|seconds| now_millis() + seconds * 1_000),
+            site_refresh: true,
+            cooldown_until: (retry_after > 0).then(|| now_millis() + retry_after as i64 * 1_000),
         },
         extras: ProviderExtras::Deeplol(json!({
             "summonerIdAvailable": string(basic, &["summoner_id"]).is_some(),
@@ -580,8 +612,11 @@ impl DeepLolProvider {
         .await
     }
 
-    async fn updated_time(&self, player: &PlayerIdentity) -> Option<Value> {
-        let puuid = player.puuid.as_deref()?;
+    async fn updated_time(&self, player: &PlayerIdentity) -> Result<Value> {
+        let puuid = player
+            .puuid
+            .as_deref()
+            .ok_or_else(|| ProviderError::InvalidData("DeepLoL profile omitted puuid".into()))?;
         response_json(
             self.http
                 .get(format!("{}/summoner/updated-time", self.player_base_url))
@@ -591,7 +626,6 @@ impl DeepLolProvider {
                 ]),
         )
         .await
-        .ok()
     }
 
     async fn tier_chart(&self, player: &PlayerIdentity) -> Result<Value> {
@@ -643,6 +677,78 @@ impl DeepLolProvider {
             .map(|season| season.to_string())
             .ok_or_else(|| ProviderError::InvalidData("DeepLoL returned no current season".into()))
     }
+
+    fn local_refresh_retry_after(&self, player: &PlayerRef) -> Option<u64> {
+        let now = Instant::now();
+        let mut cooldowns = self.site_refresh_cooldowns.lock().unwrap();
+        cooldowns.retain(|_, deadline| *deadline > now);
+        cooldowns
+            .get(player)
+            .map(|deadline| deadline.saturating_duration_since(now).as_secs().max(1))
+    }
+
+    fn start_local_refresh_cooldown(&self, player: &PlayerRef) {
+        self.site_refresh_cooldowns
+            .lock()
+            .unwrap()
+            .insert(player.clone(), Instant::now() + SITE_REFRESH_COOLDOWN);
+    }
+
+    async fn site_refresh_request(&self, path: &str, payload: Value) -> Result<String> {
+        let value = response_json(
+            self.http
+                .post(format!("{}/match/{path}", self.site_refresh_base_url))
+                .header(reqwest::header::ORIGIN, "https://www.deeplol.gg")
+                .header(reqwest::header::REFERER, "https://www.deeplol.gg/")
+                .json(&payload),
+        )
+        .await?;
+        value.as_str().map(str::to_owned).ok_or_else(|| {
+            ProviderError::InvalidData(format!(
+                "DeepLoL site refresh {path} returned a non-string response"
+            ))
+        })
+    }
+
+    async fn check_site_refresh(&self, player: &PlayerIdentity) -> Result<()> {
+        let status = self
+            .site_refresh_request(
+                "check-refresh",
+                json!({
+                    "puu_id": player.puuid,
+                    "platform_id": player.platform_id,
+                }),
+            )
+            .await?;
+        if status == "available" {
+            return Ok(());
+        }
+        if status.contains("update") {
+            let retry_after = status
+                .split('|')
+                .nth(1)
+                .and_then(|value| value.parse().ok())
+                .unwrap_or(SITE_REFRESH_COOLDOWN.as_secs())
+                .max(1);
+            return Err(ProviderError::RateLimited {
+                retry_after: Some(retry_after),
+            });
+        }
+        Err(ProviderError::InvalidData(format!(
+            "DeepLoL site refresh check returned {status:?}"
+        )))
+    }
+
+    async fn run_site_refresh_step(&self, path: &str, payload: Value) -> Result<()> {
+        let status = self.site_refresh_request(path, payload).await?;
+        if status.contains("completed") {
+            Ok(())
+        } else {
+            Err(ProviderError::InvalidData(format!(
+                "DeepLoL site refresh {path} returned {status:?}"
+            )))
+        }
+    }
 }
 
 #[async_trait]
@@ -662,41 +768,47 @@ impl PlayerStatsProvider for DeepLolProvider {
         let puuid = string(basic, &["puu_id", "puuid"])
             .ok_or_else(|| ProviderError::InvalidData("DeepLoL profile omitted puu_id".into()))?;
         let platform = platform_id(&player.platform_id)?;
-        let realtime = if let Some(summoner_id) = string(basic, &["summoner_id"]) {
-            response_json(
-                self.http
-                    .get(format!(
-                        "{}/summoner/summoner-realtime",
-                        self.player_base_url
-                    ))
-                    .query(&[
-                        ("platform_id", platform.as_str()),
-                        ("summoner_id", summoner_id.as_str()),
-                        ("puu_id", puuid.as_str()),
-                    ]),
-            )
-            .await
-            .ok()
-        } else {
-            None
-        };
+        // DeepLoL requires the summoner_id query parameter, but valid resolver
+        // responses can contain an empty value. The realtime endpoint still
+        // resolves those players from puu_id as long as summoner_id is sent.
+        let summoner_id = basic
+            .get("summoner_id")
+            .and_then(Value::as_str)
+            .unwrap_or_default();
+        let realtime = response_json(
+            self.http
+                .get(format!(
+                    "{}/summoner/summoner-realtime",
+                    self.player_base_url
+                ))
+                .query(&[
+                    ("platform_id", platform.as_str()),
+                    ("summoner_id", summoner_id),
+                    ("puu_id", puuid.as_str()),
+                ]),
+        )
+        .await
+        .ok();
         let identity = PlayerIdentity {
             platform_id: platform,
             game_name: player.game_name.clone(),
             tag_line: player.tag_line.clone(),
             puuid: Some(puuid),
         };
-        let updated = self.updated_time(&identity).await;
+        let updated = self.updated_time(&identity).await.ok();
         // Tier chart is optional display enrichment, but its request contract is
         // strict: derive and pass the latest match ID rather than omitting it.
         let tier_chart = self.tier_chart(&identity).await.ok();
-        let profile = parse_profile(
+        let mut profile = parse_profile(
             player,
             &basic_response,
             realtime.as_ref(),
             updated.as_ref(),
             tier_chart.as_ref(),
         )?;
+        if let Some(retry_after) = self.local_refresh_retry_after(player) {
+            profile.refresh.cooldown_until = Some(now_millis() + retry_after as i64 * 1_000);
+        }
         self.player_cache
             .write()
             .await
@@ -879,13 +991,75 @@ impl PlayerStatsProvider for DeepLolProvider {
     }
 
     async fn refresh(&self, player: &PlayerRef) -> Result<RefreshResult> {
+        let _refresh_guard = self.site_refresh_lock.lock().await;
+        if let Some(retry_after) = self.local_refresh_retry_after(player) {
+            return Err(ProviderError::RateLimited {
+                retry_after: Some(retry_after),
+            });
+        }
+
+        let basic_response = self.resolve_player(player).await?;
+        let basic = basic_response
+            .get("summoner_basic_info_dict")
+            .unwrap_or(&basic_response);
+        let puuid = string(basic, &["puu_id", "puuid"])
+            .ok_or_else(|| ProviderError::InvalidData("DeepLoL profile omitted puu_id".into()))?;
+        let platform = platform_id(&player.platform_id)?;
+        let identity = PlayerIdentity {
+            platform_id: platform.clone(),
+            game_name: player.game_name.clone(),
+            tag_line: player.tag_line.clone(),
+            puuid: Some(puuid.clone()),
+        };
+        let updated = self.updated_time(&identity).await?;
+        let retry_after = upstream_refresh_retry_after(&updated);
+        if retry_after > 0 {
+            return Err(ProviderError::RateLimited {
+                retry_after: Some(retry_after),
+            });
+        }
+
+        self.check_site_refresh(&identity).await?;
+        // Start the local cooldown before the mutations. A partial upstream
+        // failure must not turn into an immediate burst of duplicate writes.
+        self.start_local_refresh_cooldown(player);
+        let season =
+            self.current_season().await?.parse::<i64>().map_err(|_| {
+                ProviderError::InvalidData("DeepLoL returned an invalid season".into())
+            })?;
+        self.run_site_refresh_step(
+            "refresh_tier",
+            json!({"puu_id": puuid, "platform_id": platform}),
+        )
+        .await?;
+        self.run_site_refresh_step(
+            "refresh-matches",
+            json!({
+                "puu_id": puuid,
+                "platform_id": platform,
+                "queue_type": "ALL",
+                "start_idx": 0,
+                "count": SITE_REFRESH_MATCH_COUNT,
+            }),
+        )
+        .await?;
+        self.run_site_refresh_step(
+            "refresh-champion-stat",
+            json!({
+                "puu_id": puuid,
+                "platform_id": platform,
+                "queue_type": "RANKED_SOLO_5x5",
+                "season": season,
+            }),
+        )
+        .await?;
+
         self.player_cache.write().await.invalidate(player);
-        // Prove read freshness without crossing the authenticated mutation boundary.
         self.profile(player, true).await?;
         Ok(RefreshResult {
             source: "deeplol".into(),
             cache_invalidated: true,
-            mutation_performed: false,
+            mutation_performed: true,
             refreshed_at: now_millis(),
         })
     }
@@ -898,7 +1072,7 @@ impl PlayerStatsProvider for DeepLolProvider {
             champion_stats: true,
             live_game: false,
             direct_api: true,
-            site_refresh: false,
+            site_refresh: true,
             regions: [
                 "KR", "JP1", "NA1", "EUW1", "EUN1", "OC1", "BR1", "LA1", "LA2", "TR1", "RU", "PH2",
                 "SG2", "TH2", "TW2", "VN2",
@@ -1008,6 +1182,7 @@ mod tests {
         requests: &Mutex<Vec<String>>,
         handler: &dyn Fn(&str) -> MockResponse,
     ) {
+        let _ = stream.set_nonblocking(false);
         let _ = stream.set_read_timeout(Some(Duration::from_secs(1)));
         let mut buffer = [0_u8; 16 * 1024];
         let Ok(read) = stream.read(&mut buffer) else {
@@ -1051,6 +1226,7 @@ mod tests {
         let mut provider = DeepLolProvider::new(Arc::new(overlay_ddragon::DdragonClient::new()))
             .expect("DeepLoL provider");
         provider.player_base_url = server.url();
+        provider.site_refresh_base_url = server.url();
         provider.http = reqwest::Client::builder()
             .timeout(timeout)
             .user_agent("lol-overlay-contract-test")
@@ -1127,7 +1303,7 @@ mod tests {
             refresh: RefreshResult {
                 source: "deeplol".into(),
                 cache_invalidated: true,
-                mutation_performed: false,
+                mutation_performed: true,
                 refreshed_at: 4,
             },
             capabilities: ProviderCapabilities {
@@ -1135,6 +1311,7 @@ mod tests {
                 match_history: true,
                 champion_stats: true,
                 direct_api: true,
+                site_refresh: true,
                 regions: vec!["KR".into(), "JP1".into()],
                 ..ProviderCapabilities::default()
             },
@@ -1299,6 +1476,241 @@ mod tests {
             .expect_err("timeout fixture");
         assert!(matches!(error, ProviderError::Timeout));
         assert_eq!(server.requests().len(), RETRY_ATTEMPTS);
+    }
+
+    #[test]
+    fn profile_requests_realtime_rank_when_summoner_id_is_empty() {
+        let server = MockHttpServer::start(|target| {
+            if target.starts_with("/summoner/summoner?") {
+                return MockResponse::json(
+                    json!({"summoner_basic_info_dict": {
+                        "puu_id": "jp-puuid", "summoner_id": "",
+                        "riot_id_name": "REEL", "riot_id_tag_line": "3450"
+                    }})
+                    .to_string(),
+                );
+            }
+            if target.starts_with("/summoner/summoner-realtime?") {
+                return MockResponse::json(
+                    json!({"season_tier_info_dict": {
+                        "ranked_solo_5x5": {
+                            "tier": "EMERALD", "division": 2,
+                            "league_points": 88, "wins": 105, "losses": 99
+                        }
+                    }})
+                    .to_string(),
+                );
+            }
+            if target.starts_with("/summoner/updated-time?") {
+                return MockResponse::json(r#"{"remain_second":0}"#);
+            }
+            if target.starts_with("/match/matches?") {
+                return MockResponse::json(r#"{"match_id_list":[]}"#);
+            }
+            MockResponse {
+                status: 500,
+                content_type: Some("application/json"),
+                retry_after: None,
+                body: r#"{"detail":"unexpected fixture route"}"#.into(),
+                delay: Duration::ZERO,
+            }
+        })
+        .expect("mock server");
+        let provider = mock_provider(&server, Duration::from_secs(5));
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .unwrap();
+
+        let profile = runtime
+            .block_on(provider.profile(
+                &PlayerRef {
+                    platform_id: "JP1".into(),
+                    game_name: "REEL".into(),
+                    tag_line: "3450".into(),
+                },
+                true,
+            ))
+            .expect("profile with realtime rank");
+
+        assert_eq!(profile.ranks.len(), 1);
+        assert_eq!(profile.ranks[0].tier.as_deref(), Some("EMERALD"));
+        assert_eq!(profile.ranks[0].division.as_deref(), Some("2"));
+        assert_eq!(profile.ranks[0].lp, Some(88));
+        assert_eq!(profile.ranks[0].wins, Some(105));
+        assert_eq!(profile.ranks[0].losses, Some(99));
+        assert!(server.requests().iter().any(|request| {
+            request.starts_with("/summoner/summoner-realtime?")
+                && request.contains("platform_id=JP1")
+                && request.contains("summoner_id=")
+                && request.contains("puu_id=jp-puuid")
+        }));
+    }
+
+    #[test]
+    fn site_refresh_runs_upstream_mutations_once_then_enforces_cooldown() {
+        let server = MockHttpServer::start(|target| {
+            if target.starts_with("/summoner/summoner?") {
+                return MockResponse::json(
+                    json!({"summoner_basic_info_dict": {
+                        "puu_id": "refresh-puuid", "summoner_id": "",
+                        "riot_id_name": "REEL", "riot_id_tag_line": "3450"
+                    }})
+                    .to_string(),
+                );
+            }
+            if target.starts_with("/summoner/summoner-realtime?") {
+                return MockResponse::json(
+                    json!({"season_tier_info_dict": {"ranked_solo_5x5": {
+                        "tier": "EMERALD", "division": 1, "league_points": 6,
+                        "wins": 106, "losses": 99
+                    }}})
+                    .to_string(),
+                );
+            }
+            if target.starts_with("/summoner/updated-time?") {
+                return MockResponse::json(
+                    r#"{"updated_timestamp":0,"auto_update":false,"remain_second":0}"#,
+                );
+            }
+            if target.starts_with("/match/matches?") {
+                return MockResponse::json(r#"{"match_id_list":[]}"#);
+            }
+            if target.starts_with("/common/season-list") {
+                return MockResponse::json(r#"{"season_list":[26,27]}"#);
+            }
+            if target.starts_with("/match/check-refresh") {
+                return MockResponse::json(r#""available""#);
+            }
+            if target.starts_with("/match/refresh_tier")
+                || target.starts_with("/match/refresh-matches")
+                || target.starts_with("/match/refresh-champion-stat")
+            {
+                return MockResponse::json(r#""completed""#);
+            }
+            MockResponse {
+                status: 500,
+                content_type: Some("application/json"),
+                retry_after: None,
+                body: r#"{"detail":"unexpected fixture route"}"#.into(),
+                delay: Duration::ZERO,
+            }
+        })
+        .expect("mock server");
+        let provider = mock_provider(&server, Duration::from_secs(5));
+        let player = PlayerRef {
+            platform_id: "JP1".into(),
+            game_name: "REEL".into(),
+            tag_line: "3450".into(),
+        };
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .unwrap();
+
+        let (first, second) = runtime.block_on(async {
+            futures::join!(provider.refresh(&player), provider.refresh(&player))
+        });
+        let (refreshed, error) = match (first, second) {
+            (Ok(refreshed), Err(error)) | (Err(error), Ok(refreshed)) => (refreshed, error),
+            result => panic!("expected one refresh and one cooldown: {result:?}"),
+        };
+        assert!(refreshed.cache_invalidated);
+        assert!(refreshed.mutation_performed);
+        let requests_after_success = server.requests();
+        for path in [
+            "/match/check-refresh",
+            "/match/refresh_tier",
+            "/match/refresh-matches",
+            "/match/refresh-champion-stat",
+        ] {
+            assert!(
+                requests_after_success
+                    .iter()
+                    .any(|request| request.starts_with(path)),
+                "missing {path}: {requests_after_success:?}"
+            );
+        }
+
+        assert!(matches!(
+            error,
+            ProviderError::RateLimited {
+                retry_after: Some(1..=45)
+            }
+        ));
+        assert_eq!(server.requests(), requests_after_success);
+    }
+
+    #[test]
+    fn site_refresh_honors_upstream_and_timestamp_cooldowns() {
+        assert_eq!(
+            upstream_refresh_retry_after(&json!({
+                "updated_timestamp": now_seconds() - 60,
+                "remain_second": 0,
+            })),
+            0
+        );
+        assert_eq!(
+            upstream_refresh_retry_after(&json!({
+                "updated_timestamp": 0,
+                "remain_second": 17,
+            })),
+            17
+        );
+        assert!((44..=45).contains(&upstream_refresh_retry_after(&json!({
+            "updated_timestamp": now_seconds(),
+            "remain_second": 0,
+        }))));
+
+        let server = MockHttpServer::start(|target| {
+            if target.starts_with("/summoner/summoner?") {
+                return MockResponse::json(
+                    json!({"summoner_basic_info_dict": {
+                        "puu_id": "limited-puuid", "summoner_id": "",
+                    }})
+                    .to_string(),
+                );
+            }
+            if target.starts_with("/summoner/updated-time?") {
+                return MockResponse::json(
+                    r#"{"updated_timestamp":0,"auto_update":false,"remain_second":0}"#,
+                );
+            }
+            if target.starts_with("/match/check-refresh") {
+                return MockResponse::json(r#""update|17""#);
+            }
+            MockResponse {
+                status: 500,
+                content_type: Some("application/json"),
+                retry_after: None,
+                body: r#"{"detail":"unexpected fixture route"}"#.into(),
+                delay: Duration::ZERO,
+            }
+        })
+        .expect("mock server");
+        let provider = mock_provider(&server, Duration::from_secs(5));
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .unwrap();
+        let error = runtime
+            .block_on(provider.refresh(&PlayerRef {
+                platform_id: "JP1".into(),
+                game_name: "Limited".into(),
+                tag_line: "JP1".into(),
+            }))
+            .expect_err("upstream cooldown");
+        assert!(matches!(
+            error,
+            ProviderError::RateLimited {
+                retry_after: Some(17)
+            }
+        ));
+        assert!(!server.requests().iter().any(|request| {
+            request.starts_with("/match/refresh_tier")
+                || request.starts_with("/match/refresh-matches")
+                || request.starts_with("/match/refresh-champion-stat")
+        }));
     }
 
     #[test]
@@ -1481,7 +1893,7 @@ mod tests {
         assert_eq!(profile.identity.puuid.as_deref(), Some("p"));
         assert_eq!(profile.previous_seasons.len(), 1);
         assert!(profile.ranks.is_empty());
-        assert!(!profile.refresh.site_refresh);
+        assert!(profile.refresh.site_refresh);
         let ProviderExtras::Deeplol(extras) = profile.extras else {
             panic!("DeepLoL extras")
         };

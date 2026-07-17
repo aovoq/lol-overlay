@@ -1,5 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
-import { createMemo, createSignal, For, onMount, Show } from "solid-js";
+import { createMemo, createSignal, For, onCleanup, onMount, Show } from "solid-js";
 import { champIconByKey, champName, profileIconUrl } from "../../assets";
 import {
   addPlayerHistory,
@@ -61,6 +61,7 @@ export function SummonerPage() {
   const [championFilter, setChampionFilter] = createSignal<number>();
   const [roleFilter, setRoleFilter] = createSignal("");
   const [statsQueueFilter, setStatsQueueFilter] = createSignal("");
+  const [clock, setClock] = createSignal(Date.now());
 
   const visibleMatches = createMemo(() => filterMatches(state.matches()?.matches ?? [], queue()));
   const summary = createMemo(() => summarizeMatches(visibleMatches()));
@@ -75,6 +76,14 @@ export function SummonerPage() {
     [...new Set(state.championStats().map((entry) => entry.championId))].sort((a, b) =>
       (champName(a) || String(a)).localeCompare(champName(b) || String(b)),
     ),
+  );
+  const refreshCooldownSeconds = createMemo(() => {
+    const cooldownUntil = state.profile()?.refresh.cooldownUntil;
+    return cooldownUntil ? Math.max(0, Math.ceil((cooldownUntil - clock()) / 1_000)) : 0;
+  });
+  const refreshProviderLabel = createMemo(
+    () =>
+      state.sources().find((provider) => provider.id === state.source())?.label ?? state.source(),
   );
 
   function remember(player: PlayerRef) {
@@ -116,6 +125,11 @@ export function SummonerPage() {
       : await invoke<PlayerRef | null>("get_current_player_ref").catch(() => null);
     if (current) await search(current);
     else if (history()[0]) await search(history()[0]);
+  });
+
+  onMount(() => {
+    const timer = window.setInterval(() => setClock(Date.now()), 1_000);
+    onCleanup(() => window.clearInterval(timer));
   });
 
   return (
@@ -270,8 +284,16 @@ export function SummonerPage() {
               </div>
               <div class="summoner-profile-actions">
                 <span>Fetched {formatDate(profile().fetchedAt)}</span>
-                <button type="button" onClick={() => void state.refresh()}>
-                  再読み込み
+                <button
+                  type="button"
+                  disabled={state.status() === "loading" || refreshCooldownSeconds() > 0}
+                  onClick={() => void state.refresh()}
+                >
+                  {profile().refresh.siteRefresh
+                    ? refreshCooldownSeconds() > 0
+                      ? `更新まで ${refreshCooldownSeconds()}秒`
+                      : `${refreshProviderLabel()}を更新`
+                    : "再読み込み"}
                 </button>
               </div>
               <div class="summoner-rank-grid">
