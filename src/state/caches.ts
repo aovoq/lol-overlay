@@ -72,6 +72,19 @@ export function makeCache<T>(fetcher: (key: string) => Promise<T>) {
 export const tierCache = makeCache<TierEntry[]>((role) => invoke("get_tier_list", { role }));
 
 export const counterCache = makeCache<CounterEntry[]>((key) => {
+  if (
+    import.meta.env.DEV &&
+    new URLSearchParams(window.location.search).has("desktop-test") &&
+    new URLSearchParams(window.location.search).has("counter-mock")
+  ) {
+    return Promise.resolve(
+      [103, 238, 64, 81, 157, 35, 266, 22].map((championId, index) => ({
+        championId,
+        winRate: 0.614 - index * 0.019,
+        games: 1_200 - index * 80,
+      })),
+    );
+  }
   const [champ, role] = key.split("|");
   return invoke("get_counters", { championId: Number(champ), role });
 });

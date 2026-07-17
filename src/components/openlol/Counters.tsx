@@ -1,5 +1,5 @@
 import { createMemo, For, Show } from "solid-js";
-import { assetsReady, champIconByKey, champName, fmtPct } from "../../assets";
+import { assetsReady, champIconByKey, champName, fmtCompact, fmtPct } from "../../assets";
 import { counterCache } from "../../state/caches";
 import type { CounterEntry } from "../../types";
 import { Icon } from "../Icon";
@@ -34,11 +34,16 @@ export function Counters(props: {
 
   return (
     <Show when={enemy()}>
-      <div>
-        <div class="text-hx-muted text-xs mb-1.5">
-          Counters for {champName(enemy()) || `#${enemy()}`}
+      <div class="min-w-0">
+        <div class="flex items-end justify-between gap-2 mb-1.5">
+          <span class="min-w-0 text-hx-muted text-xs truncate">
+            Counters for {champName(enemy()) || `#${enemy()}`}
+          </span>
+          <span class="shrink-0 text-[8px] font-bold tracking-[0.08em] text-hx-muted">
+            WR · GAMES
+          </span>
         </div>
-        <div class="flex gap-2.5 min-h-[46px] items-center">
+        <div class="flex flex-wrap gap-x-2.5 gap-y-2 min-h-[46px] items-start">
           <Show
             when={entry()?.state === "loading"}
             fallback={
@@ -55,7 +60,7 @@ export function Counters(props: {
                   <For each={counters()}>
                     {(c) => (
                       <div
-                        class="w-[34px] text-center flex flex-col gap-0.5 items-center"
+                        class="w-[34px] shrink-0 text-center flex flex-col gap-0.5 items-center"
                         onMouseEnter={() => props.onHoverChampion?.(c.championId)}
                         onMouseLeave={() => props.onHoverChampion?.(0)}
                       >
@@ -66,10 +71,18 @@ export function Counters(props: {
                             title={champName(c.championId)}
                           />
                         </Show>
-                        <span
-                          class={`text-[10px] ${c.winRate > 0.51 ? "text-hx-up" : "text-hx-muted"}`}
-                        >
-                          {fmtPct(c.winRate)}
+                        <span class="flex flex-col items-center leading-tight">
+                          <span
+                            class={`text-[10px] ${c.winRate > 0.51 ? "text-hx-up" : "text-hx-muted"}`}
+                          >
+                            {fmtPct(c.winRate)}
+                          </span>
+                          <span
+                            class="text-[8px] text-hx-muted"
+                            title={`${c.games.toLocaleString()} games`}
+                          >
+                            {fmtCompact(c.games)}
+                          </span>
                         </span>
                       </div>
                     )}
@@ -79,7 +92,7 @@ export function Counters(props: {
             }
           >
             <For each={Array.from({ length: 8 }, (_, i) => i)}>
-              {() => <div class="hx-skel w-8 h-11 rounded" />}
+              {() => <div class="hx-skel w-8 h-11 shrink-0 rounded" />}
             </For>
           </Show>
         </div>
