@@ -203,6 +203,29 @@ fn item_order_flattens_starting_then_core_then_shoes() {
 }
 
 #[test]
+fn item_reason_precedence_prefers_starting_then_boots_over_core() {
+    let mut row = summary();
+    // Boots also listed as a core item, and a core item also listed as a
+    // starting item: starting wins over core, boots wins over core.
+    row.starting_item_id_list = vec![vec![3508]];
+    row.core_item_id_list = vec![3508, 3047, 3031];
+    let mut recommendations = item_recommendations(item_ids(&row), |_| "item".into(), 50.0, 100);
+    apply_item_reasons(&mut recommendations, &row, 0.5, 100, "champion stats", None);
+    let reasons = recommendations
+        .iter()
+        .map(|item| (item.item_id, item.reason.as_str()))
+        .collect::<Vec<_>>();
+    assert_eq!(
+        reasons,
+        vec![
+            (3508, "Starting item · champion stats 50% WR · 100 games"),
+            (3047, "Boots"),
+            (3031, "Core item"),
+        ]
+    );
+}
+
+#[test]
 fn maps_skill_rune_and_counter_contracts() {
     let selected = selected();
     let skills = skill_order(&selected.value).expect("skills");

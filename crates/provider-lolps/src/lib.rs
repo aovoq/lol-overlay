@@ -97,6 +97,10 @@ impl BuildProvider for LolpsProvider {
             win_rate * 100.0,
             games,
         );
+        if items.is_empty() {
+            // Every id was 0 or a duplicate; treat it like any other empty payload.
+            return Err(ProviderError::NotEnoughData);
+        }
         apply_item_reasons(
             &mut items,
             &selected.value,
