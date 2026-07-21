@@ -1,0 +1,20 @@
+[package]
+name = "overlay-provider-lolps"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+overlay-provider = { workspace = true }
+overlay-types = { workspace = true }
+overlay-ddragon = { workspace = true }
+async-trait = { workspace = true }
+reqwest = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+tokio = { workspace = true }
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["rt", "macros"] }
+
+[lints]
+workspace = true

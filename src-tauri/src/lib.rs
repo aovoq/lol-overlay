@@ -36,6 +36,7 @@ use overlay_provider::{
 };
 use overlay_provider_deeplol::DeepLolProvider;
 use overlay_provider_lolalytics::LolalyticsProvider;
+use overlay_provider_lolps::LolpsProvider;
 use overlay_provider_opgg::OpggProvider;
 use overlay_provider_ugg::UggProvider;
 
@@ -63,30 +64,36 @@ fn create_player_stats_proxy(
     )
 }
 
+fn create_build_provider_proxy(
+    ddragon: Arc<DdragonClient>,
+    deeplol: Arc<DeepLolProvider>,
+    opgg: Arc<OpggProvider>,
+) -> overlay_provider::Result<BuildProviderProxy> {
+    let providers: [(ProviderKind, Arc<dyn BuildProvider>); 5] = [
+        (ProviderKind::Deeplol, deeplol),
+        (
+            ProviderKind::Ugg,
+            Arc::new(UggProvider::new(ddragon.clone())?),
+        ),
+        (
+            ProviderKind::Lolalytics,
+            Arc::new(LolalyticsProvider::new(ddragon.clone())?),
+        ),
+        (ProviderKind::Lolps, Arc::new(LolpsProvider::new(ddragon)?)),
+        (ProviderKind::Opgg, opgg),
+    ];
+    BuildProviderProxy::new(ProviderKind::Deeplol, providers)
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let ddragon = Arc::new(DdragonClient::new());
     let deeplol =
         Arc::new(DeepLolProvider::new(ddragon.clone()).expect("failed to build DeepLoL provider"));
-    let deeplol_build = deeplol.clone() as Arc<dyn BuildProvider>;
-    let ugg: Arc<dyn BuildProvider> =
-        Arc::new(UggProvider::new(ddragon.clone()).expect("failed to build u.gg provider"));
-    let lolalytics: Arc<dyn BuildProvider> = Arc::new(
-        LolalyticsProvider::new(ddragon.clone()).expect("failed to build LoLalytics provider"),
-    );
     let opgg =
         Arc::new(OpggProvider::new(ddragon.clone()).expect("failed to build op.gg provider"));
-    let opgg_build = opgg.clone() as Arc<dyn BuildProvider>;
-    let proxy = BuildProviderProxy::new(
-        ProviderKind::Deeplol,
-        [
-            (ProviderKind::Deeplol, deeplol_build),
-            (ProviderKind::Ugg, ugg),
-            (ProviderKind::Lolalytics, lolalytics),
-            (ProviderKind::Opgg, opgg_build),
-        ],
-    )
-    .expect("failed to build provider proxy");
+    let proxy = create_build_provider_proxy(ddragon, deeplol.clone(), opgg.clone())
+        .expect("failed to build provider proxy");
     let provider = Arc::new(proxy);
     let player_provider = Arc::new(
         create_player_stats_proxy(deeplol, opgg).expect("failed to build player stats proxy"),
@@ -249,6 +256,21 @@ mod player_registration_tests {
         assert_eq!(ids, vec!["deeplol", "opgg"]);
         assert!(proxy.set_active(ProviderKind::Ugg).is_err());
         assert!(proxy.set_active(ProviderKind::Lolalytics).is_err());
+        assert!(proxy.set_active(ProviderKind::Lolps).is_err());
+    }
+
+    #[test]
+    fn production_build_registry_contains_lolps() {
+        let ddragon = Arc::new(DdragonClient::new());
+        let deeplol = Arc::new(DeepLolProvider::new(ddragon.clone()).unwrap());
+        let opgg = Arc::new(OpggProvider::new(ddragon.clone()).unwrap());
+        let proxy = create_build_provider_proxy(ddragon, deeplol, opgg).unwrap();
+        let ids = proxy
+            .available()
+            .into_iter()
+            .map(|kind| kind.as_str())
+            .collect::<Vec<_>>();
+        assert_eq!(ids, vec!["deeplol", "lolalytics", "lolps", "opgg", "ugg"]);
     }
 }
 

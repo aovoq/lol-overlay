@@ -9,6 +9,7 @@ pub enum ProviderKind {
     Deeplol,
     Ugg,
     Lolalytics,
+    Lolps,
     Opgg,
 }
 
@@ -28,6 +29,7 @@ impl ProviderKind {
             "deeplol" => Some(Self::Deeplol),
             "ugg" => Some(Self::Ugg),
             "lolalytics" => Some(Self::Lolalytics),
+            "lolps" => Some(Self::Lolps),
             "opgg" => Some(Self::Opgg),
             _ => None,
         }
@@ -38,7 +40,27 @@ impl ProviderKind {
             Self::Deeplol => "deeplol",
             Self::Ugg => "ugg",
             Self::Lolalytics => "lolalytics",
+            Self::Lolps => "lolps",
             Self::Opgg => "opgg",
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn lolps_round_trips_through_parse_and_serde() {
+        assert_eq!(ProviderKind::parse("lolps"), Some(ProviderKind::Lolps));
+        assert_eq!(ProviderKind::Lolps.as_str(), "lolps");
+        assert_eq!(
+            serde_json::to_string(&ProviderKind::Lolps).unwrap(),
+            "\"lolps\""
+        );
+        assert_eq!(
+            serde_json::from_str::<ProviderKind>("\"lolps\"").unwrap(),
+            ProviderKind::Lolps
+        );
     }
 }

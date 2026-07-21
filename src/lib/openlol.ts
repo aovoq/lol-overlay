@@ -6,6 +6,7 @@ const DATA_SOURCE_LABELS: Record<string, string> = {
   deeplol: "DeepLoL",
   ugg: "u.gg",
   lolalytics: "LoLalytics",
+  lolps: "LOL.PS",
   opgg: "OP.GG",
 };
 

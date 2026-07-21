@@ -2,7 +2,7 @@
 
 This document defines how runtime data-source selection and fallback behavior
 should work. The goal is to keep provider behavior predictable when switching
-between DeepLoL and u.gg.
+between the registered build providers.
 
 ## Provider Selection
 
@@ -50,6 +50,20 @@ provider's semantics.
 - Counters use current patch matchups first. If the filtered result is empty,
   previous patch matchups may be used. If previous patch lookup fails, return
   the current patch result.
+
+## LOL.PS Specifics
+
+- Population is always Korea, Emerald+, latest patch. `set_platform_id` is
+  intentionally ignored; only the requested lane changes.
+- An absent lane uses LOL.PS lane `-1`, which selects the populated row with the
+  largest sample. An unrecognized non-empty role is an input error. A known lane
+  with no usable sample does not fall back to another role.
+- A 200 response with no populated `buildTypeId = 0` row may fall back from the
+  current patch to the previous LOL.PS patch. Transport, HTTP, rate-limit, and
+  schema errors do not trigger fallback.
+- Matchup-specific rune builds are not available through the anonymous JSON
+  contract and return `NotEnoughData`; authenticated or premium routes are not used.
+- LOL.PS is Build-only and must not be registered in `PlayerStatsProxy`.
 
 ## Mock Data
 

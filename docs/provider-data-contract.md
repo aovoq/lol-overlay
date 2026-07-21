@@ -25,7 +25,7 @@ the row tooltip. Provider routing never supplies a fallback automatically.
 | U.GG | Current-patch ranking response | Upstream denominator | Previous response when comparable | Adapter may use documented region-to-World or role fallback; provenance must disclose it |
 | OP.GG | Global tier response | Not exposed (`null`) | Not exposed (`null`) | None in the normalized adapter |
 | LoLalytics | 30-day aggregate | Upstream games | No comparable baseline (`null`) | None in the normalized adapter |
+| LOL.PS | KR, Emerald+, latest patch, requested lane | Upstream games | Ranking movement is not a win-rate delta (`null`) | Previous LOL.PS patch only when the current response has no usable sample |
 
 All build results pass through the shared normalizer in `BuildProviderProxy`. Invalid values return
 the typed `ProviderError::InvalidData`; they are never repaired into plausible-looking statistics.
-

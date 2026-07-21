@@ -2168,6 +2168,7 @@ dependencies = [
  "overlay-provider",
  "overlay-provider-deeplol",
  "overlay-provider-lolalytics",
+ "overlay-provider-lolps",
  "overlay-provider-opgg",
  "overlay-provider-ugg",
  "overlay-types",
@@ -2722,6 +2723,20 @@ dependencies = [
 
 [[package]]
 name = "overlay-provider-lolalytics"
+version = "0.4.1"
+dependencies = [
+ "async-trait",
+ "overlay-ddragon",
+ "overlay-provider",
+ "overlay-types",
+ "reqwest 0.12.28",
+ "serde",
+ "serde_json",
+ "tokio",
+]
+
+[[package]]
+name = "overlay-provider-lolps"
 version = "0.4.1"
 dependencies = [
  "async-trait",

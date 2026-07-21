@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { fmtTier, phaseChipLabel, roleLabel } from "./openlol";
+import { dataSourceLabel, fmtTier, phaseChipLabel, roleLabel } from "./openlol";
 
 describe("openlol formatters", () => {
   it("formats phase chips", () => {
@@ -17,5 +17,9 @@ describe("openlol formatters", () => {
 
   it("formats tiers", () => {
     expect(fmtTier("EMERALD")).toBe("Emerald");
+  });
+
+  it("labels the LOL.PS build provider", () => {
+    expect(dataSourceLabel("lolps")).toBe("LOL.PS");
   });
 });

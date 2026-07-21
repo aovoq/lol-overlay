@@ -87,7 +87,9 @@ where
     let source = ProviderKind::deserialize(deserializer)?;
     Ok(match source {
         ProviderKind::Deeplol | ProviderKind::Opgg => source,
-        ProviderKind::Ugg | ProviderKind::Lolalytics => default_player_stats_source(),
+        ProviderKind::Ugg | ProviderKind::Lolalytics | ProviderKind::Lolps => {
+            default_player_stats_source()
+        }
     })
 }
 
@@ -996,7 +998,7 @@ mod tests {
 
     #[test]
     fn settings_repair_build_only_player_sources() {
-        for unsupported in ["ugg", "lolalytics"] {
+        for unsupported in ["ugg", "lolalytics", "lolps"] {
             let settings: Settings = serde_json::from_value(json!({
                 "buildDataSource": unsupported,
                 "playerStatsSource": unsupported,

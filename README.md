@@ -9,7 +9,7 @@
 - チャンピオン選択中の tier list、counter、rune build 表示
 - LCU への rune page / summoner spell インポート
 - Borderless ゲーム上に重ねる透明・最前面・クリック透過 overlay
-- DeepLoL / u.gg のデータソース切り替え
+- DeepLoL / u.gg / LoLalytics / LOL.PS / OP.GG のBuildデータソース切り替え
 - macOS でも UI を触れる debug mock mode (`Ctrl+Shift+D`)
 - iPhoneをサブディスプレイとして使うExpoアプリとCloudflare Relay
 
@@ -40,6 +40,9 @@ crates/
   provider/                   BuildProvider trait, proxy, shared helpers
   provider-deeplol/           DeepLoL provider
   provider-ugg/               u.gg provider
+  provider-lolalytics/        LoLalytics provider
+  provider-lolps/             LOL.PS provider (KR / Emerald+ build data)
+  provider-opgg/              OP.GG provider
   types/                      shared serde payloads mirrored by src/types.ts
 ```
 
@@ -103,6 +106,7 @@ CI=true bun run check
 cargo test --workspace --lib
 cargo test -p overlay-provider-deeplol --lib -- --ignored --nocapture
 cargo test -p overlay-provider-ugg --lib -- --ignored --nocapture
+cargo test -p overlay-provider-lolps --lib -- --ignored --nocapture
 ```
 
 ## 実行時メモ
@@ -111,8 +115,8 @@ cargo test -p overlay-provider-ugg --lib -- --ignored --nocapture
   Windows + League client が必要。
 - LoL は Borderless mode で起動する。排他的 fullscreen には重ねられない。
 - LCU lockfile の探索と認証は `irelia` が行うため、通常は環境変数不要。
-- 外部データは Data Dragon / DeepLoL / u.gg から取得し、短い timeout と retry、
-  TTL 付き cache を通す。
+- 外部データは Data Dragon と選択中Build Providerから取得し、短い timeout と retry、
+  TTL 付き cache を通す。LOL.PSはKR・Emerald+固定で、ロールだけ現在のpositionに追従する。
 - `reference-repo.local/` は gitignore 済みのローカル参照用ディレクトリ。容量が
   大きい場合は内部の Rust `target/` に対して `cargo clean` すれば回収できる。
 

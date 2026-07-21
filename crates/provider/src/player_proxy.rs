@@ -219,7 +219,7 @@ impl PlayerStatsProxy {
                     label: match kind {
                         ProviderKind::Deeplol => "DeepLoL",
                         ProviderKind::Opgg => "OP.GG",
-                        ProviderKind::Ugg | ProviderKind::Lolalytics => {
+                        ProviderKind::Ugg | ProviderKind::Lolalytics | ProviderKind::Lolps => {
                             unreachable!("non-player provider passed constructor validation")
                         }
                     }
