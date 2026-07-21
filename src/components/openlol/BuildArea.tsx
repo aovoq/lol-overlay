@@ -1,5 +1,14 @@
 import { createMemo, For, Show } from "solid-js";
-import { champName, getPerk, getShard, getStyle } from "../../assets";
+import {
+  champName,
+  fmtPct,
+  fmtThousands,
+  getPerk,
+  getShard,
+  getStyle,
+  getStyleTree,
+  SHARD_ROWS,
+} from "../../assets";
 import { OPENLOL_MARK_SVG, roleLabel } from "../../lib/openlol";
 import { buildCache, buildKey } from "../../state/caches";
 import type { RuneBuild } from "../../types";
@@ -7,72 +16,137 @@ import { Icon } from "../Icon";
 import { ScrollArea } from "../ScrollArea";
 import { SectionError } from "./SectionError";
 
-function TreeHead(props: { styleId: number; primary: boolean }) {
-  const s = () => getStyle(props.styleId);
-  return (
-    <div
-      class="flex items-center gap-2 my-2 mx-0 font-hx-display font-semibold text-xs tracking-[0.16em] text-hx-accent"
-      style={!props.primary && s() ? { color: s()?.color ?? "" } : undefined}
-    >
-      <Show when={s()?.icon}>
-        <Icon url={s()?.icon ?? ""} class="w-4 h-4" />
-      </Show>
-      {(s()?.name ?? `Style ${props.styleId}`).toUpperCase()}
-    </div>
-  );
-}
-
-function KeystoneCard(props: { perkId: number }) {
+/** One rune-tree icon: full color + accent ring when picked, dimmed otherwise. */
+function RuneCell(props: { perkId: number; picked: boolean; keystone?: boolean }) {
   const perk = () => getPerk(props.perkId);
   return (
-    <div class="flex items-center gap-3 px-3 py-2 bg-hx-bg-raised border border-hx-keystone-border rounded-md">
-      <Icon url={perk()?.icon ?? ""} class="w-11 h-11" />
-      <span class="text-[15px] font-bold text-hx-text">{perk()?.name ?? `#${props.perkId}`}</span>
-    </div>
+    <Icon
+      url={perk()?.icon ?? ""}
+      title={perk()?.name ?? `#${props.perkId}`}
+      class={`rune-cell ${props.keystone ? "rune-cell--keystone" : ""} ${
+        props.picked ? (props.keystone ? "is-keystone-pick" : "is-picked") : ""
+      }`}
+    />
   );
 }
 
-function RuneRow(props: { perkId: number }) {
-  const perk = () => getPerk(props.perkId);
-  return (
-    <div class="flex items-center gap-2.5 px-2 py-1 text-[13px] text-hx-text">
-      <Icon url={perk()?.icon ?? ""} class="w-7 h-7" />
-      {perk()?.name ?? `#${props.perkId}`}
-    </div>
-  );
-}
+/** Full rune tree as a compact icon grid with the page's picks highlighted.
+ * Sub-tree columns hide the keystone row (sub picks never use it). */
+function TreeColumn(props: {
+  styleId: number;
+  label: string;
+  pickedIds: number[];
+  hideKeystones?: boolean;
+}) {
+  const style = () => getStyle(props.styleId);
+  const tree = () => getStyleTree(props.styleId);
+  const rows = () => (props.hideKeystones ? tree().slice(1) : tree());
+  const picked = () => new Set(props.pickedIds);
 
-function ShardChip(props: { shardId: number }) {
-  const info = () => getShard(props.shardId);
   return (
-    <div class="inline-flex items-center gap-1.5 border border-hx-border rounded-full px-2.5 py-1 text-[11px] text-hx-text">
-      <Show when={info().icon}>
-        <Icon url={info().icon} class="w-4 h-4 opacity-90" />
+    <div class="rune-tree-col">
+      <div class="rune-tree-head" style={style() ? { color: style()?.color } : undefined}>
+        <Show when={style()?.icon}>
+          <Icon url={style()?.icon ?? ""} class="rune-tree-head-icon" />
+        </Show>
+        {props.label} · {(style()?.name ?? "").toUpperCase()}
+      </div>
+      <Show
+        when={tree().length > 0}
+        fallback={
+          <div class="rune-tree-row">
+            <For each={props.pickedIds}>{(id) => <RuneCell perkId={id} picked={true} />}</For>
+          </div>
+        }
+      >
+        <For each={rows()}>
+          {(row, i) => (
+            <div class="rune-tree-row">
+              <For each={row}>
+                {(id) => (
+                  <RuneCell
+                    perkId={id}
+                    picked={picked().has(id)}
+                    keystone={!props.hideKeystones && i() === 0}
+                  />
+                )}
+              </For>
+            </div>
+          )}
+        </For>
       </Show>
-      {info().label}
+    </div>
+  );
+}
+
+/** 3×3 stat-shard picker with the page's picks highlighted. */
+function ShardGrid(props: { pickedIds: number[] }) {
+  const picked = () => new Set(props.pickedIds);
+  // Legacy ids (5002/5003) live outside the current rows — append them so a
+  // picked legacy shard never renders as "nothing selected".
+  const extras = () => {
+    const known = new Set(SHARD_ROWS.flat());
+    return props.pickedIds.filter((id) => !known.has(id));
+  };
+
+  return (
+    <div class="rune-tree-col">
+      <div class="rune-tree-head">SHARDS</div>
+      <For each={SHARD_ROWS}>
+        {(row) => (
+          <div class="rune-tree-row">
+            <For each={row}>
+              {(id) => {
+                const info = () => getShard(id);
+                return (
+                  <Icon
+                    url={info().icon}
+                    title={info().label}
+                    class={`rune-cell rune-cell--shard ${picked().has(id) ? "is-picked" : ""}`}
+                  />
+                );
+              }}
+            </For>
+          </div>
+        )}
+      </For>
+      <Show when={extras().length > 0}>
+        <div class="rune-tree-row">
+          <For each={extras()}>
+            {(id) => {
+              const info = () => getShard(id);
+              return (
+                <Icon
+                  url={info().icon}
+                  title={info().label}
+                  class="rune-cell rune-cell--shard is-picked"
+                />
+              );
+            }}
+          </For>
+        </div>
+      </Show>
     </div>
   );
 }
 
 function RunePage(props: { build: RuneBuild }) {
   const b = () => props.build;
-  const keystone = () => b().primaryPerkIds[0];
-  const minors = () => b().primaryPerkIds.slice(1);
 
   return (
-    <div class="flex flex-col gap-1.5">
-      <TreeHead styleId={b().primaryStyleId} primary={true} />
-      <Show when={keystone()}>{(id) => <KeystoneCard perkId={id()} />}</Show>
-      <For each={minors()}>{(id) => <RuneRow perkId={id} />}</For>
-
-      <TreeHead styleId={b().subStyleId} primary={false} />
-      <For each={b().subPerkIds}>{(id) => <RuneRow perkId={id} />}</For>
-
-      <span class="block mt-2 text-hx-muted font-hx-display font-semibold text-[11px] tracking-[0.16em]">
-        SHARDS
-      </span>
-      <div class="flex flex-wrap gap-2">
-        <For each={b().shardIds}>{(id) => <ShardChip shardId={id} />}</For>
+    <div class="rune-compact">
+      <div class="rune-compact-trees">
+        <TreeColumn styleId={b().primaryStyleId} label="MAIN" pickedIds={b().primaryPerkIds} />
+        <TreeColumn styleId={b().subStyleId} label="SUB" pickedIds={b().subPerkIds} hideKeystones />
+        <ShardGrid pickedIds={b().shardIds} />
+      </div>
+      <div class="rune-compact-meta">
+        <span>
+          Win Rate <strong>{fmtPct(b().winRate)}</strong>
+        </span>
+        <span>
+          Games <strong>{fmtThousands(b().games)}</strong>
+        </span>
       </div>
     </div>
   );
@@ -81,8 +155,8 @@ function RunePage(props: { build: RuneBuild }) {
 function BuildSkeleton() {
   return (
     <div class="flex flex-col gap-1.5">
-      <div class="hx-skel h-[62px] rounded-md" />
-      <For each={[0, 1, 2, 3, 4]}>{() => <div class="hx-skel h-9 rounded-md" />}</For>
+      <div class="hx-skel h-3.5 w-16 rounded" />
+      <For each={[0, 1, 2]}>{() => <div class="hx-skel h-7 w-24 rounded-md" />}</For>
     </div>
   );
 }

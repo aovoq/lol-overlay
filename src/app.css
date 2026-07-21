@@ -329,6 +329,228 @@
     border-radius: 4px;
   }
 
+  /* ---- compact champion build (stat-site density) ---- */
+
+  /* Stats strip: small label above a bold value, inline cells. */
+  .stat-strip {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    column-gap: 20px;
+    row-gap: 6px;
+    padding: 8px 2px;
+  }
+  .stat-cell {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    min-width: 0;
+  }
+  .stat-cell > span {
+    color: var(--hx-muted);
+    font-size: 8px;
+    font-weight: 700;
+    letter-spacing: 0.14em;
+  }
+  .stat-cell > strong {
+    color: var(--hx-text-strong);
+    font-size: 15px;
+    font-weight: 800;
+    font-variant-numeric: tabular-nums;
+    line-height: 1.1;
+  }
+
+  /* Rune trees: full-grid icons, picks lit + accent-ringed, rest dimmed. */
+  .rune-compact {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 6px 0 2px;
+  }
+  .rune-compact-trees {
+    display: flex;
+    flex-wrap: wrap;
+    column-gap: 20px;
+    row-gap: 10px;
+  }
+  .rune-tree-col {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+  }
+  .rune-tree-head {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    margin-bottom: 2px;
+    color: var(--hx-muted);
+    font-size: 8px;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    white-space: nowrap;
+  }
+  .rune-tree-head-icon {
+    width: 11px;
+    height: 11px;
+  }
+  .rune-tree-row {
+    display: flex;
+    gap: 4px;
+    align-items: center;
+    min-height: 26px;
+  }
+  .rune-cell {
+    width: 26px;
+    height: 26px;
+    border-radius: 50%;
+    opacity: 0.26;
+    filter: grayscale(1);
+    transition:
+      opacity 120ms ease,
+      filter 120ms ease,
+      box-shadow 120ms ease;
+  }
+  .rune-cell--keystone {
+    width: 30px;
+    height: 30px;
+  }
+  .rune-cell--shard {
+    width: 20px;
+    height: 20px;
+  }
+  .rune-cell.is-picked,
+  .rune-cell.is-keystone-pick {
+    opacity: 1;
+    filter: none;
+  }
+  .rune-cell.is-picked {
+    box-shadow: 0 0 0 1.5px var(--hx-accent-dim);
+  }
+  .rune-cell.is-keystone-pick {
+    box-shadow:
+      0 0 0 2px var(--hx-accent),
+      0 0 10px var(--hx-accent-wash);
+  }
+  .rune-compact-meta {
+    display: flex;
+    gap: 16px;
+    color: var(--hx-muted);
+    font-size: 10px;
+  }
+  .rune-compact-meta strong {
+    margin-left: 2px;
+    color: var(--hx-text);
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* Skill matrix: Q/W/E/R rows × 18 level cells, taken cells filled. */
+  .skill-matrix {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    width: fit-content;
+    max-width: 100%;
+  }
+  .skill-matrix-row {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+  }
+  .skill-matrix-head {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex: none;
+    width: 24px;
+    height: 24px;
+    margin-right: 4px;
+    overflow: hidden;
+    border: 1px solid var(--hx-border);
+    border-radius: 3px;
+    background: var(--hx-bg-raised);
+  }
+  .skill-matrix-head-icon {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+  .skill-matrix-head-key {
+    position: relative;
+    color: var(--hx-accent-dim);
+    font-size: 10px;
+    font-weight: 800;
+    line-height: 1;
+  }
+  .skill-matrix-head.has-icon .skill-matrix-head-key {
+    position: absolute;
+    right: 0;
+    bottom: 0;
+    padding: 0 2px;
+    border-top-left-radius: 3px;
+    background: var(--hx-skill-key-bg);
+    color: var(--hx-text);
+    font-size: 8px;
+  }
+  .skill-matrix-cell {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 15px;
+    height: 17px;
+    border-radius: 2px;
+    background: var(--hx-bg-raised);
+    color: transparent;
+    font-size: 8px;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    line-height: 1;
+  }
+  .skill-matrix-cell.is-taken {
+    background: var(--hx-accent);
+    color: var(--hx-bg);
+  }
+
+  /* Item path: build order as icon → icon → icon. */
+  .item-path {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 4px;
+  }
+  .item-path-slot {
+    display: flex;
+  }
+  .item-path-icon {
+    width: 30px;
+    height: 30px;
+    border: 1px solid var(--hx-border);
+    border-radius: 4px;
+  }
+  .item-path-arrow {
+    width: 7px;
+    height: 7px;
+    margin: 0 2px;
+    border-top: 1.5px solid var(--hx-accent-dim);
+    border-right: 1.5px solid var(--hx-accent-dim);
+    transform: rotate(45deg);
+  }
+
+  .build-extra-block {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  .build-extra-label {
+    color: var(--hx-accent-dim);
+    font-size: 8px;
+    font-weight: 700;
+    letter-spacing: 0.14em;
+  }
+
   .control-root {
     height: 100vh;
     min-height: 0;
@@ -1046,29 +1268,11 @@
   }
 
   .desktop-build-extras {
-    border-top: 1px solid var(--hx-border);
-  }
-
-  .desktop-item-build {
     display: flex;
-    align-items: center;
-    gap: 7px;
-    padding: 10px 12px;
-  }
-
-  .desktop-item-build > span {
-    width: 96px;
-    color: var(--hx-accent-dim);
-    font-size: 9px;
-    font-weight: 700;
-    letter-spacing: 0.14em;
-  }
-
-  .desktop-item-build img {
-    width: 34px;
-    height: 34px;
-    border: 1px solid var(--hx-border);
-    border-radius: 4px;
+    flex-direction: column;
+    gap: 12px;
+    padding: 12px 0 4px;
+    border-top: 1px solid var(--hx-border);
   }
 
   .desktop-build-details-status {

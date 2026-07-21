@@ -44,6 +44,9 @@ export interface StyleInfo {
 }
 const styleById = new Map<number, StyleInfo>();
 
+/** Style id → rune ids per slot ([keystones, row2, row3, row4]). */
+const styleTreeById = new Map<number, number[][]>();
+
 export interface SpellInfo {
   name: string;
   icon: string;
@@ -85,6 +88,14 @@ const SHARDS: Record<number, ShardInfo> = {
   5002: { label: "Armor", icon: "" },
   5003: { label: "Magic Resist", icon: "" },
 };
+
+/** Shard picker rows [offense, flex, defense] — mirrors
+ * crates/provider-deeplol/src/runes.rs (OFFENSE/FLEX/DEFENSE_SHARDS). */
+export const SHARD_ROWS: number[][] = [
+  [5008, 5005, 5007],
+  [5008, 5010, 5001],
+  [5011, 5013, 5001],
+];
 
 // ---- accessors ----
 
@@ -136,6 +147,11 @@ export const getPerk = (id: number) => {
 export const getStyle = (id: number) => {
   assetsReady();
   return styleById.get(id);
+};
+/** Rune ids per slot for a style ([] while assets are loading). */
+export const getStyleTree = (id: number): number[][] => {
+  assetsReady();
+  return styleTreeById.get(id) ?? [];
 };
 export const getSpell = (key: number) => {
   assetsReady();
@@ -250,6 +266,10 @@ async function load(): Promise<void> {
         icon: `${DD}/cdn/img/${style.icon}`,
         color: STYLE_COLORS[style.id] ?? "#c8aa6e",
       });
+      styleTreeById.set(
+        style.id,
+        (style.slots as any[]).map((slot) => (slot.runes as any[]).map((rune) => Number(rune.id))),
+      );
       for (const slot of style.slots) {
         for (const rune of slot.runes) {
           perkById.set(rune.id, { name: rune.name, icon: `${DD}/cdn/img/${rune.icon}` });

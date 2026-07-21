@@ -1,6 +1,6 @@
 import { createMemo, For, Show } from "solid-js";
 import { fmtPct, fmtThousands, getSpell } from "../../assets";
-import { buildCache, buildKey } from "../../state/caches";
+import { buildCache, buildKey, tierCache } from "../../state/caches";
 import {
   importSpells,
   setSpellsFlipped as persistSpellsFlipped,
@@ -8,6 +8,15 @@ import {
   spellsFlipped as spellsFlippedSetting,
 } from "../../state/settings";
 import { Icon } from "../Icon";
+
+function StatCell(props: { label: string; value: string }) {
+  return (
+    <div class="stat-cell">
+      <span>{props.label}</span>
+      <strong>{props.value}</strong>
+    </div>
+  );
+}
 
 export function StatsRow(props: { championId: number; role: string; enemyId?: number | null }) {
   const role = createMemo(() => props.role);
@@ -25,6 +34,18 @@ export function StatsRow(props: { championId: number; role: string; enemyId?: nu
     return e.value;
   });
 
+  /** Role-wide champion stats (WR/pick/ban) — the rune page's own WR/games
+   * are shown under the rune grid instead. */
+  const tierEntry = createMemo(() => {
+    if (props.championId <= 0 || !role()) return null;
+    const e = tierCache.get(role());
+    if (e.state !== "ok") return null;
+    return e.value.find((t) => t.championId === props.championId) ?? null;
+  });
+
+  const winRate = createMemo(() => tierEntry()?.winRate ?? build()?.winRate ?? null);
+  const games = createMemo(() => tierEntry()?.games ?? build()?.games ?? null);
+
   const spells = createMemo(() => {
     const b = build();
     if (!b) return [];
@@ -34,16 +55,30 @@ export function StatsRow(props: { championId: number; role: string; enemyId?: nu
   return (
     <Show when={build()}>
       {(b) => (
-        <div class="flex items-center gap-2 py-2.5">
-          <span class="font-bold text-sm text-hx-text">{fmtPct(b().winRate)} WR</span>
-          <span class="text-hx-muted"> · {fmtThousands(b().games)} games</span>
+        <div class="stat-strip">
+          <Show when={winRate() !== null}>
+            <StatCell label="WIN RATE" value={fmtPct(winRate() ?? 0)} />
+          </Show>
+          <Show when={tierEntry()}>
+            {(t) => (
+              <>
+                <StatCell label="PICK RATE" value={fmtPct(t().pickRate)} />
+                <StatCell label="BAN RATE" value={fmtPct(t().banRate)} />
+              </>
+            )}
+          </Show>
+          <Show when={games() !== null}>
+            <StatCell label="GAMES" value={fmtThousands(games() ?? 0)} />
+          </Show>
+
           <span class="flex-1" />
+
           <div class="flex gap-1">
             <For each={spells()}>
               {(id) => (
                 <Icon
                   url={getSpell(id)?.icon ?? ""}
-                  class="w-[26px] h-[26px] rounded border border-hx-border"
+                  class="w-[22px] h-[22px] rounded border border-hx-border"
                   title={getSpell(id)?.name ?? `Spell ${id}`}
                 />
               )}
@@ -52,13 +87,13 @@ export function StatsRow(props: { championId: number; role: string; enemyId?: nu
           <Show when={b().spellIds.length >= 2}>
             <button
               type="button"
-              class="bg-none border border-hx-border rounded px-2 py-1 font-hx-display font-semibold text-[10px] tracking-widest text-hx-accent-dim hover:text-hx-accent hover:border-hx-accent-dim cursor-pointer"
+              class="bg-none border border-hx-border rounded px-1.5 py-0.5 font-hx-display font-semibold text-[9px] tracking-widest text-hx-accent-dim hover:text-hx-accent hover:border-hx-accent-dim cursor-pointer"
               onClick={() => persistSpellsFlipped(!spellsFlippedSetting())}
             >
               FLIP
             </button>
           </Show>
-          <label class="flex items-center gap-1.5 ml-1.5 text-xs text-hx-text cursor-pointer">
+          <label class="flex items-center gap-1 ml-1 text-[11px] text-hx-text cursor-pointer">
             <input
               type="checkbox"
               checked={importSpells()}

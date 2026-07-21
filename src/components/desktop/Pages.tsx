@@ -6,7 +6,6 @@ import {
   champIconByKey,
   champName,
   fmtPct,
-  itemIconUrl,
   profileIconUrl,
 } from "../../assets";
 import { matchRank, normalizeForSearch, searchChampions } from "../../lib/championSearch";
@@ -26,10 +25,11 @@ import { autoImport, dataSource, developerMode, importSpells } from "../../state
 import { DebugPanel } from "../DebugPanel";
 import { Icon } from "../Icon";
 import { LiveDashboard } from "../ingame/LiveDashboard";
-import { SkillOrder } from "../ingame/SkillOrder";
 import { BuildArea } from "../openlol/BuildArea";
 import { Counters } from "../openlol/Counters";
 import { ImportButton } from "../openlol/ImportButton";
+import { ItemPath } from "../openlol/ItemPath";
+import { SkillMatrix } from "../openlol/SkillMatrix";
 import { StatsRow } from "../openlol/StatsRow";
 import { ScrollArea } from "../ScrollArea";
 import { SettingsForm } from "../SettingsPanel";
@@ -441,26 +441,24 @@ export function ChampionPage() {
               </h2>
               <span>{selectedEnemy() ? "MATCHUP BUILD" : "BEST BUILD"}</span>
             </div>
-            <BuildArea championId={championId()} role={selectedRole()} enemyId={selectedEnemy()} />
             <StatsRow championId={championId()} role={selectedRole()} enemyId={selectedEnemy()} />
+            <BuildArea championId={championId()} role={selectedRole()} enemyId={selectedEnemy()} />
             <Show when={detailsValue()}>
               {(value) => (
                 <div class="desktop-build-extras">
-                  <SkillOrder
-                    order={value().skillOrder}
-                    championImageId={champion()?.imageId ?? ""}
-                  />
+                  <Show when={value().skillOrder}>
+                    <div class="build-extra-block">
+                      <span class="build-extra-label">SKILL ORDER</span>
+                      <SkillMatrix
+                        order={value().skillOrder}
+                        championImageId={champion()?.imageId ?? ""}
+                      />
+                    </div>
+                  </Show>
                   <Show when={value().items.length > 0}>
-                    <div class="desktop-item-build">
-                      <span>ITEM BUILD</span>
-                      <For each={value().items}>
-                        {(item) => (
-                          <Icon
-                            url={itemIconUrl(item.itemId)}
-                            title={`${item.name} · ${item.reason}`}
-                          />
-                        )}
-                      </For>
+                    <div class="build-extra-block">
+                      <span class="build-extra-label">ITEM BUILD</span>
+                      <ItemPath items={value().items} />
                     </div>
                   </Show>
                 </div>
