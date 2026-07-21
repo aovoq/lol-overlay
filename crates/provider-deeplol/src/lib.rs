@@ -26,8 +26,8 @@ use async_trait::async_trait;
 use overlay_ddragon::{normalize, ChampionMaps, DdragonClient};
 use overlay_provider::{
     counter_entries_from_subject_losses, item_recommendations, rune_recommendation, BuildProvider,
-    CounterEntry, ItemRecommendation, ProviderError, Result, RuneBuild, RuneRecommendation,
-    SkillOrder, TierEntry, MIN_MATCHUP_GAMES,
+    CounterEntry, ItemRecommendation, ProviderError, RequestRetryExt, Result, RuneBuild,
+    RuneRecommendation, SkillOrder, TierEntry, MIN_MATCHUP_GAMES,
 };
 use overlay_types::{GameSnapshot, PlayerRef};
 use serde::de::DeserializeOwned;
@@ -49,8 +49,6 @@ const DEEPLOL_RENEW: &str = "https://renew.deeplol.gg";
 /// …and at least this many usable rune samples from `/matchup/OTP_match`.
 const MIN_RUNE_SAMPLES: usize = 3;
 const CACHE_TTL: Duration = Duration::from_hours(6);
-const RETRY_ATTEMPTS: usize = 2;
-const RETRY_DELAY: Duration = Duration::from_millis(250);
 
 fn diagnostic_fragment(body: &str) -> String {
     body.chars()
@@ -724,36 +722,6 @@ impl BuildProvider for DeepLolProvider {
             champs.id_to_name.get(&champion_id)?.clone(),
             champs.id_to_image.get(&champion_id)?.clone(),
         ))
-    }
-}
-
-trait RequestBuilderRetryExt {
-    async fn send_with_retry(self) -> std::result::Result<reqwest::Response, reqwest::Error>;
-}
-
-impl RequestBuilderRetryExt for reqwest::RequestBuilder {
-    async fn send_with_retry(self) -> std::result::Result<reqwest::Response, reqwest::Error> {
-        let request = self;
-        let mut attempt = 0;
-        loop {
-            let Some(next) = request.try_clone() else {
-                return request.send().await;
-            };
-            match next.send().await {
-                Ok(response) if response.status().is_server_error() && attempt < RETRY_ATTEMPTS => {
-                    attempt += 1;
-                    tokio::time::sleep(RETRY_DELAY * attempt as u32).await;
-                }
-                Err(err)
-                    if (err.is_connect() || err.is_timeout() || err.is_request())
-                        && attempt < RETRY_ATTEMPTS =>
-                {
-                    attempt += 1;
-                    tokio::time::sleep(RETRY_DELAY * attempt as u32).await;
-                }
-                result => return result,
-            }
-        }
     }
 }
 

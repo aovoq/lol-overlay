@@ -3,7 +3,7 @@
 use std::collections::HashMap;
 use std::time::{Duration, Instant};
 
-use overlay_provider::{ProviderError, Result};
+use overlay_provider::{ProviderError, RequestRetryExt, Result, MAC_USER_AGENT};
 use serde_json::Value;
 use tokio::sync::RwLock;
 
@@ -16,8 +16,6 @@ const API_VERSIONS_URL: &str =
     "https://static.bigbrain.gg/assets/lol/riot_patch_update/prod/ugg/ugg-api-versions.json";
 const STATS_BASE: &str = "https://stats2.u.gg/lol/1.5";
 const CACHE_TTL: Duration = Duration::from_hours(6);
-const RETRY_ATTEMPTS: usize = 2;
-const RETRY_DELAY: Duration = Duration::from_millis(250);
 
 pub type UggApiVersions = HashMap<String, HashMap<String, String>>;
 
@@ -40,10 +38,7 @@ impl UggApi {
     pub fn new() -> Result<Self> {
         let http = reqwest::Client::builder()
             .timeout(Duration::from_secs(8))
-            .user_agent(
-                "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) \
-                 AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36",
-            )
+            .user_agent(MAC_USER_AGENT)
             .build()?;
         Ok(Self {
             http,
@@ -334,36 +329,6 @@ impl UggApi {
             .await
             .insert(cache_key, data.clone());
         Ok(data)
-    }
-}
-
-trait RequestBuilderRetryExt {
-    async fn send_with_retry(self) -> std::result::Result<reqwest::Response, reqwest::Error>;
-}
-
-impl RequestBuilderRetryExt for reqwest::RequestBuilder {
-    async fn send_with_retry(self) -> std::result::Result<reqwest::Response, reqwest::Error> {
-        let request = self;
-        let mut attempt = 0;
-        loop {
-            let Some(next) = request.try_clone() else {
-                return request.send().await;
-            };
-            match next.send().await {
-                Ok(response) if response.status().is_server_error() && attempt < RETRY_ATTEMPTS => {
-                    attempt += 1;
-                    tokio::time::sleep(RETRY_DELAY * attempt as u32).await;
-                }
-                Err(err)
-                    if (err.is_connect() || err.is_timeout() || err.is_request())
-                        && attempt < RETRY_ATTEMPTS =>
-                {
-                    attempt += 1;
-                    tokio::time::sleep(RETRY_DELAY * attempt as u32).await;
-                }
-                result => return result,
-            }
-        }
     }
 }
 

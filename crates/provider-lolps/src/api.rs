@@ -1,14 +1,10 @@
 //! Anonymous LOL.PS JSON transport with a short TTL cache.
 
-use std::collections::HashMap;
 use std::sync::Arc;
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
-use overlay_provider::{ProviderError, Result};
-use reqwest::header::{CONTENT_TYPE, RETRY_AFTER};
-use serde::de::DeserializeOwned;
+use overlay_provider::{fetch_json, ProviderError, Result, TtlCache, WINDOWS_USER_AGENT};
 use serde_json::Value;
-use tokio::sync::RwLock;
 
 use crate::types::{Selected, SummaryResponse, SummaryRow, TierResponse, VersionInfo};
 
@@ -17,28 +13,15 @@ const LOLPS_BASE: &str = "https://lol.ps";
 // aligned with that freshness contract instead of inheriting the 6-hour TTL
 // used by providers whose datasets update less frequently.
 const CACHE_TTL: Duration = Duration::from_mins(30);
-const RETRY_ATTEMPTS: usize = 2;
-const RETRY_DELAY: Duration = Duration::from_millis(250);
 const REGION: i64 = 0;
 const TIER: i64 = 2;
-
-struct Cached<T> {
-    loaded_at: Instant,
-    value: Arc<T>,
-}
-
-impl<T> Cached<T> {
-    fn fresh(&self) -> Option<Arc<T>> {
-        (self.loaded_at.elapsed() < CACHE_TTL).then(|| self.value.clone())
-    }
-}
 
 pub(crate) struct LolpsApi {
     http: reqwest::Client,
     base_url: String,
-    versions: RwLock<Option<Cached<Vec<VersionInfo>>>>,
-    summaries: RwLock<HashMap<(i64, i64, i64), Cached<SummaryResponse>>>,
-    tiers: RwLock<HashMap<(i64, i64), Cached<TierResponse>>>,
+    versions: TtlCache<(), Vec<VersionInfo>>,
+    summaries: TtlCache<(i64, i64, i64), SummaryResponse>,
+    tiers: TtlCache<(i64, i64), TierResponse>,
 }
 
 impl LolpsApi {
@@ -49,17 +32,14 @@ impl LolpsApi {
     pub(crate) fn with_base_url(base_url: &str) -> Result<Self> {
         let http = reqwest::Client::builder()
             .timeout(Duration::from_secs(8))
-            .user_agent(
-                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) \
-                 AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36",
-            )
+            .user_agent(WINDOWS_USER_AGENT)
             .build()?;
         Ok(Self {
             http,
             base_url: base_url.trim_end_matches('/').to_string(),
-            versions: RwLock::new(None),
-            summaries: RwLock::new(HashMap::new()),
-            tiers: RwLock::new(HashMap::new()),
+            versions: TtlCache::new(CACHE_TTL),
+            summaries: TtlCache::new(CACHE_TTL),
+            tiers: TtlCache::new(CACHE_TTL),
         })
     }
 
@@ -116,29 +96,30 @@ impl LolpsApi {
     }
 
     pub async fn versions(&self) -> Result<Arc<Vec<VersionInfo>>> {
-        if let Some(hit) = self.versions.read().await.as_ref().and_then(Cached::fresh) {
-            return Ok(hit);
-        }
-        // Any champion page exposes the same version metadata. Champion 41 is
-        // a stable, arbitrary page used only to obtain the SvelteKit payload.
-        let value: Value = self
-            .fetch_json(&format!("{}/champ/41/__data.json", self.base_url))
-            .await?;
-        let mut versions = decode_versions(&value)?;
-        // LOL.PS currently marks every retained version `isActive: true`, so
-        // that field cannot identify the current patch. ISO patch_date is the
-        // effective primary key; version_id breaks ties deterministically.
-        versions.sort_by(|a, b| {
-            b.patch_date
-                .cmp(&a.patch_date)
-                .then_with(|| b.version_id.cmp(&a.version_id))
-        });
-        let value = Arc::new(versions);
-        *self.versions.write().await = Some(Cached {
-            loaded_at: Instant::now(),
-            value: value.clone(),
-        });
-        Ok(value)
+        self.versions
+            .get_or_fetch((), || async {
+                // Any champion page exposes the same version metadata.
+                // Champion 41 is a stable, arbitrary page used only to obtain
+                // the SvelteKit payload.
+                let value: Value = fetch_json(
+                    &self.http,
+                    &format!("{}/champ/41/__data.json", self.base_url),
+                    "LOL.PS",
+                )
+                .await?;
+                let mut versions = decode_versions(&value)?;
+                // LOL.PS currently marks every retained version
+                // `isActive: true`, so that field cannot identify the current
+                // patch. ISO patch_date is the effective primary key;
+                // version_id breaks ties deterministically.
+                versions.sort_by(|a, b| {
+                    b.patch_date
+                        .cmp(&a.patch_date)
+                        .then_with(|| b.version_id.cmp(&a.version_id))
+                });
+                Ok(versions)
+            })
+            .await
     }
 
     async fn summary_at(
@@ -148,103 +129,29 @@ impl LolpsApi {
         lane_id: i64,
     ) -> Result<SummaryRow> {
         let key = (version_id, champion_id, lane_id);
-        if let Some(hit) = self
+        let value = self
             .summaries
-            .read()
-            .await
-            .get(&key)
-            .and_then(Cached::fresh)
-        {
-            return select_summary(&hit, champion_id, lane_id);
-        }
-        let url = format!(
-            "{}/api/champ/{champion_id}/summary.json?region={REGION}&version={version_id}&tier={TIER}&lane={lane_id}",
-            self.base_url
-        );
-        let response: SummaryResponse = self.fetch_json(&url).await?;
-        let value = Arc::new(response);
-        self.summaries.write().await.insert(
-            key,
-            Cached {
-                loaded_at: Instant::now(),
-                value: value.clone(),
-            },
-        );
+            .get_or_fetch(key, || async {
+                let url = format!(
+                    "{}/api/champ/{champion_id}/summary.json?region={REGION}&version={version_id}&tier={TIER}&lane={lane_id}",
+                    self.base_url
+                );
+                fetch_json(&self.http, &url, "LOL.PS").await
+            })
+            .await?;
         select_summary(&value, champion_id, lane_id)
     }
 
     async fn tier_at(&self, version_id: i64, lane_id: i64) -> Result<Arc<TierResponse>> {
-        let key = (version_id, lane_id);
-        if let Some(hit) = self.tiers.read().await.get(&key).and_then(Cached::fresh) {
-            return Ok(hit);
-        }
-        let url = format!(
-            "{}/api/statistics/tierlist.json?region={REGION}&version={version_id}&tier={TIER}&lane={lane_id}",
-            self.base_url
-        );
-        let value: Arc<TierResponse> = Arc::new(self.fetch_json(&url).await?);
-        self.tiers.write().await.insert(
-            key,
-            Cached {
-                loaded_at: Instant::now(),
-                value: value.clone(),
-            },
-        );
-        Ok(value)
-    }
-
-    async fn fetch_json<T: DeserializeOwned>(&self, url: &str) -> Result<T> {
-        let response = self.send_with_retry(url).await?;
-        if response.status().as_u16() == 429 {
-            let retry_after = response
-                .headers()
-                .get(RETRY_AFTER)
-                .and_then(|value| value.to_str().ok())
-                .and_then(|value| value.parse().ok());
-            return Err(ProviderError::RateLimited { retry_after });
-        }
-        if !response.status().is_success() {
-            let status = response.status();
-            let body = response.text().await.unwrap_or_default();
-            let diagnostic: String = body.chars().take(512).collect();
-            return Err(ProviderError::Other(format!(
-                "LOL.PS HTTP {status}: {diagnostic}"
-            )));
-        }
-        let is_json = response
-            .headers()
-            .get(CONTENT_TYPE)
-            .and_then(|value| value.to_str().ok())
-            .is_some_and(|value| value.starts_with("application/json"));
-        if !is_json {
-            return Err(ProviderError::InvalidData(
-                "LOL.PS returned a non-JSON response".into(),
-            ));
-        }
-        let body = response.bytes().await?;
-        serde_json::from_slice(&body)
-            .map_err(|error| ProviderError::InvalidData(format!("LOL.PS JSON: {error}")))
-    }
-
-    async fn send_with_retry(&self, url: &str) -> Result<reqwest::Response> {
-        let mut attempt = 0;
-        loop {
-            match self.http.get(url).send().await {
-                Ok(response) if response.status().is_server_error() && attempt < RETRY_ATTEMPTS => {
-                    attempt += 1;
-                    tokio::time::sleep(RETRY_DELAY * attempt as u32).await;
-                }
-                Err(error)
-                    if (error.is_connect() || error.is_timeout() || error.is_request())
-                        && attempt < RETRY_ATTEMPTS =>
-                {
-                    attempt += 1;
-                    tokio::time::sleep(RETRY_DELAY * attempt as u32).await;
-                }
-                Ok(response) => return Ok(response),
-                Err(error) => return Err(error.into()),
-            }
-        }
+        self.tiers
+            .get_or_fetch((version_id, lane_id), || async {
+                let url = format!(
+                    "{}/api/statistics/tierlist.json?region={REGION}&version={version_id}&tier={TIER}&lane={lane_id}",
+                    self.base_url
+                );
+                fetch_json(&self.http, &url, "LOL.PS").await
+            })
+            .await
     }
 }
 

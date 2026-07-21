@@ -7,21 +7,17 @@
 //! the in-game poller asks for items every couple of seconds and the
 //! champ-select UI re-invokes commands on every render.
 
-use std::collections::HashMap;
 use std::sync::Arc;
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
-use overlay_provider::Result;
+use overlay_provider::{RequestRetryExt, Result, TtlCache, MAC_USER_AGENT};
 use reqwest::header::{HeaderMap, HeaderValue, REFERER};
 use serde::de::DeserializeOwned;
-use tokio::sync::RwLock;
 
 use crate::types::{CounterResponse, EarlySetResponse, ItemSetResponse, TierResponse};
 
 const MEGA_BASE: &str = "https://a1.lolalytics.com/mega/";
 const CACHE_TTL: Duration = Duration::from_hours(6);
-const RETRY_ATTEMPTS: usize = 2;
-const RETRY_DELAY: Duration = Duration::from_millis(250);
 
 /// `patch=30` aggregates the last 30 days rather than pinning a single game
 /// patch, so it stays current without a version lookup. `queue=ranked`
@@ -34,25 +30,14 @@ const REGION: &str = "all";
 /// (`emerald_plus`, `diamond_plus`, …) are valid but thin out the low-elo tail.
 const TIER_BRACKET: &str = "platinum_plus";
 
-struct Cached<T> {
-    loaded_at: Instant,
-    value: Arc<T>,
-}
-
-impl<T> Cached<T> {
-    fn fresh(&self) -> Option<Arc<T>> {
-        (self.loaded_at.elapsed() < CACHE_TTL).then(|| self.value.clone())
-    }
-}
-
 pub struct LolalyticsApi {
     http: reqwest::Client,
     /// `"{ep}:{slug}:{lane}"` → parsed champion-scoped response.
-    itemsets: RwLock<HashMap<String, Cached<ItemSetResponse>>>,
-    earlysets: RwLock<HashMap<String, Cached<EarlySetResponse>>>,
-    counters: RwLock<HashMap<String, Cached<CounterResponse>>>,
+    itemsets: TtlCache<String, ItemSetResponse>,
+    earlysets: TtlCache<String, EarlySetResponse>,
+    counters: TtlCache<String, CounterResponse>,
     /// The whole-list `ep=tier` payload (one per process, refreshed on TTL).
-    tier: RwLock<Option<Cached<TierResponse>>>,
+    tier: TtlCache<(), TierResponse>,
 }
 
 impl LolalyticsApi {
@@ -61,18 +46,15 @@ impl LolalyticsApi {
         headers.insert(REFERER, HeaderValue::from_static("https://lolalytics.com/"));
         let http = reqwest::Client::builder()
             .timeout(Duration::from_secs(8))
-            .user_agent(
-                "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) \
-                 AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36",
-            )
+            .user_agent(MAC_USER_AGENT)
             .default_headers(headers)
             .build()?;
         Ok(Self {
             http,
-            itemsets: RwLock::new(HashMap::new()),
-            earlysets: RwLock::new(HashMap::new()),
-            counters: RwLock::new(HashMap::new()),
-            tier: RwLock::new(None),
+            itemsets: TtlCache::new(CACHE_TTL),
+            earlysets: TtlCache::new(CACHE_TTL),
+            counters: TtlCache::new(CACHE_TTL),
+            tier: TtlCache::new(CACHE_TTL),
         })
     }
 
@@ -107,120 +89,52 @@ impl LolalyticsApi {
     }
 
     pub async fn get_itemset(&self, slug: &str, lane: &str) -> Result<Arc<ItemSetResponse>> {
-        let key = format!("{slug}:{lane}");
-        if let Some(hit) = self.itemsets.read().await.get(&key).and_then(Cached::fresh) {
-            return Ok(hit);
-        }
-        let value: Arc<ItemSetResponse> =
-            Arc::new(self.fetch_champion("build-itemset", slug, lane).await?);
-        self.itemsets.write().await.insert(
-            key,
-            Cached {
-                loaded_at: Instant::now(),
-                value: value.clone(),
-            },
-        );
-        Ok(value)
+        self.itemsets
+            .get_or_fetch(format!("{slug}:{lane}"), || async {
+                self.fetch_champion("build-itemset", slug, lane).await
+            })
+            .await
     }
 
     pub async fn get_earlyset(&self, slug: &str, lane: &str) -> Result<Arc<EarlySetResponse>> {
-        let key = format!("{slug}:{lane}");
-        if let Some(hit) = self
-            .earlysets
-            .read()
+        self.earlysets
+            .get_or_fetch(format!("{slug}:{lane}"), || async {
+                self.fetch_champion("build-earlyset", slug, lane).await
+            })
             .await
-            .get(&key)
-            .and_then(Cached::fresh)
-        {
-            return Ok(hit);
-        }
-        let value: Arc<EarlySetResponse> =
-            Arc::new(self.fetch_champion("build-earlyset", slug, lane).await?);
-        self.earlysets.write().await.insert(
-            key,
-            Cached {
-                loaded_at: Instant::now(),
-                value: value.clone(),
-            },
-        );
-        Ok(value)
     }
 
     pub async fn get_counter(&self, slug: &str, lane: &str) -> Result<Arc<CounterResponse>> {
-        let key = format!("{slug}:{lane}");
-        if let Some(hit) = self.counters.read().await.get(&key).and_then(Cached::fresh) {
-            return Ok(hit);
-        }
-        let value: Arc<CounterResponse> =
-            Arc::new(self.fetch_champion("counter", slug, lane).await?);
-        self.counters.write().await.insert(
-            key,
-            Cached {
-                loaded_at: Instant::now(),
-                value: value.clone(),
-            },
-        );
-        Ok(value)
+        self.counters
+            .get_or_fetch(format!("{slug}:{lane}"), || async {
+                self.fetch_champion("counter", slug, lane).await
+            })
+            .await
     }
 
     /// The whole-list tier payload (all lanes at once). `lane`/`c` are omitted;
     /// the endpoint returns every lane nested under each champion bucket.
     pub async fn get_tier(&self) -> Result<Arc<TierResponse>> {
-        if let Some(hit) = self.tier.read().await.as_ref().and_then(Cached::fresh) {
-            return Ok(hit);
-        }
-        let value: Arc<TierResponse> = Arc::new(
-            self.http
-                .get(MEGA_BASE)
-                .query(&[
-                    ("ep", "tier"),
-                    ("v", "1"),
-                    ("patch", PATCH),
-                    ("tier", TIER_BRACKET),
-                    ("queue", QUEUE),
-                    ("region", REGION),
-                    ("lane", "all"),
-                ])
-                .send_with_retry()
-                .await?
-                .error_for_status()?
-                .json()
-                .await?,
-        );
-        *self.tier.write().await = Some(Cached {
-            loaded_at: Instant::now(),
-            value: value.clone(),
-        });
-        Ok(value)
-    }
-}
-
-trait RequestBuilderRetryExt {
-    async fn send_with_retry(self) -> std::result::Result<reqwest::Response, reqwest::Error>;
-}
-
-impl RequestBuilderRetryExt for reqwest::RequestBuilder {
-    async fn send_with_retry(self) -> std::result::Result<reqwest::Response, reqwest::Error> {
-        let request = self;
-        let mut attempt = 0;
-        loop {
-            let Some(next) = request.try_clone() else {
-                return request.send().await;
-            };
-            match next.send().await {
-                Ok(response) if response.status().is_server_error() && attempt < RETRY_ATTEMPTS => {
-                    attempt += 1;
-                    tokio::time::sleep(RETRY_DELAY * attempt as u32).await;
-                }
-                Err(err)
-                    if (err.is_connect() || err.is_timeout() || err.is_request())
-                        && attempt < RETRY_ATTEMPTS =>
-                {
-                    attempt += 1;
-                    tokio::time::sleep(RETRY_DELAY * attempt as u32).await;
-                }
-                result => return result,
-            }
-        }
+        self.tier
+            .get_or_fetch((), || async {
+                Ok(self
+                    .http
+                    .get(MEGA_BASE)
+                    .query(&[
+                        ("ep", "tier"),
+                        ("v", "1"),
+                        ("patch", PATCH),
+                        ("tier", TIER_BRACKET),
+                        ("queue", QUEUE),
+                        ("region", REGION),
+                        ("lane", "all"),
+                    ])
+                    .send_with_retry()
+                    .await?
+                    .error_for_status()?
+                    .json()
+                    .await?)
+            })
+            .await
     }
 }

@@ -3,6 +3,7 @@
 mod build_proxy;
 mod error;
 mod hardcoded;
+pub mod http;
 mod player_proxy;
 mod player_trait;
 mod proxy;
@@ -14,6 +15,7 @@ mod trait_def;
 pub use build_proxy::BuildProviderProxy;
 pub use error::{ProviderError, Result};
 pub use hardcoded::{champion_damage_type, DamageType, HardcodedProvider};
+pub use http::{fetch_json, RequestRetryExt, TtlCache, MAC_USER_AGENT, WINDOWS_USER_AGENT};
 pub use overlay_types::{
     CounterEntry, ItemRecommendation, RuneBuild, RuneRecommendation, SkillOrder, ThreatProfile,
     TierEntry,

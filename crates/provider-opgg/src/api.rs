@@ -7,36 +7,21 @@
 //! browser-ish `User-Agent` — same shape of guard as LoLalytics, different
 //! trigger.
 
-use std::collections::HashMap;
 use std::sync::Arc;
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
-use overlay_provider::{ProviderError, Result};
-use tokio::sync::RwLock;
+use overlay_provider::{ProviderError, RequestRetryExt, Result, TtlCache, WINDOWS_USER_AGENT};
 
 use crate::flight::{self, MetaNode};
 use crate::types::{CounterRow, RunePage, SkillMastery, TierRow};
 
 const BASE: &str = "https://op.gg";
 const CACHE_TTL: Duration = Duration::from_hours(6);
-const RETRY_ATTEMPTS: usize = 2;
-const RETRY_DELAY: Duration = Duration::from_millis(250);
 
 /// Rank bracket the tier list covers. op.gg's own default for the champions
 /// overview page; other brackets are valid query values but thin out sample
 /// sizes at the low-elo tail.
 const TIER_BRACKET: &str = "emerald_plus";
-
-struct Cached<T> {
-    loaded_at: Instant,
-    value: Arc<T>,
-}
-
-impl<T> Cached<T> {
-    fn fresh(&self) -> Option<Arc<T>> {
-        (self.loaded_at.elapsed() < CACHE_TTL).then(|| self.value.clone())
-    }
-}
 
 /// Parsed contents of a champion's `/build[/lane]` page: everything that
 /// doesn't have a clean data prop and had to come out of the rendered
@@ -55,13 +40,13 @@ pub struct BuildPage {
 pub struct OpggApi {
     http: reqwest::Client,
     /// `"{slug}:{lane}"` → parsed build page.
-    build_pages: RwLock<HashMap<String, Cached<BuildPage>>>,
+    build_pages: TtlCache<String, BuildPage>,
     /// `"{slug}:{lane}"` → matchup rows.
-    counters: RwLock<HashMap<String, Cached<Vec<CounterRow>>>>,
+    counters: TtlCache<String, Vec<CounterRow>>,
     /// lane → the lane's full tier-list rows.
-    tier_lists: RwLock<HashMap<String, Cached<Vec<TierRow>>>>,
+    tier_lists: TtlCache<String, Vec<TierRow>>,
     /// `"{slug}:{lane}"` → skill-leveling masteries.
-    skills: RwLock<HashMap<String, Cached<Vec<SkillMastery>>>>,
+    skills: TtlCache<String, Vec<SkillMastery>>,
 }
 
 impl OpggApi {
@@ -72,17 +57,14 @@ impl OpggApi {
     pub fn new() -> Result<Self> {
         let http = reqwest::Client::builder()
             .timeout(Duration::from_secs(8))
-            .user_agent(
-                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 \
-                 (KHTML, like Gecko) Chrome/124.0 Safari/537.36",
-            )
+            .user_agent(WINDOWS_USER_AGENT)
             .build()?;
         Ok(Self {
             http,
-            build_pages: RwLock::new(HashMap::new()),
-            counters: RwLock::new(HashMap::new()),
-            tier_lists: RwLock::new(HashMap::new()),
-            skills: RwLock::new(HashMap::new()),
+            build_pages: TtlCache::new(CACHE_TTL),
+            counters: TtlCache::new(CACHE_TTL),
+            tier_lists: TtlCache::new(CACHE_TTL),
+            skills: TtlCache::new(CACHE_TTL),
         })
     }
 
@@ -113,38 +95,25 @@ impl OpggApi {
             lane.unwrap_or("_"),
             target_champion.unwrap_or("_")
         );
-        if let Some(hit) = self
-            .build_pages
-            .read()
+        self.build_pages
+            .get_or_fetch(key, || async {
+                let path = match lane {
+                    Some(lane) => format!("/lol/champions/{slug}/build/{lane}"),
+                    None => format!("/lol/champions/{slug}/build"),
+                };
+                let mut request = self.http.get(format!("{BASE}{path}"));
+                if let Some(target) = target_champion {
+                    request = request.query(&[("target_champion", target)]);
+                }
+                let html = request
+                    .send_with_retry()
+                    .await?
+                    .error_for_status()?
+                    .text()
+                    .await?;
+                Ok(parse_build_page(&html))
+            })
             .await
-            .get(&key)
-            .and_then(Cached::fresh)
-        {
-            return Ok(hit);
-        }
-        let path = match lane {
-            Some(lane) => format!("/lol/champions/{slug}/build/{lane}"),
-            None => format!("/lol/champions/{slug}/build"),
-        };
-        let mut request = self.http.get(format!("{BASE}{path}"));
-        if let Some(target) = target_champion {
-            request = request.query(&[("target_champion", target)]);
-        }
-        let html = request
-            .send_with_retry()
-            .await?
-            .error_for_status()?
-            .text()
-            .await?;
-        let value = Arc::new(parse_build_page(&html));
-        self.build_pages.write().await.insert(
-            key,
-            Cached {
-                loaded_at: Instant::now(),
-                value: value.clone(),
-            },
-        );
-        Ok(value)
     }
 
     pub async fn get_counters(
@@ -153,24 +122,20 @@ impl OpggApi {
         lane: Option<&str>,
     ) -> Result<Arc<Vec<CounterRow>>> {
         let key = format!("{slug}:{}", lane.unwrap_or("_"));
-        if let Some(hit) = self.counters.read().await.get(&key).and_then(Cached::fresh) {
-            return Ok(hit);
-        }
-        let path = match lane {
-            Some(lane) => format!("/lol/champions/{slug}/counters/{lane}"),
-            None => format!("/lol/champions/{slug}/counters"),
-        };
-        let html = self.fetch_html(&path).await?;
-        let chunks = flight::extract_flight_chunks(&html);
-        let rows: Vec<CounterRow> = flight::find_data_field(&chunks, "data").unwrap_or_default();
-        let value = Arc::new(rows);
-        self.counters.write().await.insert(
-            key,
-            Cached {
-                loaded_at: Instant::now(),
-                value: value.clone(),
-            },
-        );
+        let value = self
+            .counters
+            .get_or_fetch(key, || async {
+                let path = match lane {
+                    Some(lane) => format!("/lol/champions/{slug}/counters/{lane}"),
+                    None => format!("/lol/champions/{slug}/counters"),
+                };
+                let html = self.fetch_html(&path).await?;
+                let chunks = flight::extract_flight_chunks(&html);
+                let rows: Vec<CounterRow> =
+                    flight::find_data_field(&chunks, "data").unwrap_or_default();
+                Ok(rows)
+            })
+            .await?;
         if value.is_empty() {
             return Err(ProviderError::NotEnoughData);
         }
@@ -182,39 +147,29 @@ impl OpggApi {
     /// by a `position` query param rather than a path segment — op.gg has no
     /// combined "all lanes" list, so each lane is its own fetch.
     pub async fn get_tier_list(&self, lane: &str) -> Result<Arc<Vec<TierRow>>> {
-        if let Some(hit) = self
+        let value = self
             .tier_lists
-            .read()
-            .await
-            .get(lane)
-            .and_then(Cached::fresh)
-        {
-            return Ok(hit);
-        }
-        let html = self
-            .http
-            .get(format!("{BASE}/lol/champions"))
-            .query(&[
-                ("region", "global"),
-                ("tier", TIER_BRACKET),
-                ("type", "ranked"),
-                ("position", lane),
-            ])
-            .send_with_retry()
-            .await?
-            .error_for_status()?
-            .text()
+            .get_or_fetch(lane.to_string(), || async {
+                let html = self
+                    .http
+                    .get(format!("{BASE}/lol/champions"))
+                    .query(&[
+                        ("region", "global"),
+                        ("tier", TIER_BRACKET),
+                        ("type", "ranked"),
+                        ("position", lane),
+                    ])
+                    .send_with_retry()
+                    .await?
+                    .error_for_status()?
+                    .text()
+                    .await?;
+                let chunks = flight::extract_flight_chunks(&html);
+                let rows: Vec<TierRow> =
+                    flight::find_data_field(&chunks, "data").unwrap_or_default();
+                Ok(rows)
+            })
             .await?;
-        let chunks = flight::extract_flight_chunks(&html);
-        let rows: Vec<TierRow> = flight::find_data_field(&chunks, "data").unwrap_or_default();
-        let value = Arc::new(rows);
-        self.tier_lists.write().await.insert(
-            lane.to_string(),
-            Cached {
-                loaded_at: Instant::now(),
-                value: value.clone(),
-            },
-        );
         if value.is_empty() {
             return Err(ProviderError::NotEnoughData);
         }
@@ -231,25 +186,20 @@ impl OpggApi {
         lane: Option<&str>,
     ) -> Result<Arc<Vec<SkillMastery>>> {
         let key = format!("{slug}:{}", lane.unwrap_or("_"));
-        if let Some(hit) = self.skills.read().await.get(&key).and_then(Cached::fresh) {
-            return Ok(hit);
-        }
-        let path = match lane {
-            Some(lane) => format!("/lol/champions/{slug}/skills/{lane}"),
-            None => format!("/lol/champions/{slug}/skills"),
-        };
-        let html = self.fetch_html(&path).await?;
-        let chunks = flight::extract_flight_chunks(&html);
-        let masteries: Vec<SkillMastery> =
-            flight::find_data_field(&chunks, "skill_masteries").unwrap_or_default();
-        let value = Arc::new(masteries);
-        self.skills.write().await.insert(
-            key,
-            Cached {
-                loaded_at: Instant::now(),
-                value: value.clone(),
-            },
-        );
+        let value = self
+            .skills
+            .get_or_fetch(key, || async {
+                let path = match lane {
+                    Some(lane) => format!("/lol/champions/{slug}/skills/{lane}"),
+                    None => format!("/lol/champions/{slug}/skills"),
+                };
+                let html = self.fetch_html(&path).await?;
+                let chunks = flight::extract_flight_chunks(&html);
+                let masteries: Vec<SkillMastery> =
+                    flight::find_data_field(&chunks, "skill_masteries").unwrap_or_default();
+                Ok(masteries)
+            })
+            .await?;
         if value.is_empty() {
             return Err(ProviderError::NotEnoughData);
         }
@@ -325,36 +275,6 @@ fn parse_spell_ids(nodes: &[MetaNode]) -> Vec<i64> {
 /// e.g. `"3161-0"`, so the row id isn't necessarily the nearest key).
 fn in_section(node: &MetaNode, section: &str) -> bool {
     node.section_path.iter().any(|s| s == section)
-}
-
-trait RequestBuilderRetryExt {
-    async fn send_with_retry(self) -> std::result::Result<reqwest::Response, reqwest::Error>;
-}
-
-impl RequestBuilderRetryExt for reqwest::RequestBuilder {
-    async fn send_with_retry(self) -> std::result::Result<reqwest::Response, reqwest::Error> {
-        let request = self;
-        let mut attempt = 0;
-        loop {
-            let Some(next) = request.try_clone() else {
-                return request.send().await;
-            };
-            match next.send().await {
-                Ok(response) if response.status().is_server_error() && attempt < RETRY_ATTEMPTS => {
-                    attempt += 1;
-                    tokio::time::sleep(RETRY_DELAY * attempt as u32).await;
-                }
-                Err(err)
-                    if (err.is_connect() || err.is_timeout() || err.is_request())
-                        && attempt < RETRY_ATTEMPTS =>
-                {
-                    attempt += 1;
-                    tokio::time::sleep(RETRY_DELAY * attempt as u32).await;
-                }
-                result => return result,
-            }
-        }
-    }
 }
 
 #[cfg(test)]
