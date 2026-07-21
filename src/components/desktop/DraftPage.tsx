@@ -2,6 +2,7 @@ import { createEffect, createMemo, createSignal, For, Index, type JSX, Show } fr
 import {
   assetsReady,
   champIconByKey,
+  champImageId,
   championKeyByImage,
   champName,
   fmtCompact,
@@ -19,13 +20,15 @@ import {
   userPickedVsEnemy,
   vsEnemyId,
 } from "../../state/backend";
-import { tierCache } from "../../state/caches";
+import { buildDetailsCache, buildKey, tierCache } from "../../state/caches";
 import type { GamePlayer, TierEntry } from "../../types";
 import { Icon } from "../Icon";
 import { BuildArea } from "../openlol/BuildArea";
 import { Counters } from "../openlol/Counters";
 import { ImportButton } from "../openlol/ImportButton";
+import { ItemPath } from "../openlol/ItemPath";
 import { SectionError } from "../openlol/SectionError";
+import { SkillMaster, SkillMatrix } from "../openlol/SkillMatrix";
 import { StatsRow } from "../openlol/StatsRow";
 import { ScrollArea } from "../ScrollArea";
 import { RoleSelector } from "./Pages";
@@ -463,6 +466,18 @@ export function DraftPage() {
   const previewChamp = () => hoverChampId() || myChampionId();
   const previewEnemy = () => (hoverChampId() ? null : vsEnemyId() || null);
 
+  // Skill order + items only for our own champion — a hover preview shows
+  // that champion's runes, so rendering our details next to them would lie.
+  const detailsEntry = createMemo(() => {
+    const id = myChampionId();
+    if (id <= 0 || hoverChampId()) return null;
+    return buildDetailsCache.get(buildKey(id, role(), vsEnemyId() || null));
+  });
+  const detailsValue = createMemo(() => {
+    const e = detailsEntry();
+    return e?.state === "ok" ? e.value : null;
+  });
+
   const statusLabel = () => {
     if (active()) return TIMER_PHASE_LABELS[champSelect()?.timerPhase ?? ""] ?? "CHAMP SELECT";
     if (stale()) return phase()?.inGame ? "IN GAME" : "LOADING";
@@ -518,8 +533,6 @@ export function DraftPage() {
             <div class="border-t border-hx-border my-1" />
             <MatchupLine role={role()} />
             <Counters championId={vsEnemyId()} role={role()} onHoverChampion={setHoverChampId} />
-            <span class="flex-1" />
-            <StatsRow championId={previewChamp()} role={role()} enemyId={previewEnemy()} />
             <Show when={active()}>
               <ImportButton
                 championId={myChampionId()}
@@ -530,7 +543,7 @@ export function DraftPage() {
           </div>
           <div class={`desktop-draft-build ${hoverChampId() ? "is-previewing" : ""}`}>
             <div class="desktop-draft-build-header">
-              <div class="hx-section-title">{hoverChampId() ? "RUNE PREVIEW" : "RUNES"}</div>
+              <div class="hx-section-title">{hoverChampId() ? "RUNE PREVIEW" : "BUILD"}</div>
               <Show when={hoverChampId()}>
                 {(id) => (
                   <span class="desktop-draft-preview-chip">
@@ -545,7 +558,42 @@ export function DraftPage() {
                 )}
               </Show>
             </div>
-            <BuildArea championId={previewChamp()} role={role()} enemyId={previewEnemy()} />
+            <StatsRow championId={previewChamp()} role={role()} enemyId={previewEnemy()} />
+            <div class="build-band">
+              <BuildArea championId={previewChamp()} role={role()} enemyId={previewEnemy()} />
+              <Show when={detailsValue()?.skillOrder}>
+                <div class="build-extra-block">
+                  <span class="build-extra-label">SKILL ORDER</span>
+                  <SkillMatrix
+                    order={detailsValue()?.skillOrder}
+                    championImageId={champImageId(myChampionId())}
+                  />
+                </div>
+              </Show>
+            </div>
+            <Show when={detailsValue()}>
+              {(value) => (
+                <Show when={value().skillOrder || value().items.length > 0}>
+                  <div class="build-band build-band--sub">
+                    <Show when={value().skillOrder}>
+                      <div class="build-extra-block">
+                        <span class="build-extra-label">SKILL MASTER</span>
+                        <SkillMaster
+                          order={value().skillOrder}
+                          championImageId={champImageId(myChampionId())}
+                        />
+                      </div>
+                    </Show>
+                    <Show when={value().items.length > 0}>
+                      <div class="build-extra-block">
+                        <span class="build-extra-label">ITEM BUILD</span>
+                        <ItemPath items={value().items} />
+                      </div>
+                    </Show>
+                  </div>
+                </Show>
+              )}
+            </Show>
           </div>
         </section>
       </div>

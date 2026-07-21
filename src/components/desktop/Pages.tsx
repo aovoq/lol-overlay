@@ -29,7 +29,7 @@ import { BuildArea } from "../openlol/BuildArea";
 import { Counters } from "../openlol/Counters";
 import { ImportButton } from "../openlol/ImportButton";
 import { ItemPath } from "../openlol/ItemPath";
-import { SkillMatrix } from "../openlol/SkillMatrix";
+import { SkillMaster, SkillMatrix } from "../openlol/SkillMatrix";
 import { StatsRow } from "../openlol/StatsRow";
 import { ScrollArea } from "../ScrollArea";
 import { SettingsForm } from "../SettingsPanel";
@@ -376,7 +376,7 @@ export function ChampionPage() {
         </div>
       }
     >
-      <div class="desktop-page desktop-champion-detail">
+      <ScrollArea class="h-full" contentClass="desktop-page desktop-champion-detail">
         <div class="desktop-detail-header">
           <A href="/champions" class="desktop-back-link">
             ← CHAMPIONS
@@ -442,26 +442,43 @@ export function ChampionPage() {
               <span>{selectedEnemy() ? "MATCHUP BUILD" : "BEST BUILD"}</span>
             </div>
             <StatsRow championId={championId()} role={selectedRole()} enemyId={selectedEnemy()} />
-            <BuildArea championId={championId()} role={selectedRole()} enemyId={selectedEnemy()} />
+            <div class="build-band">
+              <BuildArea
+                championId={championId()}
+                role={selectedRole()}
+                enemyId={selectedEnemy()}
+              />
+              <Show when={detailsValue()?.skillOrder}>
+                <div class="build-extra-block">
+                  <span class="build-extra-label">SKILL ORDER</span>
+                  <SkillMatrix
+                    order={detailsValue()?.skillOrder}
+                    championImageId={champion()?.imageId ?? ""}
+                  />
+                </div>
+              </Show>
+            </div>
             <Show when={detailsValue()}>
               {(value) => (
-                <div class="desktop-build-extras">
-                  <Show when={value().skillOrder}>
-                    <div class="build-extra-block">
-                      <span class="build-extra-label">SKILL ORDER</span>
-                      <SkillMatrix
-                        order={value().skillOrder}
-                        championImageId={champion()?.imageId ?? ""}
-                      />
-                    </div>
-                  </Show>
-                  <Show when={value().items.length > 0}>
-                    <div class="build-extra-block">
-                      <span class="build-extra-label">ITEM BUILD</span>
-                      <ItemPath items={value().items} />
-                    </div>
-                  </Show>
-                </div>
+                <Show when={value().skillOrder || value().items.length > 0}>
+                  <div class="build-band build-band--sub">
+                    <Show when={value().skillOrder}>
+                      <div class="build-extra-block">
+                        <span class="build-extra-label">SKILL MASTER</span>
+                        <SkillMaster
+                          order={value().skillOrder}
+                          championImageId={champion()?.imageId ?? ""}
+                        />
+                      </div>
+                    </Show>
+                    <Show when={value().items.length > 0}>
+                      <div class="build-extra-block">
+                        <span class="build-extra-label">ITEM BUILD</span>
+                        <ItemPath items={value().items} />
+                      </div>
+                    </Show>
+                  </div>
+                </Show>
               )}
             </Show>
             <Show when={details().state === "loading"}>
@@ -482,7 +499,7 @@ export function ChampionPage() {
             />
           </section>
         </div>
-      </div>
+      </ScrollArea>
     </Show>
   );
 }

@@ -551,6 +551,34 @@
     letter-spacing: 0.14em;
   }
 
+  /* Horizontal build bands — the reference stat-site layout: runes, skill
+   * matrix, and item path line up in single rows across the full width. */
+  .build-band {
+    display: flex;
+    align-items: flex-start;
+    flex-wrap: wrap;
+    column-gap: 32px;
+    row-gap: 12px;
+    padding: 4px 0;
+  }
+  .build-band--sub {
+    margin-top: 6px;
+    padding-top: 12px;
+    border-top: 1px solid var(--hx-border);
+  }
+
+  /* Skill-max priority: slightly larger ability icons than the matrix. */
+  .skill-master {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
+  .skill-master .skill-matrix-head {
+    width: 30px;
+    height: 30px;
+    margin-right: 0;
+  }
+
   .control-root {
     height: 100vh;
     min-height: 0;
@@ -1142,9 +1170,6 @@
     text-align: right;
   }
 
-  .desktop-champion-detail {
-    height: 100%;
-  }
   .desktop-detail-header {
     display: grid;
     grid-template-columns: auto auto minmax(0, 1fr);
@@ -1265,14 +1290,6 @@
     width: 24px;
     height: 24px;
     border-radius: 3px;
-  }
-
-  .desktop-build-extras {
-    display: flex;
-    flex-direction: column;
-    gap: 12px;
-    padding: 12px 0 4px;
-    border-top: 1px solid var(--hx-border);
   }
 
   .desktop-build-details-status {
@@ -1845,9 +1862,9 @@
     color: var(--hx-accent);
   }
   .desktop-draft-main {
-    display: grid;
+    display: flex;
     min-height: 0;
-    grid-template-columns: minmax(0, 1fr) 240px;
+    flex-direction: column;
     gap: 14px;
   }
   .desktop-draft-left {
@@ -1860,13 +1877,13 @@
     display: flex;
     min-height: 0;
     flex-direction: column;
-    padding-left: 18px;
-    border-left: 1px solid var(--hx-border);
+    padding-top: 14px;
+    border-top: 1px solid var(--hx-border);
     transition: border-color 120ms ease;
   }
 
   .desktop-draft-build.is-previewing {
-    border-left-color: var(--hx-accent);
+    border-top-color: var(--hx-accent);
   }
 
   .desktop-draft-build-header {
@@ -1940,11 +1957,6 @@
 
   .hx-scroll-root {
     overflow: hidden;
-  }
-
-  .desktop-build-card .hx-scroll-root {
-    flex: 1;
-    min-height: 0;
   }
 
   .hx-scroll-viewport {
@@ -2578,12 +2590,7 @@
     }
 
     .desktop-draft-main {
-      grid-template-columns: minmax(0, 1fr) 170px;
       gap: 10px;
-    }
-
-    .desktop-draft-build {
-      padding-left: 10px;
     }
 
     .summoner-page {
@@ -2661,13 +2668,7 @@
     }
 
     .desktop-draft-main {
-      min-height: 560px;
-      grid-template-columns: minmax(0, 1fr) 180px;
       gap: 12px;
-    }
-
-    .desktop-draft-build {
-      padding-left: 12px;
     }
 
     .desktop-draft-teams {
@@ -2701,19 +2702,6 @@
 
     .desktop-draft-main {
       min-height: 0;
-      grid-template-columns: minmax(0, 1fr);
-    }
-
-    .desktop-draft-build {
-      min-height: 420px;
-      padding-top: 14px;
-      padding-left: 0;
-      border-top: 1px solid var(--hx-border);
-      border-left: 0;
-    }
-
-    .desktop-draft-build.is-previewing {
-      border-top-color: var(--hx-accent);
     }
 
     .summoner-heading,

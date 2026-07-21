@@ -13,7 +13,6 @@ import { OPENLOL_MARK_SVG, roleLabel } from "../../lib/openlol";
 import { buildCache, buildKey } from "../../state/caches";
 import type { RuneBuild } from "../../types";
 import { Icon } from "../Icon";
-import { ScrollArea } from "../ScrollArea";
 import { SectionError } from "./SectionError";
 
 /** One rune-tree icon: full color + accent ring when picked, dimmed otherwise. */
@@ -221,7 +220,7 @@ export function BuildArea(props: { championId: number; role: string; enemyId?: n
   const loading = createMemo(() => entry()?.state === "loading");
 
   return (
-    <ScrollArea class="flex-1 min-h-0" contentClass="pt-3 pb-1.5 pr-1 pl-0">
+    <div class="pt-1.5 pb-1.5">
       <Show when={target()} fallback={<BigEmpty role={role()} />}>
         {(t) => (
           <Show when={!loading()} fallback={<BuildSkeleton />}>
@@ -243,6 +242,6 @@ export function BuildArea(props: { championId: number; role: string; enemyId?: n
           </Show>
         )}
       </Show>
-    </ScrollArea>
+    </div>
   );
 }
